@@ -1,6 +1,6 @@
 ![MiGrid Hero Image](./docs/assets/migrid_hero.png)
 
-# MiGrid: The Operating System for Sustainable Fleets and Grid Management Platform.
+# MiGrid: The Operating System for Sustainable Fleets and Grid Management.
 
 MiGrid is an open-source, enterprise-grade operating system designed to manage electric vehicle fleets not just as transportation assets, but as active, revenue-generating participants in the energy grid. It provides a unified, 10-layer platform that spans from the physics of energy transfer to the tokenization of grid-supportive actions.
 
