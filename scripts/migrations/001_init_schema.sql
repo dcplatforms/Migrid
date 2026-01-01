@@ -1,0 +1,2 @@
+-- The SQL commands to initialize the database schema will be placed here.
+-- This file is intentionally left blank for now as the schema has not been provided.

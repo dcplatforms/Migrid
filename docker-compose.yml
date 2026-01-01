@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  # --- Layer 0: Data & State ---
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    ports:
+      - "5432:5432"
+    environment:
+      POSTG-RES_USER: migrid
+      POSTGRES_PASSWORD: dev_password_123
+      POSTGRES_DB: migrid_core
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./scripts/migrations:/docker-entrypoint-initdb.d
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
+  # --- Layer 1: Physics Engine (Green Audit) ---
+  physics-engine:
+    build: ./services/01-physics-engine
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: postgres://migrid:dev_password_123@postgres:5432/migrid_core
+      REDIS_URL: redis://redis:6379
+
+  # --- Layer 7: Device Gateway (OCPP) ---
+  device-gateway:
+    build: ./services/07-device-gateway
+    ports:
+      - "9220:9220" # OCPP JSON WebSocket port
+    depends_on:
+      - redis
+
+volumes:
+  pg_data:
