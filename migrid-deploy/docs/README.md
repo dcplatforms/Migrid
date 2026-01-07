@@ -4,7 +4,7 @@ This folder contains the GitHub Pages documentation site for MiGrid.
 
 ## Features
 
-- **Platform Demonstration** — Embedded video showing the 10-layer microservices architecture in action
+- **Interactive Architecture Explorer** — Embedded Claude artifact showing the 10-layer microservices architecture
 - **Linked Source Navigation** — Direct links to every service, package, and migration in the repository
 - **Standards Reference** — OpenADR 3.0, OCPP 2.0.1, OCPI 2.2, ISO 15118, Modbus documentation
 - **Quick Start Guide** — Get running in under 5 minutes
@@ -69,21 +69,19 @@ migrid-docs/
 
 ### Updating the Embedded Artifact
 
-The platform demonstration uses a local video file:
+The interactive architecture explorer uses a Claude artifact embed:
 
 ```html
-<video 
-    src="assets/MiGrid_Platform_Demonstration_Video.mp4" 
+<iframe 
+    src="https://claude.site/artifacts/d38855dd-0804-4026-9383-824da5c463ef" 
     class="embed-frame"
-    title="MiGrid Platform Demonstration"
-    controls
-    autoplay
-    muted
-    loop
-></video>
+    title="MiGrid Interactive Architecture"
+    allow="clipboard-write"
+    allowfullscreen
+></iframe>
 ```
 
-To update, replace the video file in `assets/` and update the `src` attribute.
+To update, replace the artifact URL with a new published artifact.
 
 ### Updating Repository Links
 

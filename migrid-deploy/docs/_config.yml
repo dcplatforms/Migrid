@@ -1,0 +1,42 @@
+# MiGrid Documentation Site
+# GitHub Pages Configuration
+
+title: MiGrid Documentation
+description: The open source operating system for sustainable fleet electrification
+url: https://migrid-org.github.io
+baseurl: /migrid-core
+
+# Theme
+remote_theme: pages-themes/minimal@v0.2.0
+
+# Build settings
+markdown: kramdown
+highlighter: rouge
+
+# Navigation
+nav:
+  - title: Architecture
+    url: "#architecture"
+  - title: Quick Start
+    url: "#quickstart"
+  - title: Documentation
+    url: "#docs"
+  - title: Standards
+    url: "#standards"
+  - title: GitHub
+    url: https://github.com/migrid-org/migrid-core
+
+# Social
+github_username: migrid-org
+linkedin_username: thomasctpm
+
+# Analytics (optional)
+# google_analytics: UA-XXXXXXXX-X
+
+# Exclude from processing
+exclude:
+  - README.md
+  - CONTRIBUTING.md
+  - LICENSE
+  - Gemfile
+  - Gemfile.lock

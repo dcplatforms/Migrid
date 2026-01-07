@@ -80,7 +80,7 @@ MiGrid is built as a monorepo of microservices communicating via a Kafka event b
 1.  **Clone the repositories:**
     ```bash
     # Clone the main MiGrid monorepo
-    git clone https://github.com/ThomasC3/migrid.git
+    git clone https://github.com/dcplatforms/Migrid.git
     
     # Clone the Open-Wallet service (required for L10)
     git clone https://github.com/ThomasC3/open-wallet.git

@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MiGrid Documentation | The Operating System for Sustainable Fleets</title>
+    <meta name="description" content="Open source platform for EV fleet management, grid integration, and physics-verified charging">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300e6b8' stroke-width='2'><path d='M13 2L3 14h9l-1 8 10-12h-9l1-8z'/></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0f14;
+            --bg-secondary: #111820;
+            --bg-tertiary: #1a232d;
+            --border-color: #2a3544;
+            --text-primary: #ffffff;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-cyan: #00e6b8;
+            --accent-blue: #00a8ff;
+            --accent-teal: #14b8a6;
+            --gradient-start: #00e6b8;
+            --gradient-end: #00a8ff;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        /* Navigation */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: rgba(10, 15, 20, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0 2rem;
+        }
+
+        .navbar-inner {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 64px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+            color: var(--text-primary);
+            font-weight: 700;
+            font-size: 1.25rem;
+        }
+
+        .logo svg {
+            width: 32px;
+            height: 32px;
+        }
+
+        .logo-text {
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent-cyan);
+        }
+
+        .github-link {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary) !important;
+            transition: all 0.2s;
+        }
+
+        .github-link:hover {
+            border-color: var(--accent-cyan);
+            background: rgba(0, 230, 184, 0.1);
+        }
+
+        /* Hero Section */
+        .hero {
+            padding: 8rem 2rem 4rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 800px;
+            height: 400px;
+            background: radial-gradient(ellipse, rgba(0, 230, 184, 0.15), transparent 70%);
+            pointer-events: none;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, var(--text-primary), var(--accent-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto 2rem;
+        }
+
+        .hero-badges {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-bottom: 3rem;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 100px;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .badge svg {
+            width: 16px;
+            height: 16px;
+            color: var(--accent-cyan);
+        }
+
+        /* Interactive Embed Section */
+        .embed-section {
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .embed-container {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+        }
+
+        .embed-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.5rem;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .embed-title {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 600;
+        }
+
+        .embed-title svg {
+            width: 20px;
+            height: 20px;
+            color: var(--accent-cyan);
+        }
+
+        .embed-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .embed-btn {
+            padding: 0.5rem 1rem;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .embed-btn:hover {
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        .embed-frame {
+            width: 100%;
+            height: 700px;
+            border: none;
+            background: var(--bg-primary);
+        }
+
+        /* Architecture Section */
+        .architecture {
+            padding: 4rem 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .section-header h2 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .section-header p {
+            color: var(--text-secondary);
+        }
+
+        .layers-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .layer-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .layer-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--layer-color, var(--accent-cyan));
+        }
+
+        .layer-card:hover {
+            border-color: var(--layer-color, var(--accent-cyan));
+            transform: translateY(-4px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .layer-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .layer-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.25rem 0.5rem;
+            background: rgba(0, 230, 184, 0.1);
+            color: var(--layer-color, var(--accent-cyan));
+            border-radius: 4px;
+        }
+
+        .layer-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .layer-description {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+        }
+
+        .layer-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .layer-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.375rem 0.75rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            text-decoration: none;
+            font-family: 'JetBrains Mono', monospace;
+            transition: all 0.2s;
+        }
+
+        .layer-link:hover {
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        .layer-link svg {
+            width: 12px;
+            height: 12px;
+        }
+
+        /* Quick Start */
+        .quickstart {
+            padding: 4rem 2rem;
+            background: var(--bg-secondary);
+        }
+
+        .quickstart-inner {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .code-block {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+            margin-top: 2rem;
+        }
+
+        .code-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1rem;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .code-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .code-dot.red { background: #ff5f57; }
+        .code-dot.yellow { background: #febc2e; }
+        .code-dot.green { background: #28c840; }
+
+        .code-content {
+            padding: 1.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+            overflow-x: auto;
+        }
+
+        .code-content pre {
+            margin: 0;
+        }
+
+        .code-comment {
+            color: var(--text-muted);
+        }
+
+        .code-command {
+            color: var(--accent-cyan);
+        }
+
+        /* Docs Grid */
+        .docs-section {
+            padding: 4rem 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .docs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .doc-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-decoration: none;
+            color: var(--text-primary);
+            transition: all 0.3s;
+        }
+
+        .doc-card:hover {
+            border-color: var(--accent-cyan);
+            transform: translateY(-4px);
+        }
+
+        .doc-icon {
+            width: 48px;
+            height: 48px;
+            background: rgba(0, 230, 184, 0.1);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+        }
+
+        .doc-icon svg {
+            width: 24px;
+            height: 24px;
+            color: var(--accent-cyan);
+        }
+
+        .doc-card h3 {
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .doc-card p {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        /* Standards Section */
+        .standards {
+            padding: 4rem 2rem;
+            background: var(--bg-secondary);
+        }
+
+        .standards-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .standards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .standard-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1rem;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+
+        .standard-icon {
+            width: 40px;
+            height: 40px;
+            background: rgba(0, 168, 255, 0.1);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.75rem;
+            color: var(--accent-blue);
+        }
+
+        .standard-info {
+            flex: 1;
+        }
+
+        .standard-name {
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+
+        .standard-desc {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        /* Footer */
+        .footer {
+            padding: 3rem 2rem;
+            border-top: 1px solid var(--border-color);
+            text-align: center;
+        }
+
+        .footer-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.875rem;
+            transition: color 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: var(--accent-cyan);
+        }
+
+        .footer-copy {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        /* Mobile */
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+
+            .hero h1 {
+                font-size: 2rem;
+            }
+
+            .embed-frame {
+                height: 500px;
+            }
+
+            .layers-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Layer Colors */
+        .layer-card[data-layer="L1"] { --layer-color: #22d3d3; }
+        .layer-card[data-layer="L2"] { --layer-color: #22c55e; }
+        .layer-card[data-layer="L3"] { --layer-color: #3b82f6; }
+        .layer-card[data-layer="L4"] { --layer-color: #8b5cf6; }
+        .layer-card[data-layer="L5"] { --layer-color: #ec4899; }
+        .layer-card[data-layer="L6"] { --layer-color: #f43f5e; }
+        .layer-card[data-layer="L7"] { --layer-color: #f97316; }
+        .layer-card[data-layer="L8"] { --layer-color: #eab308; }
+        .layer-card[data-layer="L9"] { --layer-color: #14b8a6; }
+        .layer-card[data-layer="L10"] { --layer-color: #6366f1; }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <a href="#" class="logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="url(#logo-gradient)"/>
+                    <defs>
+                        <linearGradient id="logo-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#00e6b8"/>
+                            <stop offset="100%" stop-color="#00a8ff"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <span class="logo-text">MiGrid</span>
+            </a>
+            <div class="nav-links">
+                <a href="#architecture">Architecture</a>
+                <a href="#quickstart">Quick Start</a>
+                <a href="#docs">Documentation</a>
+                <a href="#standards">Standards</a>
+                <a href="roadmap.html">Roadmap</a>
+                <a href="https://github.com/migrid-org/migrid-core" class="github-link" target="_blank">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    GitHub
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="hero">
+        <h1>MiGrid Documentation</h1>
+        <p class="hero-subtitle">The open source operating system for sustainable fleet electrification. Verify the physics. Unlock the grid.</p>
+        <div class="hero-badges">
+            <span class="badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                Physics Verified
+            </span>
+            <span class="badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                OpenADR 3.0
+            </span>
+            <span class="badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                10 Microservices
+            </span>
+            <span class="badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22V8M5 12H2a10 10 0 0 0 20 0h-3"/></svg>
+                Apache 2.0
+            </span>
+        </div>
+    </section>
+
+    <!-- Interactive Embed -->
+    <section class="embed-section">
+        <div class="embed-container">
+            <div class="embed-header">
+                <div class="embed-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="3" y1="9" x2="21" y2="9"/>
+                        <line x1="9" y1="21" x2="9" y2="9"/>
+                    </svg>
+                    Interactive Architecture Explorer
+                </div>
+                <div class="embed-actions">
+                    <a href="https://claude.site/artifacts/d38855dd-0804-4026-9383-824da5c463ef" target="_blank" class="embed-btn">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                        </svg>
+                        Open Full View
+                    </a>
+                </div>
+            </div>
+            <iframe 
+                src="https://claude.site/artifacts/d38855dd-0804-4026-9383-824da5c463ef" 
+                class="embed-frame"
+                title="MiGrid Interactive Architecture"
+                allow="clipboard-write"
+                allowfullscreen
+            ></iframe>
+        </div>
+    </section>
+
+    <!-- Architecture -->
+    <section id="architecture" class="architecture">
+        <div class="section-header">
+            <h2>10-Layer Microservices Architecture</h2>
+            <p>From electron flow to token minting — each layer handles a distinct operational concern</p>
+        </div>
+        <div class="layers-grid">
+            <!-- L1 -->
+            <div class="layer-card" data-layer="L1">
+                <div class="layer-header">
+                    <span class="layer-badge">L1</span>
+                    <span class="layer-name">Physics Engine</span>
+                </div>
+                <p class="layer-description">The "Green Audit" — verifies kWh dispensed vs. kWh received via telematics. Variance threshold &lt;15%.</p>
+                <div class="layer-links">
+                    <a href="https://github.com/migrid-org/migrid-core/tree/main/services/01-physics-engine" class="layer-link" target="_blank">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/><path d="M20.5 10H19V8.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+                        /services/01-physics-engine
+                    </a>
+                    <a href="https://github.com/migrid-org/migrid-core/tree/main/packages/migrid-physics" class="layer-link" target="_blank">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                        /packages/migrid-physics
+                    </a>
+                </div>
+            </div>
+
+            <!-- L2 -->
+            <div class="layer-card" data-layer="L2">
+                <div class="layer-header">
+                    <span class="layer-badge">L2</span>
+                    <span class="layer-name">Grid Signal</span>
+                </div>
+                <p class="layer-description">OpenADR 3.0 Virtual End Node (VEN) for utility demand response communication and price signals.</p>
+                <div class="layer-links">
+                    <a href="https://github.com/migrid-org/migrid-core/tree/main/services/02-grid-signal" class="layer-link" target="_blank">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/></svg>
+                        /services/02-grid-signal
+                    </a>
+                    <a href="https://github.com/migrid-org/migrid-core/tree/main/packages/openadr-client" class="layer-link" target="_blank">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                        /packages/openadr-client
+                    </a>
+                </div>
+            </div>
+
+            <!-- L3 -->
+            <div class="layer-card" data-layer="L3">
+                <div class="layer-header">
+                    <span class="layer-badge">L3</span>
+                    <span class="layer-name">VPP Aggregator</span>
+                </div>
+                <p class="layer-description">Aggregates EVs and BESS to bid capacity into wholesale markets as a Virtual Power Plant.</p>
+                <div class="layer-links">
+                    <a href="https://github.com/migrid-org/migrid-core/tree/main/services/03-vpp-aggregator" class="layer-link" target="_blank">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/></svg>
+                        /services/03-vpp-aggregator
+                    </a>
+                </div>
+            </div>
+
+            <!-- L4 -->
+            <div class="layer-card" data-layer="L4">
+                <div class="layer-header">
+                    <span class="layer-badge">L4</span>
+                    <span class="layer-name">Market Gateway</span>
+                </div>
+                <p class="layer-description">Arbitrage engine connecting to CAISO, PJM, and Nord Pool wholesale energy markets.</p>
+                <div class="layer-links">
+                    <a href="https://github.com/migrid-org/migrid-core/tree/main/services/04-market-gateway" class="layer-link" target="_blank">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/></svg>
+                        /services/04-market-gateway
+                    </a>
+                </div>
+            </div>
+
+            <!-- L5 -->
+            <div class="layer-card" data-layer="L5">
+                <div class="layer-header">
+                    <span class="layer-badge">L5</span>
+                    <span class="layer-name">Driver DX</span>
+                </div>
+                <p class="layer-description">Smart routing, voice commands, and real-time charger availability for drivers.</p>
+                <div class="layer-links">
+                    <a href="https://github.com/migrid-org/migrid-core/tree/main/services/05-driver-bff" class="layer-link" target="_blank">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/></svg>
+                        /services/05-driver-bff
+                    </a>
+                    <a href="https://github.com/migrid-org/migrid-core/tree/main/apps/driver-app-mobile" class="layer-link" target="_blank">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                        /apps/driver-app-mobile
+                    </a>
+                </div>
+            </div>
+
+            <!-- L6 -->
+            <div class="layer-card" data-layer="L6">
+                <div class="layer-header">
+                    <span class="layer-badge">L6</span>
+                    <span class="layer-name">Engagement</span>
+                </div>
+                <p class="layer-description">CRM, targeted banners, contextual support ticketing, and driver communication.</p>
+                <div class="layer-links">
+                    <a href="https://github.com/migrid-org/migrid-core/tree/main/services/06-engagement" class="layer-link" target="_blank">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/></svg>
+                        /services/06-engagement
+                    </a>
+                </div>
+            </div>
+
+            <!-- L7 -->
+            <div class="layer-card" data-layer="L7">
+                <div class="layer-header">
+                    <span class="layer-badge">L7</span>
+                    <span class="layer-name">Device Gateway</span>
+                </div>
+                <p class="layer-description">Hardware abstraction layer for OCPP 1.6/2.0.1, OCPI roaming, and ISO 15118 Plug&Charge.</p>
+                <div class="layer-links">
+                    <a href="https://github.com/migrid-org/migrid-core/tree/main/services/07-device-gateway" class="layer-link" target="_blank">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/></svg>
+                        /services/07-device-gateway
+                    </a>
+                    <a href="https://github.com/migrid-org/migrid-core/tree/main/packages/iso15118-crypto" class="layer-link" target="_blank">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                        /packages/iso15118-crypto
+                    </a>
+                </div>
+            </div>
+
+            <!-- L8 -->
+            <div class="layer-card" data-layer="L8">
+                <div class="layer-header">
+                    <span class="layer-badge">L8</span>
+                    <span class="layer-name">Energy Manager</span>
+                </div>
+                <p class="layer-description">Dynamic Load Management (DLM) and site safety. Edge-ready for offline operation.</p>
+                <div class="layer-links">
+                    <a href="https://github.com/migrid-org/migrid-core/tree/main/services/08-energy-manager" class="layer-link" target="_blank">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/></svg>
+                        /services/08-energy-manager
+                    </a>
+                    <a href="https://github.com/migrid-org/migrid-core/tree/main/apps/admin-portal-web" class="layer-link" target="_blank">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                        /apps/admin-portal-web
+                    </a>
+                </div>
+            </div>
+
+            <!-- L9 -->
+            <div class="layer-card" data-layer="L9">
+                <div class="layer-header">
+                    <span class="layer-badge">L9</span>
+                    <span class="layer-name">Commerce Engine</span>
+                </div>
+                <p class="layer-description">Flexible billing, tariffs, subscriptions, and split-billing for fleet operators.</p>
+                <div class="layer-links">
+                    <a href="https://github.com/migrid-org/migrid-core/tree/main/services/09-commerce-engine" class="layer-link" target="_blank">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/></svg>
+                        /services/09-commerce-engine
+                    </a>
+                </div>
+            </div>
+
+            <!-- L10 -->
+            <div class="layer-card" data-layer="L10">
+                <div class="layer-header">
+                    <span class="layer-badge">L10</span>
+                    <span class="layer-name">Token Bridge</span>
+                </div>
+                <p class="layer-description">Rewards and staking via the Open-Wallet Framework. Hybrid SQL + blockchain ledger.</p>
+                <div class="layer-links">
+                    <a href="https://github.com/migrid-org/migrid-core/tree/main/services/10-token-engine" class="layer-link" target="_blank">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/></svg>
+                        /services/10-token-engine
+                    </a>
+                    <a href="https://github.com/migrid-org/migrid-core/tree/main/scripts/migrations" class="layer-link" target="_blank">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                        /scripts/migrations
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Quick Start -->
+    <section id="quickstart" class="quickstart">
+        <div class="quickstart-inner">
+            <div class="section-header">
+                <h2>Quick Start</h2>
+                <p>Get MiGrid running locally in under 5 minutes</p>
+            </div>
+            <div class="code-block">
+                <div class="code-header">
+                    <span class="code-dot red"></span>
+                    <span class="code-dot yellow"></span>
+                    <span class="code-dot green"></span>
+                </div>
+                <div class="code-content">
+<pre><span class="code-comment"># Clone the repository</span>
+<span class="code-command">git clone</span> https://github.com/migrid-org/migrid-core.git
+<span class="code-command">cd</span> migrid-core
+
+<span class="code-comment"># Start infrastructure (TimescaleDB, Redis, Gateway services)</span>
+<span class="code-command">docker-compose up -d</span>
+
+<span class="code-comment"># Seed vehicle physics models (F-150 Lightning, Rivian R1T, etc.)</span>
+<span class="code-command">npm run seed:physics</span>
+
+<span class="code-comment"># Verify services are running</span>
+<span class="code-command">curl</span> http://localhost:3000/health
+<span class="code-comment"># {"status": "ok", "services": ["physics", "device", "commerce"]}</span></pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Documentation -->
+    <section id="docs" class="docs-section">
+        <div class="section-header">
+            <h2>Documentation</h2>
+            <p>Everything you need to deploy, integrate, and contribute</p>
+        </div>
+        <div class="docs-grid">
+            <a href="https://github.com/migrid-org/migrid-core/blob/main/docs/architecture" class="doc-card" target="_blank">
+                <div class="doc-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="3" y1="9" x2="21" y2="9"/>
+                        <line x1="9" y1="21" x2="9" y2="9"/>
+                    </svg>
+                </div>
+                <h3>Architecture Decision Records</h3>
+                <p>ADRs documenting key architectural decisions and their rationale</p>
+            </a>
+            <a href="https://github.com/migrid-org/migrid-core/blob/main/docs/api-specs" class="doc-card" target="_blank">
+                <div class="doc-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                    </svg>
+                </div>
+                <h3>API Specifications</h3>
+                <p>OpenAPI/Swagger definitions for all service endpoints</p>
+            </a>
+            <a href="https://github.com/migrid-org/migrid-core/blob/main/docs/context-prompt.md" class="doc-card" target="_blank">
+                <div class="doc-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                </div>
+                <h3>AI Context Prompt</h3>
+                <p>Inject into AI assistants to ensure code follows safety invariants</p>
+            </a>
+            <a href="https://github.com/migrid-org/migrid-core/blob/main/infrastructure" class="doc-card" target="_blank">
+                <div class="doc-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                        <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                        <line x1="6" y1="6" x2="6.01" y2="6"/>
+                        <line x1="6" y1="18" x2="6.01" y2="18"/>
+                    </svg>
+                </div>
+                <h3>Infrastructure as Code</h3>
+                <p>Terraform modules and Kubernetes manifests for deployment</p>
+            </a>
+            <a href="https://github.com/migrid-org/migrid-core/blob/main/CONTRIBUTING.md" class="doc-card" target="_blank">
+                <div class="doc-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                </div>
+                <h3>Contributing Guide</h3>
+                <p>How to contribute, RFC process, and TSC governance</p>
+            </a>
+            <a href="https://github.com/migrid-org/migrid-core/blob/main/LICENSE" class="doc-card" target="_blank">
+                <div class="doc-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                </div>
+                <h3>Apache 2.0 License</h3>
+                <p>Open source license terms and conditions</p>
+            </a>
+        </div>
+    </section>
+
+    <!-- Standards -->
+    <section id="standards" class="standards">
+        <div class="standards-inner">
+            <div class="section-header">
+                <h2>Standards Compliance</h2>
+                <p>Built on open protocols for maximum interoperability</p>
+            </div>
+            <div class="standards-grid">
+                <div class="standard-badge">
+                    <div class="standard-icon">ADR</div>
+                    <div class="standard-info">
+                        <div class="standard-name">OpenADR 3.0</div>
+                        <div class="standard-desc">Demand response communication</div>
+                    </div>
+                </div>
+                <div class="standard-badge">
+                    <div class="standard-icon">OCPP</div>
+                    <div class="standard-info">
+                        <div class="standard-name">OCPP 2.0.1</div>
+                        <div class="standard-desc">Charger communication</div>
+                    </div>
+                </div>
+                <div class="standard-badge">
+                    <div class="standard-icon">OCPI</div>
+                    <div class="standard-info">
+                        <div class="standard-name">OCPI 2.2</div>
+                        <div class="standard-desc">Roaming networks</div>
+                    </div>
+                </div>
+                <div class="standard-badge">
+                    <div class="standard-icon">ISO</div>
+                    <div class="standard-info">
+                        <div class="standard-name">ISO 15118</div>
+                        <div class="standard-desc">Plug & Charge</div>
+                    </div>
+                </div>
+                <div class="standard-badge">
+                    <div class="standard-icon">MOD</div>
+                    <div class="standard-info">
+                        <div class="standard-name">Modbus TCP/RTU</div>
+                        <div class="standard-desc">Building load monitoring</div>
+                    </div>
+                </div>
+                <div class="standard-badge">
+                    <div class="standard-icon">MQTT</div>
+                    <div class="standard-info">
+                        <div class="standard-name">MQTT 5.0</div>
+                        <div class="standard-desc">Real-time messaging</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-inner">
+            <div class="footer-links">
+                <a href="https://github.com/migrid-org/migrid-core" target="_blank">GitHub</a>
+                <a href="https://github.com/migrid-org/migrid-core/issues" target="_blank">Issues</a>
+                <a href="https://github.com/migrid-org/migrid-core/discussions" target="_blank">Discussions</a>
+                <a href="https://github.com/migrid-org/migrid-core/releases" target="_blank">Releases</a>
+                <a href="https://www.linkedin.com/in/thomasctpm/" target="_blank">Author</a>
+            </div>
+            <p class="footer-copy">
+                © 2025 MiGrid Contributors • Apache 2.0 License<br>
+                <em>"Do not trust the driver. Verify the physics."</em>
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // Smooth scroll for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+
+        // Add animation on scroll
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.layer-card, .doc-card').forEach(card => {
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(20px)';
+            card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+            observer.observe(card);
+        });
+    </script>
+</body>
+</html>
