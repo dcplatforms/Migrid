@@ -1,0 +1,19 @@
+{
+  "name": "@migrid/driver-experience-api",
+  "version": "4.0.0",
+  "description": "Driver-facing API for mobile app, smart routing, and voice commands",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.0",
+    "pg": "^8.11.0",
+    "jsonwebtoken": "^9.0.0",
+    "bcrypt": "^5.1.0"
+  },
+  "keywords": ["driver-dx", "mobile-api", "smart-routing"],
+  "author": "MiGrid Contributors",
+  "license": "Apache-2.0"
+}

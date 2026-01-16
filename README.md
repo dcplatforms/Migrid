@@ -22,29 +22,34 @@ While many platforms manage EV charging, MiGrid is architected for the future of
 
 ---
 
-## Technical Architecture: The 10-Layer Stack
+## Technical Architecture: The 11-Layer Stack
 
 MiGrid is built as a monorepo of microservices communicating via a Kafka event bus. This design ensures scalability, resilience, and clear separation of concerns.
 
-| Layer | Name | Description | Service / App |
-| :--- | :--- | :--- | :--- |
-| **L1** | **Physics** | The "Green Audit." Verifies energy dispensed vs. received via telematics. | `01-physics-engine` |
-| **L2** | **Grid** | OpenADR 3.0 VEN for managing utility signals and demand response. | `02-grid-signal` |
-| **L3** | **VPP** | Aggregates EV/BESS assets into Virtual Resources for market bidding. | *(Future Service)* |
-| **L4** | **Market** | US-Centric energy arbitrage engine using Locational Marginal Pricing (LMP). | *(Future Service)* |
-| **L5** | **Driver Experience** | Voice-activated UI, smart routing, and real-time charging status. | `driver-app-mobile` |
-| **L6** | **Engagement** | Fleet CRM, targeted app banners, and support ticketing. | `admin-portal-web` |
-| **L7** | **Device** | Universal hardware abstraction (OCPP 2.0.1, ISO 15118, V2G). | `07-device-gateway` |
-| **L8** | **Energy** | Site-level Dynamic Load Management (DLM) and grid safety. | *(Handled by L7/L2)* |
-| **L9** | **Commerce** | Fintech-grade billing, tariffs, and subscription management. | `09-commerce-engine` |
-| **L10**| **Token** | Web3 rewards & staking for driver incentives via the Open-Wallet Framework. | `10-token-engine` |
+| Layer | Name | Description | Service / App | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **L1** | **Physics** | The "Green Audit." Verifies energy dispensed vs. received via telematics. | `01-physics-engine` | ✅ Complete |
+| **L2** | **Grid** | OpenADR 3.0 VEN for managing utility signals and demand response. | `02-grid-signal` | ✅ Complete |
+| **L3** | **VPP** | Aggregates EV/BESS assets into Virtual Resources for market bidding. | `03-vpp-aggregator` | ✅ Complete |
+| **L4** | **Market** | Wholesale energy market integration (CAISO, PJM, ERCOT). | `04-market-gateway` | ✅ Complete |
+| **L5** | **Driver Experience** | Mobile API, smart routing, and voice commands. | `05-driver-experience-api` + `driver-app-mobile` | ✅ Complete |
+| **L6** | **Engagement** | Gamification, leaderboards, and driver engagement. | `06-engagement-engine` | ✅ Complete |
+| **L7** | **Device** | Universal hardware abstraction (OCPP 2.0.1, ISO 15118, V2G). | `07-device-gateway` | 🔄 In Progress |
+| **L8** | **Energy** | Site-level Dynamic Load Management (DLM) and grid safety. | `08-energy-manager` | ✅ Complete |
+| **L9** | **Commerce** | Fintech-grade billing, tariffs, and subscription management. | `09-commerce-engine` | 🔄 In Progress |
+| **L10**| **Token** | Web3 rewards & staking for driver incentives via Open-Wallet. | `10-token-engine` | ✅ Complete |
+| **L11**| **ML Engine** | AI forecasting, predictive maintenance, anomaly detection. | `11-ml-engine` | 📋 Planned Q2 2026 |
 
 ### Core Technologies
-*   **Backend:** Node.js, Express.js, TypeScript (planned)
-*   **Database:** PostgreSQL with TimescaleDB for time-series data
-*   **Event Bus:** Apache Kafka
-*   **Frontend:** React, TypeScript, Fluent UI, Chart.js
-*   **Containerization:** Docker
+*   **Backend:** Node.js, Express.js, Python (ML services)
+*   **Database:** PostgreSQL 15+ with TimescaleDB for time-series data
+*   **Event Bus:** Apache Kafka for inter-service communication
+*   **Caching:** Redis for session and real-time state
+*   **Frontend:** React 19, TypeScript, Fluent UI v9, Chart.js
+*   **Mobile:** React Native with Expo (iOS & Android)
+*   **ML/AI:** TensorFlow 2.x / PyTorch 2.x, MLflow
+*   **Blockchain:** Polygon (ERC-20 tokens via Open-Wallet)
+*   **Containerization:** Docker + Kubernetes
 
 ---
 
@@ -107,3 +112,24 @@ This command will build and start all the services defined in `docker-compose.ym
 **Accessing the Admin Portal:**
 *   **URL:** `http://localhost:5173` (or the port specified by the Vite server)
 *   The portal provides a real-time view of the **L8 Energy** layer via the "Live Site Energy" dashboard.
+
+## Platform Status (January 2026)
+
+**Current Version:** 10.0.0
+**Roadmap Progress:** Phase 5 (Enterprise Scale) — In Progress
+
+### Completed Phases (Q1 2025 - Q4 2025)
+✅ **Phase 1**: Foundation — Physics verification, Energy Manager MVP
+✅ **Phase 2**: Grid Integration — OpenADR 3.0, Telematics bridges
+✅ **Phase 3**: Market Access — VPP aggregation, Wholesale markets
+✅ **Phase 4**: Driver Experience — Mobile app, Token ecosystem
+
+### Current Phase (Q1 2026)
+🔄 **Phase 5**: Enterprise Scale — Commerce engine, ISO 15118, Global markets
+
+### Upcoming Phases (2026)
+📋 **Phase 6** (Q2 2026): AI & Optimization — ML forecasting, Predictive analytics
+📋 **Phase 7** (Q3 2026): Global Expansion — Multi-tenant, International markets
+📋 **Phase 8** (Q4 2026): Advanced Grid Services — Frequency regulation, Resilience
+
+**Feature Completion:** 28 of 81 features (35%)

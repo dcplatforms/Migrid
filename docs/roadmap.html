@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Product Roadmap | MiGrid Documentation</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <title>Product Roadmap 2026 | MiGrid Documentation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -12,10 +12,24 @@
                 extend: {
                     colors: {
                         slate: {
-                            950: '#0a0f14',
-                            900: '#111820',
-                            800: '#1a232d',
-                            700: '#2a3544'
+                            950: '#020617',
+                            900: '#0f172a',
+                            850: '#1e293b'
+                        }
+                    },
+                    animation: {
+                        'gradient': 'gradient 8s linear infinite',
+                        'float': 'float 6s ease-in-out infinite',
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    },
+                    keyframes: {
+                        gradient: {
+                            '0%, 100%': { backgroundPosition: '0% 50%' },
+                            '50%': { backgroundPosition: '100% 50%' },
+                        },
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0px)' },
+                            '50%': { transform: 'translateY(-20px)' },
                         }
                     }
                 }
@@ -23,24 +37,47 @@
         }
     </script>
     <style>
-        body { font-family: 'Inter', sans-serif; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(to bottom, #020617 0%, #0f172a 100%);
+        }
         .mono { font-family: 'JetBrains Mono', monospace; }
+        .gradient-border {
+            background: linear-gradient(90deg, #06b6d4, #3b82f6, #8b5cf6);
+            background-size: 200% 200%;
+            animation: gradient 3s ease infinite;
+        }
+        .glass {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+        .phase-card {
+            transition: all 0.3s ease;
+        }
+        .phase-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(6, 182, 212, 0.2);
+        }
     </style>
 </head>
-<body class="bg-slate-950 text-white min-h-screen">
+<body class="text-white min-h-screen">
     <!-- Navigation -->
-    <nav class="fixed top-0 left-0 right-0 z-50 bg-slate-950/95 backdrop-blur border-b border-slate-700">
+    <nav class="fixed top-0 left-0 right-0 z-50 glass">
         <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-            <a href="index.html" class="flex items-center gap-2 text-xl font-bold">
-                <svg class="w-8 h-8 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-                </svg>
-                <span class="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">MiGrid</span>
+            <a href="index.html" class="flex items-center gap-2 text-xl font-bold group">
+                <div class="relative">
+                    <svg class="w-8 h-8 text-cyan-400 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                    </svg>
+                    <div class="absolute inset-0 bg-cyan-400 blur-xl opacity-20 group-hover:opacity-40 transition-opacity"></div>
+                </div>
+                <span class="bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent">MiGrid</span>
             </a>
             <div class="flex items-center gap-6">
-                <a href="index.html" class="text-slate-400 hover:text-cyan-400 text-sm">Documentation</a>
-                <a href="roadmap.html" class="text-cyan-400 text-sm">Roadmap</a>
-                <a href="https://github.com/migrid-org/migrid-core" target="_blank" class="flex items-center gap-2 px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm hover:border-cyan-400 transition-colors">
+                <a href="index.html" class="text-slate-400 hover:text-cyan-400 text-sm transition-colors">Documentation</a>
+                <a href="roadmap.html" class="text-cyan-400 text-sm font-semibold">Roadmap</a>
+                <a href="https://github.com/dcplatforms/Migrid" target="_blank" class="flex items-center gap-2 px-4 py-2 glass rounded-lg text-sm hover:border-cyan-400 transition-all hover:scale-105">
                     <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
                     GitHub
                 </a>
@@ -48,232 +85,475 @@
         </div>
     </nav>
 
-    <main class="pt-24 pb-16 px-6">
-        <div class="max-w-5xl mx-auto">
+    <main class="pt-32 pb-16 px-6">
+        <div class="max-w-7xl mx-auto">
             <!-- Header -->
-            <div class="text-center mb-12">
-                <div class="flex items-center justify-center gap-3 mb-4">
-                    <svg class="w-10 h-10 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-                    </svg>
-                    <h1 class="text-4xl font-bold bg-gradient-to-r from-cyan-400 to-teal-400 bg-clip-text text-transparent">
-                        MiGrid Product Roadmap
+            <div class="text-center mb-16">
+                <div class="flex items-center justify-center gap-3 mb-6">
+                    <div class="relative">
+                        <svg class="w-16 h-16 text-cyan-400 animate-float" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                        </svg>
+                        <div class="absolute inset-0 bg-cyan-400 blur-2xl opacity-30 animate-pulse-slow"></div>
+                    </div>
+                    <h1 class="text-5xl md:text-6xl font-bold bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent">
+                        Product Roadmap
                     </h1>
                 </div>
-                <p class="text-slate-400 text-lg">Q1 2025 → Q1 2026 | 5 Phases | 10 Releases</p>
-            </div>
-
-            <!-- Stats -->
-            <div class="grid grid-cols-3 gap-4 mb-12">
-                <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-6 text-center">
-                    <div class="text-4xl font-bold text-emerald-400">10</div>
-                    <div class="text-slate-400 text-sm mt-1">Features Complete</div>
-                </div>
-                <div class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-6 text-center">
-                    <div class="text-4xl font-bold text-amber-400">4</div>
-                    <div class="text-slate-400 text-sm mt-1">In Progress</div>
-                </div>
-                <div class="bg-slate-500/10 border border-slate-500/30 rounded-xl p-6 text-center">
-                    <div class="text-4xl font-bold text-slate-400">22</div>
-                    <div class="text-slate-400 text-sm mt-1">Planned</div>
+                <p class="text-slate-400 text-xl mb-4">Q1 2025 → Q4 2026</p>
+                <div class="flex items-center justify-center gap-4 text-sm">
+                    <span class="px-3 py-1 glass rounded-full text-cyan-400">8 Phases</span>
+                    <span class="px-3 py-1 glass rounded-full text-purple-400">16 Releases</span>
+                    <span class="px-3 py-1 glass rounded-full text-emerald-400">v10.0.0</span>
                 </div>
             </div>
 
-            <!-- Timeline -->
-            <div class="space-y-8">
-                <!-- Phase 1 -->
-                <div class="bg-slate-900/50 rounded-xl border border-emerald-500/50 overflow-hidden">
-                    <div class="h-1 bg-emerald-500"></div>
+            <!-- Stats Grid -->
+            <div class="grid md:grid-cols-4 gap-6 mb-16">
+                <div class="glass rounded-2xl p-6 text-center phase-card border-l-4 border-emerald-400">
+                    <div class="text-5xl font-bold text-emerald-400 mb-2">28</div>
+                    <div class="text-slate-400 text-sm">Features Complete</div>
+                    <div class="mt-2 w-full bg-slate-800 rounded-full h-2">
+                        <div class="bg-gradient-to-r from-emerald-400 to-emerald-500 h-2 rounded-full" style="width: 35%"></div>
+                    </div>
+                </div>
+                <div class="glass rounded-2xl p-6 text-center phase-card border-l-4 border-amber-400">
+                    <div class="text-5xl font-bold text-amber-400 mb-2">6</div>
+                    <div class="text-slate-400 text-sm">In Progress</div>
+                    <div class="mt-2 text-xs text-slate-500">Q1 2026</div>
+                </div>
+                <div class="glass rounded-2xl p-6 text-center phase-card border-l-4 border-purple-400">
+                    <div class="text-5xl font-bold text-purple-400 mb-2">24</div>
+                    <div class="text-slate-400 text-sm">Planned</div>
+                    <div class="mt-2 text-xs text-slate-500">Q2-Q4 2026</div>
+                </div>
+                <div class="glass rounded-2xl p-6 text-center phase-card border-l-4 border-cyan-400">
+                    <div class="text-5xl font-bold text-cyan-400 mb-2">35%</div>
+                    <div class="text-slate-400 text-sm">Platform Complete</div>
+                    <div class="mt-2 text-xs text-slate-500">28 of 81 features</div>
+                </div>
+            </div>
+
+            <!-- Timeline Header -->
+            <div class="mb-12">
+                <h2 class="text-3xl font-bold mb-4 bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">Development Timeline</h2>
+                <p class="text-slate-400">From foundational infrastructure to advanced grid services and global expansion</p>
+            </div>
+
+            <!-- Phases Grid -->
+            <div class="grid lg:grid-cols-2 gap-8 mb-16">
+                <!-- Phase 1: Foundation -->
+                <div class="glass rounded-2xl overflow-hidden phase-card border-2 border-emerald-500/50">
+                    <div class="h-2 bg-gradient-to-r from-emerald-500 to-emerald-600"></div>
                     <div class="p-6">
-                        <div class="flex items-start gap-4 mb-6">
-                            <div class="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-                                <svg class="w-6 h-6 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                        <div class="flex items-start gap-4 mb-4">
+                            <div class="w-14 h-14 rounded-xl bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+                                <svg class="w-7 h-7 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
                             </div>
-                            <div>
-                                <div class="flex items-center gap-3">
-                                    <h2 class="text-xl font-bold">Phase 1: Foundation</h2>
-                                    <span class="mono text-cyan-400 text-sm">v1.0</span>
-                                    <span class="px-2 py-1 bg-emerald-500/20 text-emerald-400 text-xs rounded">Q1 2025 ✓</span>
+                            <div class="flex-1">
+                                <div class="flex flex-wrap items-center gap-2 mb-2">
+                                    <h3 class="text-xl font-bold">Phase 1: Foundation</h3>
+                                    <span class="mono text-xs px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded">v1.0-1.1</span>
                                 </div>
-                                <p class="text-slate-400 mt-1">Core infrastructure and physics verification</p>
+                                <p class="text-slate-400 text-sm mb-2">Core infrastructure and physics verification</p>
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2 py-1 bg-emerald-500/20 text-emerald-400 text-xs rounded-full font-semibold">✓ Q1 2025</span>
+                                    <span class="text-xs text-slate-500">Complete</span>
+                                </div>
                             </div>
                         </div>
-                        <div class="grid md:grid-cols-2 gap-4">
-                            <div class="bg-slate-800/50 rounded-lg p-4 border-l-2 border-emerald-500">
-                                <div class="flex items-center gap-2 mb-2">
+                        <div class="grid gap-3">
+                            <div class="bg-slate-900/50 rounded-lg p-3 border-l-2 border-emerald-500">
+                                <div class="flex items-center gap-2 mb-1">
                                     <span class="mono text-xs px-2 py-0.5 bg-cyan-500/20 text-cyan-400 rounded">L1</span>
-                                    <span class="font-medium">Physics Engine Core</span>
+                                    <span class="font-medium text-sm">Physics Engine Core</span>
                                 </div>
-                                <p class="text-slate-500 text-sm">Variance calculation with &lt;15% threshold</p>
+                                <p class="text-slate-500 text-xs">Variance calculation with &lt;15% threshold</p>
                             </div>
-                            <div class="bg-slate-800/50 rounded-lg p-4 border-l-2 border-emerald-500">
-                                <div class="flex items-center gap-2 mb-2">
+                            <div class="bg-slate-900/50 rounded-lg p-3 border-l-2 border-emerald-500">
+                                <div class="flex items-center gap-2 mb-1">
                                     <span class="mono text-xs px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded">L7</span>
-                                    <span class="font-medium">OCPP 1.6 Support</span>
+                                    <span class="font-medium text-sm">OCPP 1.6 Support</span>
                                 </div>
-                                <p class="text-slate-500 text-sm">Basic charger communication protocol</p>
-                            </div>
-                            <div class="bg-slate-800/50 rounded-lg p-4 border-l-2 border-emerald-500">
-                                <div class="flex items-center gap-2 mb-2">
-                                    <span class="mono text-xs px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded">L8</span>
-                                    <span class="font-medium">Energy Manager MVP</span>
-                                </div>
-                                <p class="text-slate-500 text-sm">Modbus load monitoring, basic DLM</p>
-                            </div>
-                            <div class="bg-slate-800/50 rounded-lg p-4 border-l-2 border-emerald-500">
-                                <div class="flex items-center gap-2 mb-2">
-                                    <span class="mono text-xs px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded">L10</span>
-                                    <span class="font-medium">Token Engine Foundation</span>
-                                </div>
-                                <p class="text-slate-500 text-sm">Kafka consumer, reward rules engine</p>
+                                <p class="text-slate-500 text-xs">Basic charger communication protocol</p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Phase 2 -->
-                <div class="bg-slate-900/50 rounded-xl border border-amber-500/50 overflow-hidden">
-                    <div class="h-1 bg-gradient-to-r from-amber-500 to-slate-700" style="background-size: 50% 100%"></div>
+                <!-- Phase 2: Grid Integration -->
+                <div class="glass rounded-2xl overflow-hidden phase-card border-2 border-emerald-500/50">
+                    <div class="h-2 bg-gradient-to-r from-emerald-500 to-emerald-600"></div>
                     <div class="p-6">
-                        <div class="flex items-start gap-4 mb-6">
-                            <div class="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center">
-                                <svg class="w-6 h-6 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        <div class="flex items-start gap-4 mb-4">
+                            <div class="w-14 h-14 rounded-xl bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+                                <svg class="w-7 h-7 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
                             </div>
-                            <div>
-                                <div class="flex items-center gap-3">
-                                    <h2 class="text-xl font-bold">Phase 2: Grid Integration</h2>
-                                    <span class="mono text-cyan-400 text-sm">v2.0</span>
-                                    <span class="px-2 py-1 bg-amber-500/20 text-amber-400 text-xs rounded">Q2 2025 🔄</span>
+                            <div class="flex-1">
+                                <div class="flex flex-wrap items-center gap-2 mb-2">
+                                    <h3 class="text-xl font-bold">Phase 2: Grid Integration</h3>
+                                    <span class="mono text-xs px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded">v2.0-2.1</span>
                                 </div>
-                                <p class="text-slate-400 mt-1">OpenADR 3.0 and utility program connectivity</p>
+                                <p class="text-slate-400 text-sm mb-2">OpenADR 3.0 and utility connectivity</p>
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2 py-1 bg-emerald-500/20 text-emerald-400 text-xs rounded-full font-semibold">✓ Q2 2025</span>
+                                    <span class="text-xs text-slate-500">Complete</span>
+                                </div>
                             </div>
                         </div>
-                        <div class="grid md:grid-cols-2 gap-4">
-                            <div class="bg-slate-800/50 rounded-lg p-4 border-l-2 border-amber-500">
-                                <div class="flex items-center gap-2 mb-2">
+                        <div class="grid gap-3">
+                            <div class="bg-slate-900/50 rounded-lg p-3 border-l-2 border-emerald-500">
+                                <div class="flex items-center gap-2 mb-1">
                                     <span class="mono text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded">L2</span>
-                                    <span class="font-medium">OpenADR 3.0 VEN</span>
+                                    <span class="font-medium text-sm">OpenADR 3.0 VEN</span>
+                                </div>
+                                <p class="text-slate-500 text-xs">Demand response & price signals</p>
+                            </div>
+                            <div class="bg-slate-900/50 rounded-lg p-3 border-l-2 border-emerald-500">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="mono text-xs px-2 py-0.5 bg-cyan-500/20 text-cyan-400 rounded">L1</span>
+                                    <span class="font-medium text-sm">Telematics Bridges</span>
+                                </div>
+                                <p class="text-slate-500 text-xs">Samsara, Geotab, Fleetio integration</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Phase 3: Market Access -->
+                <div class="glass rounded-2xl overflow-hidden phase-card border-2 border-emerald-500/50">
+                    <div class="h-2 bg-gradient-to-r from-emerald-500 to-emerald-600"></div>
+                    <div class="p-6">
+                        <div class="flex items-start gap-4 mb-4">
+                            <div class="w-14 h-14 rounded-xl bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+                                <svg class="w-7 h-7 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            </div>
+                            <div class="flex-1">
+                                <div class="flex flex-wrap items-center gap-2 mb-2">
+                                    <h3 class="text-xl font-bold">Phase 3: Market Access</h3>
+                                    <span class="mono text-xs px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded">v3.0-3.1</span>
+                                </div>
+                                <p class="text-slate-400 text-sm mb-2">VPP aggregation & wholesale markets</p>
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2 py-1 bg-emerald-500/20 text-emerald-400 text-xs rounded-full font-semibold">✓ Q3 2025</span>
+                                    <span class="text-xs text-slate-500">Complete</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid gap-3">
+                            <div class="bg-slate-900/50 rounded-lg p-3 border-l-2 border-emerald-500">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="mono text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded">L3</span>
+                                    <span class="font-medium text-sm">VPP Aggregator</span>
+                                </div>
+                                <p class="text-slate-500 text-xs">Fleet capacity & BESS integration</p>
+                            </div>
+                            <div class="bg-slate-900/50 rounded-lg p-3 border-l-2 border-emerald-500">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="mono text-xs px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded">L4</span>
+                                    <span class="font-medium text-sm">Market Gateway</span>
+                                </div>
+                                <p class="text-slate-500 text-xs">CAISO & PJM adapters, LMP optimization</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Phase 4: Driver Experience -->
+                <div class="glass rounded-2xl overflow-hidden phase-card border-2 border-emerald-500/50">
+                    <div class="h-2 bg-gradient-to-r from-emerald-500 to-emerald-600"></div>
+                    <div class="p-6">
+                        <div class="flex items-start gap-4 mb-4">
+                            <div class="w-14 h-14 rounded-xl bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+                                <svg class="w-7 h-7 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            </div>
+                            <div class="flex-1">
+                                <div class="flex flex-wrap items-center gap-2 mb-2">
+                                    <h3 class="text-xl font-bold">Phase 4: Driver Experience</h3>
+                                    <span class="mono text-xs px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded">v4.0-4.1</span>
+                                </div>
+                                <p class="text-slate-400 text-sm mb-2">Mobile app & reward ecosystem</p>
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2 py-1 bg-emerald-500/20 text-emerald-400 text-xs rounded-full font-semibold">✓ Q4 2025</span>
+                                    <span class="text-xs text-slate-500">Complete</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid gap-3">
+                            <div class="bg-slate-900/50 rounded-lg p-3 border-l-2 border-emerald-500">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="mono text-xs px-2 py-0.5 bg-pink-500/20 text-pink-400 rounded">L5</span>
+                                    <span class="font-medium text-sm">React Native App</span>
+                                </div>
+                                <p class="text-slate-500 text-xs">Smart routing & voice commands</p>
+                            </div>
+                            <div class="bg-slate-900/50 rounded-lg p-3 border-l-2 border-emerald-500">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="mono text-xs px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded">L10</span>
+                                    <span class="font-medium text-sm">$GRID Token</span>
+                                </div>
+                                <p class="text-slate-500 text-xs">ERC-20 on Polygon, gamification</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Phase 5: Enterprise Scale -->
+                <div class="glass rounded-2xl overflow-hidden phase-card border-2 border-amber-500/50">
+                    <div class="h-2 bg-gradient-to-r from-amber-500 via-amber-600 to-slate-700" style="background-size: 50% 100%"></div>
+                    <div class="p-6">
+                        <div class="flex items-start gap-4 mb-4">
+                            <div class="w-14 h-14 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0 animate-pulse">
+                                <svg class="w-7 h-7 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            </div>
+                            <div class="flex-1">
+                                <div class="flex flex-wrap items-center gap-2 mb-2">
+                                    <h3 class="text-xl font-bold">Phase 5: Enterprise Scale</h3>
+                                    <span class="mono text-xs px-2 py-1 bg-amber-500/20 text-amber-400 rounded">v5.0-5.1</span>
+                                </div>
+                                <p class="text-slate-400 text-sm mb-2">Multi-site orchestration & global markets</p>
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2 py-1 bg-amber-500/20 text-amber-400 text-xs rounded-full font-semibold">🔄 Q1 2026</span>
+                                    <span class="text-xs text-slate-500">In Progress</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid gap-3">
+                            <div class="bg-slate-900/50 rounded-lg p-3 border-l-2 border-amber-500">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="mono text-xs px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded">L9</span>
+                                    <span class="font-medium text-sm">Commerce Engine</span>
                                     <span class="text-xs text-amber-400">In Progress</span>
                                 </div>
-                                <p class="text-slate-500 text-sm">Virtual End Node implementation per spec</p>
+                                <p class="text-slate-500 text-xs">Flexible billing, tariffs, split-billing</p>
                             </div>
-                            <div class="bg-slate-800/50 rounded-lg p-4 border-l-2 border-slate-600">
-                                <div class="flex items-center gap-2 mb-2">
+                            <div class="bg-slate-900/50 rounded-lg p-3 border-l-2 border-amber-500">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="mono text-xs px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded">L7</span>
+                                    <span class="font-medium text-sm">ISO 15118 Plug & Charge</span>
+                                    <span class="text-xs text-amber-400">In Progress</span>
+                                </div>
+                                <p class="text-slate-500 text-xs">Certificate-based authentication</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Phase 6: AI & Optimization -->
+                <div class="glass rounded-2xl overflow-hidden phase-card border-2 border-purple-500/50">
+                    <div class="h-2 bg-gradient-to-r from-purple-500 to-purple-600"></div>
+                    <div class="p-6">
+                        <div class="flex items-start gap-4 mb-4">
+                            <div class="w-14 h-14 rounded-xl bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+                                <svg class="w-7 h-7 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 0 1 7.07 2.93M12 2a10 10 0 0 0-7.07 2.93M12 2v4m0 12v4M2 12h4m12 0h4M12 22c2.76 0 5.24-1.12 7.07-2.93M12 22c-2.76 0-5.24-1.12-7.07-2.93"/></svg>
+                            </div>
+                            <div class="flex-1">
+                                <div class="flex flex-wrap items-center gap-2 mb-2">
+                                    <h3 class="text-xl font-bold">Phase 6: AI & Optimization</h3>
+                                    <span class="mono text-xs px-2 py-1 bg-purple-500/20 text-purple-400 rounded">v6.0-6.1</span>
+                                </div>
+                                <p class="text-slate-400 text-sm mb-2">ML forecasting & predictive analytics</p>
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2 py-1 bg-purple-500/20 text-purple-400 text-xs rounded-full font-semibold">📋 Q2 2026</span>
+                                    <span class="text-xs text-slate-500">Planned</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid gap-3">
+                            <div class="bg-slate-900/50 rounded-lg p-3 border-l-2 border-slate-600">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="mono text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded">L11</span>
+                                    <span class="font-medium text-sm">ML Demand Forecasting</span>
+                                </div>
+                                <p class="text-slate-500 text-xs">LSTM/Transformer models, 24-72h predictions</p>
+                            </div>
+                            <div class="bg-slate-900/50 rounded-lg p-3 border-l-2 border-slate-600">
+                                <div class="flex items-center gap-2 mb-1">
                                     <span class="mono text-xs px-2 py-0.5 bg-cyan-500/20 text-cyan-400 rounded">L1</span>
-                                    <span class="font-medium">Samsara Integration</span>
+                                    <span class="font-medium text-sm">Predictive Maintenance</span>
                                 </div>
-                                <p class="text-slate-500 text-sm">Real-time vehicle SoC via Fleet Admin API</p>
+                                <p class="text-slate-500 text-xs">Battery health & degradation forecasting</p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Phase 3 -->
-                <div class="bg-slate-900/50 rounded-xl border border-slate-600 overflow-hidden">
+                <!-- Phase 7: Global Expansion -->
+                <div class="glass rounded-2xl overflow-hidden phase-card border-2 border-blue-500/50">
+                    <div class="h-2 bg-gradient-to-r from-blue-500 to-blue-600"></div>
                     <div class="p-6">
-                        <div class="flex items-start gap-4 mb-6">
-                            <div class="w-12 h-12 rounded-xl bg-slate-700 flex items-center justify-center">
-                                <svg class="w-6 h-6 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+                        <div class="flex items-start gap-4 mb-4">
+                            <div class="w-14 h-14 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                                <svg class="w-7 h-7 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
                             </div>
-                            <div>
-                                <div class="flex items-center gap-3">
-                                    <h2 class="text-xl font-bold">Phase 3: Market Access</h2>
-                                    <span class="mono text-cyan-400 text-sm">v3.0</span>
-                                    <span class="px-2 py-1 bg-slate-700 text-slate-400 text-xs rounded">Q3 2025</span>
+                            <div class="flex-1">
+                                <div class="flex flex-wrap items-center gap-2 mb-2">
+                                    <h3 class="text-xl font-bold">Phase 7: Global Expansion</h3>
+                                    <span class="mono text-xs px-2 py-1 bg-blue-500/20 text-blue-400 rounded">v7.0-7.1</span>
                                 </div>
-                                <p class="text-slate-400 mt-1">VPP aggregation and wholesale market bidding</p>
+                                <p class="text-slate-400 text-sm mb-2">Multi-tenant & international markets</p>
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2 py-1 bg-blue-500/20 text-blue-400 text-xs rounded-full font-semibold">📋 Q3 2026</span>
+                                    <span class="text-xs text-slate-500">Planned</span>
+                                </div>
                             </div>
                         </div>
-                        <div class="flex flex-wrap gap-2">
-                            <span class="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-sm text-slate-400">L3 VPP Aggregator</span>
-                            <span class="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-sm text-slate-400">L4 CAISO Adapter</span>
-                            <span class="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-sm text-slate-400">L4 PJM Adapter</span>
+                        <div class="grid gap-3">
+                            <div class="bg-slate-900/50 rounded-lg p-3 border-l-2 border-slate-600">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="mono text-xs px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded">ALL</span>
+                                    <span class="font-medium text-sm">Multi-Tenant Platform</span>
+                                </div>
+                                <p class="text-slate-500 text-xs">White-label UI, tenant isolation, RBAC v2</p>
+                            </div>
+                            <div class="bg-slate-900/50 rounded-lg p-3 border-l-2 border-slate-600">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="mono text-xs px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded">L4</span>
+                                    <span class="font-medium text-sm">International Markets</span>
+                                </div>
+                                <p class="text-slate-500 text-xs">AEMO, UK BM, IEEE 2030.5, GDPR/CCPA</p>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Phase 4 -->
-                <div class="bg-slate-900/50 rounded-xl border border-slate-600 overflow-hidden">
+                <!-- Phase 8: Advanced Grid Services -->
+                <div class="glass rounded-2xl overflow-hidden phase-card border-2 border-cyan-500/50">
+                    <div class="h-2 bg-gradient-to-r from-cyan-500 to-teal-500"></div>
                     <div class="p-6">
-                        <div class="flex items-start gap-4 mb-6">
-                            <div class="w-12 h-12 rounded-xl bg-slate-700 flex items-center justify-center">
-                                <svg class="w-6 h-6 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                        <div class="flex items-start gap-4 mb-4">
+                            <div class="w-14 h-14 rounded-xl bg-cyan-500/20 flex items-center justify-center flex-shrink-0">
+                                <svg class="w-7 h-7 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                             </div>
-                            <div>
-                                <div class="flex items-center gap-3">
-                                    <h2 class="text-xl font-bold">Phase 4: Driver Experience</h2>
-                                    <span class="mono text-cyan-400 text-sm">v4.0</span>
-                                    <span class="px-2 py-1 bg-slate-700 text-slate-400 text-xs rounded">Q4 2025</span>
+                            <div class="flex-1">
+                                <div class="flex flex-wrap items-center gap-2 mb-2">
+                                    <h3 class="text-xl font-bold">Phase 8: Advanced Grid Services</h3>
+                                    <span class="mono text-xs px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded">v8.0-8.1</span>
                                 </div>
-                                <p class="text-slate-400 mt-1">Mobile app and driver reward ecosystem</p>
+                                <p class="text-slate-400 text-sm mb-2">Frequency regulation & resilience</p>
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2 py-1 bg-cyan-500/20 text-cyan-400 text-xs rounded-full font-semibold">📋 Q4 2026</span>
+                                    <span class="text-xs text-slate-500">Planned</span>
+                                </div>
                             </div>
                         </div>
-                        <div class="flex flex-wrap gap-2">
-                            <span class="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-sm text-slate-400">L5 React Native App</span>
-                            <span class="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-sm text-slate-400">L10 $GRID Token</span>
-                            <span class="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-sm text-slate-400">L6 Gamification</span>
+                        <div class="grid gap-3">
+                            <div class="bg-slate-900/50 rounded-lg p-3 border-l-2 border-slate-600">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="mono text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded">L3</span>
+                                    <span class="font-medium text-sm">Fast Frequency Response</span>
+                                </div>
+                                <p class="text-slate-500 text-xs">Sub-second grid stabilization, microgrid mode</p>
+                            </div>
+                            <div class="bg-slate-900/50 rounded-lg p-3 border-l-2 border-slate-600">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="mono text-xs px-2 py-0.5 bg-red-500/20 text-red-400 rounded">ALL</span>
+                                    <span class="font-medium text-sm">Zero-Trust Security</span>
+                                </div>
+                                <p class="text-slate-500 text-xs">NERC CIP, IEC 62351, mTLS, HSM</p>
+                            </div>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- Phase 5 -->
-                <div class="bg-slate-900/50 rounded-xl border border-slate-600 overflow-hidden">
-                    <div class="p-6">
-                        <div class="flex items-start gap-4 mb-6">
-                            <div class="w-12 h-12 rounded-xl bg-slate-700 flex items-center justify-center">
-                                <svg class="w-6 h-6 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            <!-- Layer Progress -->
+            <div class="mb-16">
+                <h2 class="text-3xl font-bold mb-6 bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">Layer Development Progress</h2>
+                <div class="glass rounded-2xl p-6">
+                    <div class="space-y-4">
+                        <div class="flex items-center gap-4">
+                            <span class="mono text-xs px-3 py-1 bg-cyan-500/20 text-cyan-400 rounded w-12 text-center">L1</span>
+                            <span class="text-sm font-medium w-32">Physics</span>
+                            <div class="flex-1 bg-slate-800 rounded-full h-3 overflow-hidden">
+                                <div class="bg-gradient-to-r from-cyan-400 to-cyan-500 h-3" style="width: 55%"></div>
                             </div>
-                            <div>
-                                <div class="flex items-center gap-3">
-                                    <h2 class="text-xl font-bold">Phase 5: Enterprise Scale</h2>
-                                    <span class="mono text-cyan-400 text-sm">v5.0</span>
-                                    <span class="px-2 py-1 bg-slate-700 text-slate-400 text-xs rounded">Q1 2026</span>
-                                </div>
-                                <p class="text-slate-400 mt-1">Multi-site, multi-fleet orchestration</p>
-                            </div>
+                            <span class="text-sm text-slate-400 w-16 text-right">55%</span>
                         </div>
-                        <div class="flex flex-wrap gap-2">
-                            <span class="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-sm text-slate-400">L9 Commerce Engine</span>
-                            <span class="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-sm text-slate-400">L7 ISO 15118</span>
-                            <span class="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-sm text-slate-400">L4 ENTSO-E</span>
-                            <span class="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-sm text-slate-400">L4 Nord Pool</span>
+                        <div class="flex items-center gap-4">
+                            <span class="mono text-xs px-3 py-1 bg-green-500/20 text-green-400 rounded w-12 text-center">L2</span>
+                            <span class="text-sm font-medium w-32">Grid Signal</span>
+                            <div class="flex-1 bg-slate-800 rounded-full h-3 overflow-hidden">
+                                <div class="bg-gradient-to-r from-green-400 to-green-500 h-3" style="width: 50%"></div>
+                            </div>
+                            <span class="text-sm text-slate-400 w-16 text-right">50%</span>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <span class="mono text-xs px-3 py-1 bg-purple-500/20 text-purple-400 rounded w-12 text-center">L3</span>
+                            <span class="text-sm font-medium w-32">VPP</span>
+                            <div class="flex-1 bg-slate-800 rounded-full h-3 overflow-hidden">
+                                <div class="bg-gradient-to-r from-purple-400 to-purple-500 h-3" style="width: 33%"></div>
+                            </div>
+                            <span class="text-sm text-slate-400 w-16 text-right">33%</span>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <span class="mono text-xs px-3 py-1 bg-blue-500/20 text-blue-400 rounded w-12 text-center">L4</span>
+                            <span class="text-sm font-medium w-32">Market</span>
+                            <div class="flex-1 bg-slate-800 rounded-full h-3 overflow-hidden">
+                                <div class="bg-gradient-to-r from-blue-400 to-blue-500 h-3" style="width: 30%"></div>
+                            </div>
+                            <span class="text-sm text-slate-400 w-16 text-right">30%</span>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <span class="mono text-xs px-3 py-1 bg-pink-500/20 text-pink-400 rounded w-12 text-center">L5</span>
+                            <span class="text-sm font-medium w-32">Driver DX</span>
+                            <div class="flex-1 bg-slate-800 rounded-full h-3 overflow-hidden">
+                                <div class="bg-gradient-to-r from-pink-400 to-pink-500 h-3" style="width: 37%"></div>
+                            </div>
+                            <span class="text-sm text-slate-400 w-16 text-right">37%</span>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <span class="mono text-xs px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded w-12 text-center">L11</span>
+                            <span class="text-sm font-medium w-32">ML Engine</span>
+                            <div class="flex-1 bg-slate-800 rounded-full h-3 overflow-hidden">
+                                <div class="bg-gradient-to-r from-purple-400 to-purple-500 h-3" style="width: 0%"></div>
+                            </div>
+                            <span class="text-sm text-slate-400 w-16 text-right">0%</span>
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- Legend -->
-            <div class="flex items-center justify-center gap-8 mt-12 text-sm text-slate-500">
+            <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-400 mb-12">
                 <div class="flex items-center gap-2">
                     <div class="w-3 h-3 rounded-full bg-emerald-500"></div>
                     <span>Complete</span>
                 </div>
                 <div class="flex items-center gap-2">
-                    <div class="w-3 h-3 rounded-full bg-amber-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-amber-500 animate-pulse"></div>
                     <span>In Progress</span>
                 </div>
                 <div class="flex items-center gap-2">
-                    <div class="w-3 h-3 rounded-full bg-slate-600"></div>
+                    <div class="w-3 h-3 rounded-full bg-purple-500"></div>
                     <span>Planned</span>
                 </div>
             </div>
 
             <!-- CTA -->
-            <div class="mt-12 text-center">
-                <a href="https://github.com/migrid-org/migrid-core/issues" target="_blank" class="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-teal-500 text-slate-950 font-semibold rounded-lg hover:opacity-90 transition-opacity">
+            <div class="text-center">
+                <a href="https://github.com/dcplatforms/Migrid/issues" target="_blank" class="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 text-white font-bold rounded-xl hover:scale-105 transition-transform shadow-lg shadow-cyan-500/50">
                     <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                    Request a Feature
+                    Request a Feature or Contribute
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 </a>
             </div>
         </div>
     </main>
 
     <!-- Footer -->
-    <footer class="border-t border-slate-800 py-8 text-center">
-        <p class="text-slate-600 text-sm">
-            © 2025 MiGrid Contributors • Apache 2.0 License<br>
-            <em>"Do not trust the driver. Verify the physics."</em>
-        </p>
+    <footer class="border-t border-slate-800 py-12 text-center mt-16">
+        <div class="max-w-4xl mx-auto px-6">
+            <p class="text-slate-500 text-sm mb-2">
+                © 2025-2026 MiGrid Contributors • Apache 2.0 License
+            </p>
+            <p class="text-slate-600 text-xs italic mb-4">
+                "Do not trust the driver. Verify the physics."
+            </p>
+            <p class="text-slate-700 text-xs">
+                Last Updated: January 2026 • Version 10.0.0
+            </p>
+        </div>
     </footer>
 </body>
 </html>

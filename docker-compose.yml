@@ -19,13 +19,23 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
       - ./scripts/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U migrid"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - migrid-internal
 
   redis:
-    image: redis:alpine
+    image: redis:7-alpine
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - migrid-internal
 
@@ -48,19 +58,22 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server=localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     networks:
       - migrid-internal
 
-  # --- External Service: Open-Wallet Ledger (running on a separate network) ---
+  # --- External Service: Open-Wallet Ledger ---
   open-wallet:
-    build: ../open-wallet  # Relative path to the cloned open-wallet repo
+    build: ../open-wallet
     ports:
       - "3000:3000"
     environment:
       PORT: 3000
       NODE_ENV: development
-      # Assume open-wallet has its own DB, or it's configured internally.
-      # For this exercise, we're treating it as an external black box API.
     networks:
       - open-wallet-net
 
@@ -68,20 +81,156 @@ services:
   physics-engine:
     build: ./services/01-physics-engine
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgres://migrid:dev_password_123@postgres:5432/migrid_core
       REDIS_URL: redis://redis:6379
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    networks:
+      - migrid-internal
+
+  # --- Layer 2: Grid Signal (OpenADR 3.0) ---
+  grid-signal:
+    build: ./services/02-grid-signal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://migrid:dev_password_123@postgres:5432/migrid_core
+      KAFKA_BROKERS: kafka:9092
+      PORT: 3002
+    ports:
+      - "3002:3002"
+    networks:
+      - migrid-internal
+
+  # --- Layer 3: VPP Aggregator ---
+  vpp-aggregator:
+    build: ./services/03-vpp-aggregator
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://migrid:dev_password_123@postgres:5432/migrid_core
+      KAFKA_BROKERS: kafka:9092
+      REDIS_URL: redis://redis:6379
+      VPP_MIN_CAPACITY_KW: 100
+      VPP_BESS_MIN_SOC: 20
+      PORT: 3003
+    ports:
+      - "3003:3003"
+    networks:
+      - migrid-internal
+
+  # --- Layer 4: Market Gateway ---
+  market-gateway:
+    build: ./services/04-market-gateway
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://migrid:dev_password_123@postgres:5432/migrid_core
+      LMP_THRESHOLD_BUY: 30.00
+      LMP_THRESHOLD_SELL: 100.00
+      CAISO_SC_ID: ${CAISO_SC_ID:-demo}
+      CAISO_API_KEY: ${CAISO_API_KEY:-demo_key}
+      PJM_MEMBER_ID: ${PJM_MEMBER_ID:-demo}
+      PJM_API_KEY: ${PJM_API_KEY:-demo_key}
+      PORT: 3004
+    ports:
+      - "3004:3004"
+    networks:
+      - migrid-internal
+
+  # --- Layer 5: Driver Experience API ---
+  driver-experience-api:
+    build: ./services/05-driver-experience-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://migrid:dev_password_123@postgres:5432/migrid_core
+      JWT_SECRET: ${JWT_SECRET:-dev_secret_change_in_production}
+      PORT: 3005
+    ports:
+      - "3005:3005"
+    networks:
+      - migrid-internal
+
+  # --- Layer 6: Engagement Engine ---
+  engagement-engine:
+    build: ./services/06-engagement-engine
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://migrid:dev_password_123@postgres:5432/migrid_core
+      KAFKA_BROKERS: kafka:9092
+      PORT: 3006
+    ports:
+      - "3006:3006"
     networks:
       - migrid-internal
 
   # --- Layer 7: Device Gateway (OCPP) ---
   device-gateway:
     build: ./services/07-device-gateway
-    ports:
-      - "9220:9220" # OCPP JSON WebSocket port
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    ports:
+      - "9220:9220"
+      - "3007:3007"
+    environment:
+      DATABASE_URL: postgres://migrid:dev_password_123@postgres:5432/migrid_core
+      KAFKA_BROKERS: kafka:9092
+      REDIS_URL: redis://redis:6379
+      PORT: 3007
+    networks:
+      - migrid-internal
+
+  # --- Layer 8: Energy Manager (DLM) ---
+  energy-manager:
+    build: ./services/08-energy-manager
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://migrid:dev_password_123@postgres:5432/migrid_core
+      MODBUS_HOST: ${MODBUS_HOST:-192.168.1.100}
+      MODBUS_PORT: ${MODBUS_PORT:-502}
+      GRID_CONNECTION_LIMIT_KW: ${GRID_CONNECTION_LIMIT_KW:-500}
+      PORT: 3008
+    ports:
+      - "3008:3008"
+    networks:
+      - migrid-internal
+
+  # --- Layer 9: Commerce Engine ---
+  commerce-engine:
+    build: ./services/09-commerce-engine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://migrid:dev_password_123@postgres:5432/migrid_core
+      STRIPE_API_KEY: ${STRIPE_API_KEY:-demo_key}
+      PORT: 3009
+    ports:
+      - "3009:3009"
     networks:
       - migrid-internal
 
@@ -89,16 +238,50 @@ services:
   token-engine:
     build: ./services/10-token-engine
     depends_on:
-      - postgres
-      - kafka
-      - open-wallet
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      open-wallet:
+        condition: service_started
     environment:
       DATABASE_URL: postgres://migrid:dev_password_123@postgres:5432/migrid_core
       KAFKA_BROKER: kafka:9092
-      OPEN_WALLET_API_URL: http://open-wallet:3000 
+      OPEN_WALLET_API_URL: http://open-wallet:3000
+      POLYGON_RPC_URL: ${POLYGON_RPC_URL:-https://polygon-rpc.com}
+      PORT: 3010
+    ports:
+      - "3010:3010"
     networks:
       - migrid-internal
       - open-wallet-net
+
+  # --- Layer 11: ML Engine (Planned Q2 2026) ---
+  # Uncomment when ready for deployment
+  # ml-engine:
+  #   build: ./services/11-ml-engine
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   environment:
+  #     DATABASE_URL: postgres://migrid:dev_password_123@postgres:5432/migrid_core
+  #     MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+  #     PORT: 3011
+  #   ports:
+  #     - "3011:3011"
+  #   networks:
+  #     - migrid-internal
+
+  # --- Frontend: Admin Portal Web ---
+  admin-portal-web:
+    build: ./apps/admin-portal-web
+    environment:
+      VITE_API_BASE_URL: http://localhost:3001
+      PORT: 5173
+    ports:
+      - "5173:5173"
+    networks:
+      - migrid-internal
 
 volumes:
   pg_data:

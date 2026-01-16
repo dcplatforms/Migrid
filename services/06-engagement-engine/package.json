@@ -1,0 +1,17 @@
+{
+  "name": "@migrid/engagement-engine",
+  "version": "4.1.0",
+  "description": "Gamification, leaderboards, and driver engagement",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.0",
+    "pg": "^8.11.0",
+    "kafka-node": "^5.0.0"
+  },
+  "keywords": ["gamification", "engagement", "leaderboards"],
+  "author": "MiGrid Contributors",
+  "license": "Apache-2.0"
+}

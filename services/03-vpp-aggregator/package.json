@@ -1,0 +1,24 @@
+{
+  "name": "@migrid/vpp-aggregator",
+  "version": "3.0.0",
+  "description": "Virtual Power Plant aggregation service for fleet capacity management",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "pg": "^8.11.0",
+    "kafka-node": "^5.0.0",
+    "redis": "^4.6.0",
+    "express": "^4.18.0"
+  },
+  "keywords": [
+    "vpp",
+    "aggregation",
+    "ferc-2222",
+    "grid-services"
+  ],
+  "author": "MiGrid Contributors",
+  "license": "Apache-2.0"
+}
