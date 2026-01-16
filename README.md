@@ -32,7 +32,7 @@ Our unified 11-layer platform spans from the **physics of energy transfer** to t
 
 **[I] Verify the Physics**
 
-*"Do not trust the driver; verify the physics."*
+*"Verify the physics. Unlock the grid."*
 
 Every charging session is audited to ensure energy dispensed matches energy received (<15% variance threshold).
 
