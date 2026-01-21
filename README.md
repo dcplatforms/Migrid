@@ -24,6 +24,83 @@ MiGrid is an **open-source, enterprise-grade operating system** designed to tran
 
 Our unified 11-layer platform spans from the **physics of energy transfer** to the **tokenization of grid-supportive actions**, enabling fleets to participate in wholesale energy markets, demand response programs, and Vehicle-to-Grid (V2G) operations.
 
+# MiGrid: The Operating System for Sustainable Fleets
+
+![Version](https://img.shields.io/badge/version-10.0.0--alpha-blue) ![License](https://img.shields.io/badge/license-Apache_2.0-green) ![Status](https://img.shields.io/badge/status-active_development-success)
+
+**MiGrid** is an open-source, vertically integrated operating system designed to bridge the gap between physical EV assets and digital energy markets. We enable fleets to turn parked vehicles into revenue-generating Virtual Power Plants (VPPs) through physics-verified, standards-compliant orchestration.
+
+---
+
+## Core Philosophy
+
+We do not trust the driver; we verify the physics.
+
+1.  **Verify the Physics:** Every charging session is audited against a **Physics Engine** (L1) that compares energy dispensed vs. battery capacity with a strict `<15%` variance threshold.
+2.  **Grid as Partner:** We don't just consume energy; we manage it. Our stack is built for **OpenADR 3.0** compliance, turning load shedding and price signals into automated fleet actions.
+3.  **Tokenize Value:** Grid-supportive behaviors are measured, verified, and rewarded directly to the driver's wallet via our **Token Bridge** (L10).
+
+---
+
+## Platform Engineering
+
+MiGrid is built on a streamlined, high-precision architecture designed for the realities of critical infrastructure. Our engineering principles prioritize physics verification, low-latency data processing, and uncompromising security.
+
+### Core Architectural Pillars
+
+* **Physics-First Verification (L1):** We do not trust digital signals blindly. All energy transactions are validated against a proprietary **Physics Engine** that audits charging sessions using "Digital Twin" models to detect anomalies and enforce capacity limits.
+* **Real-Time, Low-Latency Data:** The platform utilizes **Redis** for sub-millisecond state caching and **Apache Kafka** for event streaming, enabling real-time responsiveness for frequency regulation (<500ms) and high-frequency market bidding.
+* **Edge-to-Cloud Resilience:** Our **Edge Runtime** ensures site-level orchestration and mesh networking continue seamlessly even without cloud connectivity ("The Fuse Rule"), supported by a **Multi-Region Active-Active** cloud deployment for global resilience.
+
+### Technology Stack & Standards
+
+We leverage a modern, cloud-native stack to ensure scalability and adherence to global energy standards:
+
+* **Infrastructure as Code:** Fully containerized deployments via **Docker** and **Kubernetes**, managed with **Terraform**.
+* **Data Layer:** **TimescaleDB** for high-fidelity time-series energy metrics and **PostgreSQL** for relational core data.
+* **Security & Compliance:** Built on a **Zero-Trust Architecture** with mTLS everywhere. We strictly adhere to **NERC CIP** and **IEC 62351** cybersecurity standards.
+* **Interoperability:** Native support for **OpenADR 3.0** (VEN), **OCPP 2.0.1** (Smart Charging), and **ISO 15118** (Plug & Charge).
+
+---
+
+## 10-Layer Microservices Architecture
+
+The system is decoupled into ten distinct functional planes to separate concerns between physics, markets, and user experience.
+
+| Layer | Service | Description | Standards |
+| :--- | :--- | :--- | :--- |
+| **L1** | `physics-engine` | The "Green Audit" — verifies kWh dispensed vs received. | PL/pgSQL |
+| **L2** | `grid-signal` | Virtual End Node (VEN) for utility communication. | OpenADR 3.0 |
+| **L3** | `vpp-aggregator` | Aggregates EVs & BESS for wholesale markets. | IEEE 2030.5 |
+| **L4** | `market-gateway` | Arbitrage engine for CAISO, PJM, and Nord Pool. | FIX / OASIS |
+| **L5** | `driver-dx` | Smart routing, voice commands, and availability. | GraphQL |
+| **L6** | `engagement` | CRM, contextual support, and notifications. | WebSocket |
+| **L7** | `device-gateway` | Hardware abstraction for chargers. | OCPP 2.0.1 / ISO 15118 |
+| **L8** | `energy-manager` | Edge-ready dynamic load management (DLM). | Modbus TCP |
+| **L9** | `commerce-engine`| Flexible billing, tariffs, and split-billing. | Stripe / OCPI |
+| **L10**| `token-bridge` | Rewards and staking via Open-Wallet. | ERC-20 / Polygon |
+
+---
+
+## Quick Start
+
+Get the full stack running locally in under 5 minutes.
+
+```bash
+# 1. Clone the repository
+git clone [https://github.com/thomasc3/Migrid.git](https://github.com/thomasc3/Migrid.git)
+cd Migrid
+
+# 2. Start infrastructure (TimescaleDB, Redis, Gateway services)
+docker-compose up -d
+
+# 3. Seed vehicle physics models (F-150 Lightning, Rivian R1T, etc.)
+npm run seed:physics
+
+# 4. Verify services are running
+curl http://localhost:3000/health
+# Output: {"status": "ok", "services": ["physics", "device", "commerce"]}
+
 ### Core Philosophy
 
 <table>
@@ -39,7 +116,7 @@ Every charging session is audited to ensure energy dispensed matches energy rece
 </td>
 <td width="33%" valign="top">
 
-**[II] Grid as Partner**
+**[II] Unlock the Grid**
 
 *"The Grid is a partner, not just a plug."*
 
