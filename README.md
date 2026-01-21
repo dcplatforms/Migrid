@@ -37,7 +37,7 @@ Our unified 11-layer platform spans from the **physics of energy transfer** to t
 We do not trust the driver; we verify the physics.
 
 1.  **Verify the Physics:** Every charging session is audited against a **Physics Engine** (L1) that compares energy dispensed vs. battery capacity with a strict `<15%` variance threshold.
-2.  **Grid as Partner:** We don't just consume energy; we manage it. Our stack is built for **OpenADR 3.0** compliance, turning load shedding and price signals into automated fleet actions.
+2.  **Unlock the Grid:** We don't just consume energy; we manage it. Our stack is built for **OpenADR 3.0** compliance, turning load shedding and price signals into automated fleet actions.
 3.  **Tokenize Value:** Grid-supportive behaviors are measured, verified, and rewarded directly to the driver's wallet via our **Token Bridge** (L10).
 
 ---
