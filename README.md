@@ -82,25 +82,6 @@ The system is decoupled into ten distinct functional planes to separate concerns
 
 ---
 
-## Quick Start
-
-Get the full stack running locally in under 5 minutes.
-
-```bash
-# 1. Clone the repository
-git clone [https://github.com/thomasc3/Migrid.git](https://github.com/thomasc3/Migrid.git)
-cd Migrid
-
-# 2. Start infrastructure (TimescaleDB, Redis, Gateway services)
-docker-compose up -d
-
-# 3. Seed vehicle physics models (F-150 Lightning, Rivian R1T, etc.)
-npm run seed:physics
-
-# 4. Verify services are running
-curl http://localhost:3000/health
-# Output: {"status": "ok", "services": ["physics", "device", "commerce"]}
-
 ### Core Philosophy
 
 <table>
