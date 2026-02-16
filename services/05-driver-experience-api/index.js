@@ -158,37 +158,41 @@ app.get('/auth/me', authenticateToken, async (req, res) => {
 // CHARGER & ROUTING ENDPOINTS
 // ============================================================================
 
-// Find nearby chargers
+// Find nearby chargers (restricted to driver's fleet)
 app.get('/chargers/nearby', authenticateToken, async (req, res) => {
   const { lat, lng, radius = 10 } = req.query;
 
   try {
-    // Simplified: Return all available chargers
+    // Security Fix: Added fleet_id filter to prevent cross-fleet charger enumeration
     // In production, use PostGIS for geospatial queries
     const result = await pool.query(`
       SELECT c.id, c.charger_id, c.name, c.location,
              c.max_power_kw, c.status, c.last_heartbeat_at
       FROM chargers c
-      WHERE c.status = 'available'
+      WHERE c.status = 'available' AND c.fleet_id = $1
       ORDER BY c.max_power_kw DESC
       LIMIT 20
-    `);
+    `, [req.user.fleet_id]);
 
     res.json({
       chargers: result.rows,
       count: result.rows.length
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    // Security Fix: Generic error message to prevent information leakage
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
-// Get charger details
+// Get charger details (restricted to driver's fleet)
 app.get('/chargers/:id', authenticateToken, async (req, res) => {
   try {
+    // Security Fix: Added fleet_id filter to prevent Insecure Direct Object Reference (IDOR)
     const result = await pool.query(`
-      SELECT * FROM chargers WHERE id = $1
-    `, [req.params.id]);
+      SELECT id, charger_id, name, location, max_power_kw, status, last_heartbeat_at
+      FROM chargers
+      WHERE id = $1 AND fleet_id = $2
+    `, [req.params.id, req.user.fleet_id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Charger not found' });
@@ -196,7 +200,8 @@ app.get('/chargers/:id', authenticateToken, async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    // Security Fix: Generic error message to prevent information leakage
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
