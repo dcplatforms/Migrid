@@ -26,8 +26,10 @@ MiGrid is being developed across eight major phases spanning Q1 2025 through Q4 
 ## Current Status (Q1 2026)
 
 **Features Complete:** 28
-**In Progress:** 6
-**Planned:** 24
+**In Progress:** 5
+**Planned:** 41
+
+**Overall Progress:** 38%
 
 ---
 
@@ -228,8 +230,8 @@ MiGrid is being developed across eight major phases spanning Q1 2025 through Q4 
 - MLOps: MLflow for model versioning, A/B testing, and deployment
 
 **Key Deliverables:**
-- `services/11-ml-engine/` — Python-based ML service with TensorFlow/PyTorch
-- Integration with existing L3 VPP service for market optimization
+- `services/03-vpp-aggregator/` — ML-based demand forecasting extensions
+- Integration with L3 VPP service for market optimization
 - Real-time inference API with <100ms latency
 - Model retraining pipeline with weekly cadence
 
@@ -350,9 +352,8 @@ MiGrid is being developed across eight major phases spanning Q1 2025 through Q4 
 | L8 | Energy Manager | 8 | 3 | 1 | 4 | ████░░░░░░ 37% |
 | L9 | Commerce | 5 | 0 | 1 | 4 | ░░░░░░░░░░ 0% |
 | L10 | Token Bridge | 6 | 3 | 0 | 3 | █████░░░░░ 50% |
-| L11 | ML Engine | 7 | 0 | 0 | 7 | ░░░░░░░░░░ 0% |
 
-**Overall Platform Completion:** 28 of 81 features (35%)
+**Overall Platform Completion:** 28 of 74 features (38%)
 
 ---
 

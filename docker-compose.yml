@@ -256,22 +256,6 @@ services:
       - migrid-internal
       - open-wallet-net
 
-  # --- Layer 11: ML Engine (Planned Q2 2026) ---
-  # Uncomment when ready for deployment
-  # ml-engine:
-  #   build: ./services/11-ml-engine
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   environment:
-  #     DATABASE_URL: postgres://migrid:dev_password_123@postgres:5432/migrid_core
-  #     MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
-  #     PORT: 3011
-  #   ports:
-  #     - "3011:3011"
-  #   networks:
-  #     - migrid-internal
-
   # --- Frontend: Admin Portal Web ---
   admin-portal-web:
     build: ./apps/admin-portal-web
