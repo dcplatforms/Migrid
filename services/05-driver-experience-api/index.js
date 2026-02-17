@@ -19,6 +19,40 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 
 app.use(express.json());
 
+// Rate limiting state: In-memory Map to track login attempts per email
+const loginAttempts = new Map();
+
+/**
+ * Middleware: Simple rate limiter for login attempts
+ * Limits to 5 attempts per email address within a 15-minute window
+ */
+const loginRateLimiter = (req, res, next) => {
+  const { email } = req.body;
+  if (!email || typeof email !== 'string') {
+    return next();
+  }
+
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000; // 15 minutes
+  const maxAttempts = 5;
+
+  // Clean up old attempts and get current ones
+  const attempts = (loginAttempts.get(email) || [])
+    .filter(timestamp => now - timestamp < windowMs);
+
+  if (attempts.length >= maxAttempts) {
+    console.warn(`[Security] Rate limit exceeded for email: ${email}`);
+    return res.status(429).json({
+      error: 'Too many login attempts. Please try again later.'
+    });
+  }
+
+  // Record this attempt
+  attempts.push(now);
+  loginAttempts.set(email, attempts);
+  next();
+};
+
 // Middleware: Verify JWT token
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -84,16 +118,17 @@ app.post('/auth/register', async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('[Registration Error]', error);
     if (error.code === '23505') { // Unique violation
       res.status(400).json({ error: 'Email already registered' });
     } else {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: 'An internal server error occurred' });
     }
   }
 });
 
 // Login
-app.post('/auth/login', async (req, res) => {
+app.post('/auth/login', loginRateLimiter, async (req, res) => {
   const { email, password } = req.body;
 
   try {
@@ -133,7 +168,8 @@ app.post('/auth/login', async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[Login Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
@@ -150,7 +186,8 @@ app.get('/auth/me', authenticateToken, async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[Profile Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
@@ -227,7 +264,8 @@ app.get('/sessions', authenticateToken, async (req, res) => {
       count: result.rows.length
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+      console.error('[Sessions Error]', error);
+      res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
@@ -249,7 +287,8 @@ app.get('/sessions/active', authenticateToken, async (req, res) => {
 
     res.json({ active_session: result.rows[0] });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[Active Session Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
@@ -273,7 +312,8 @@ app.get('/rewards/balance', authenticateToken, async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[Reward Balance Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
@@ -293,7 +333,8 @@ app.get('/rewards/history', authenticateToken, async (req, res) => {
       count: result.rows.length
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[Reward History Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
@@ -345,7 +386,8 @@ app.post('/voice/command', authenticateToken, async (req, res) => {
       success: false
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[Voice Command Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
