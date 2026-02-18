@@ -189,6 +189,8 @@ services:
   device-gateway:
     build: ./services/07-device-gateway
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     ports:
@@ -198,6 +200,7 @@ services:
       DATABASE_URL: postgres://migrid:dev_password_123@postgres:5432/migrid_core
       KAFKA_BROKERS: kafka:9092
       REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-dev_secret_change_in_production}
       PORT: 3007
     networks:
       - migrid-internal

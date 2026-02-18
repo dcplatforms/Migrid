@@ -1,0 +1,15 @@
+{
+  "name": "@migrid/commerce-engine",
+  "version": "1.0.0",
+  "description": "Billing and tariff management for MiGrid",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "pg": "^8.11.0",
+    "dotenv": "^16.3.1"
+  }
+}
