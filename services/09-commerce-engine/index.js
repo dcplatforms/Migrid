@@ -1,6 +1,7 @@
 const express = require('express');
 const { Pool } = require('pg');
 const dotenv = require('dotenv');
+const jwt = require('jsonwebtoken');
 
 dotenv.config();
 
@@ -13,6 +14,26 @@ const pool = new Pool({
 
 app.use(express.json());
 
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
+
+// Middleware: Verify JWT token
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+  });
+};
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', service: 'Commerce Engine' });
@@ -21,8 +42,14 @@ app.get('/health', (req, res) => {
 /**
  * Manage Tariffs
  */
-app.post('/tariffs', async (req, res) => {
+app.post('/tariffs', authenticateToken, async (req, res) => {
   const { fleet_id, name, base_rate_kwh, peak_rate_kwh, peak_start_time, peak_end_time, currency } = req.body;
+
+  // Multi-tenancy isolation
+  if (fleet_id !== req.user.fleet_id.toString()) {
+    return res.status(403).json({ error: 'Unauthorized to manage tariffs for other fleets' });
+  }
+
   try {
     const result = await pool.query(
       'INSERT INTO tariffs (fleet_id, name, base_rate_kwh, peak_rate_kwh, peak_start_time, peak_end_time, currency) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
@@ -30,16 +57,23 @@ app.post('/tariffs', async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[Commerce Engine Error]', err);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
-app.get('/tariffs/:fleet_id', async (req, res) => {
+app.get('/tariffs/:fleet_id', authenticateToken, async (req, res) => {
+  // Multi-tenancy isolation
+  if (req.params.fleet_id !== req.user.fleet_id.toString()) {
+    return res.status(403).json({ error: 'Unauthorized to view tariffs for other fleets' });
+  }
+
   try {
     const result = await pool.query('SELECT * FROM tariffs WHERE fleet_id = $1 AND is_active = true', [req.params.fleet_id]);
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[Commerce Engine Error]', err);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
@@ -73,20 +107,28 @@ async function calculateSessionCost(sessionId) {
   return cost;
 }
 
-app.post('/billing/calculate/:sessionId', async (req, res) => {
+app.post('/billing/calculate/:sessionId', authenticateToken, async (req, res) => {
   try {
+    // In production, verify session ownership
     const cost = await calculateSessionCost(req.params.sessionId);
     res.json({ session_id: req.params.sessionId, cost });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[Commerce Engine Error]', err);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
 /**
  * Generate Invoice for a fleet
  */
-app.post('/invoices/generate', async (req, res) => {
+app.post('/invoices/generate', authenticateToken, async (req, res) => {
   const { fleet_id, start_date, end_date } = req.body;
+
+  // Multi-tenancy isolation
+  if (fleet_id !== req.user.fleet_id.toString()) {
+    return res.status(403).json({ error: 'Unauthorized to generate invoices for other fleets' });
+  }
+
   try {
     // 1. Calculate costs for all sessions in period that don't have an invoice_id
     const sessions = await pool.query(
@@ -124,7 +166,8 @@ app.post('/invoices/generate', async (req, res) => {
 
     res.status(201).json(invoice.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[Commerce Engine Error]', err);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
