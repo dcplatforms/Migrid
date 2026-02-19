@@ -6,6 +6,7 @@
 const express = require('express');
 const { Pool } = require('pg');
 const redis = require('redis');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const port = process.env.PORT || 3003;
@@ -22,6 +23,26 @@ const redisClient = redis.createClient({
 
 app.use(express.json());
 
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
+
+// Middleware: Verify JWT token
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+  });
+};
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({
@@ -33,9 +54,10 @@ app.get('/health', (req, res) => {
 });
 
 // Get available capacity
-app.get('/capacity/available', async (req, res) => {
+app.get('/capacity/available', authenticateToken, async (req, res) => {
   try {
     // Calculate: Σ(vehicle_soc × battery_capacity × availability_factor)
+    // Security Fix: Added fleet_id filter for multi-tenancy isolation
     const result = await pool.query(`
       SELECT
         SUM(v.current_soc * v.battery_capacity_kwh * v.availability_factor) as total_capacity_kwh,
@@ -44,7 +66,8 @@ app.get('/capacity/available', async (req, res) => {
       WHERE v.is_plugged_in = true
         AND v.v2g_enabled = true
         AND v.current_soc > v.min_soc_threshold
-    `);
+        AND v.fleet_id = $1
+    `, [req.user.fleet_id]);
 
     const capacity = result.rows[0];
     res.json({
@@ -54,12 +77,13 @@ app.get('/capacity/available', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[VPP Aggregator Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
 // Register resource
-app.post('/resources/register', async (req, res) => {
+app.post('/resources/register', authenticateToken, async (req, res) => {
   const { vehicle_id, battery_capacity_kwh, v2g_enabled } = req.body;
 
   if (battery_capacity_kwh < 50) {
@@ -83,7 +107,8 @@ app.post('/resources/register', async (req, res) => {
       message: 'Resource registered for VPP participation'
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[VPP Aggregator Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
