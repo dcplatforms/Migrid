@@ -9,3 +9,8 @@
 **Vulnerability:** Missing rate limiting on login endpoints and exposure of internal error messages.
 **Learning:** Public-facing authentication endpoints are primary targets for brute-force attacks. Additionally, returning raw database error messages (`error.message`) leaks internal schema details.
 **Prevention:** Implement rate limiting on sensitive endpoints and ensure all API responses use generic error messages, with detailed errors logged only on the server.
+
+## 2025-05-21 - [Unauthenticated Sensitive Endpoints and Rate Limiting]
+**Vulnerability:** Registration endpoints lacked rate limiting, and several internal services (Commerce, VPP Aggregator) expose unauthenticated sensitive endpoints.
+**Learning:** Public registration endpoints are highly susceptible to automated abuse if not IP-rate limited. Some services were found with unauthenticated `POST /tariffs` and `POST /resources/register` endpoints, representing significant security gaps.
+**Prevention:** Always apply IP-based rate limiting to registration and ensure all sensitive endpoints across all microservices are protected by the `authenticateToken` middleware.
