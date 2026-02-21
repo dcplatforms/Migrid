@@ -30,7 +30,9 @@ app.post('/tariffs', async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    // Security: Log error details server-side but return generic message to prevent information leakage
+    console.error('[Tariff Creation Error]', err);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
@@ -39,7 +41,9 @@ app.get('/tariffs/:fleet_id', async (req, res) => {
     const result = await pool.query('SELECT * FROM tariffs WHERE fleet_id = $1 AND is_active = true', [req.params.fleet_id]);
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    // Security: Log error details server-side but return generic message to prevent information leakage
+    console.error('[Tariff Retrieval Error]', err);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
@@ -78,7 +82,9 @@ app.post('/billing/calculate/:sessionId', async (req, res) => {
     const cost = await calculateSessionCost(req.params.sessionId);
     res.json({ session_id: req.params.sessionId, cost });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    // Security: Log error details server-side but return generic message to prevent information leakage
+    console.error('[Billing Calculation Error]', err);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
@@ -124,7 +130,9 @@ app.post('/invoices/generate', async (req, res) => {
 
     res.status(201).json(invoice.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    // Security: Log error details server-side but return generic message to prevent information leakage
+    console.error('[Invoice Generation Error]', err);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
