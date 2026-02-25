@@ -14,3 +14,8 @@
 **Vulnerability:** API endpoints returning raw database and internal error messages (`err.message`).
 **Learning:** Development-focused error handling often prioritizes quick debugging over security, but returning raw errors in production can leak schema details and internal logic.
 **Prevention:** Always use generic error messages in API responses (e.g., 'An internal server error occurred') and log detailed errors to the server console or a logging service.
+
+## 2026-02-07 - [Unauthenticated State-Changing Endpoints]
+**Vulnerability:** Resource registration endpoints accessible without authentication and lack of tenant ownership verification.
+**Learning:** Even internal-facing microservices must enforce authentication and authorization, especially when they modify state or manage sensitive grid resources. Relying on "security by obscurity" or network isolation is insufficient.
+**Prevention:** Implement JWT authentication on all state-changing endpoints and always verify that the resource being modified (e.g., a vehicle) belongs to the authenticated user's tenant (e.g., fleet_id).

@@ -6,9 +6,12 @@
 const express = require('express');
 const { Pool } = require('pg');
 const redis = require('redis');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const port = process.env.PORT || 3003;
+
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 
 // PostgreSQL connection
 const pool = new Pool({
@@ -21,6 +24,26 @@ const redisClient = redis.createClient({
 });
 
 app.use(express.json());
+
+/**
+ * Middleware: Verify JWT token
+ */
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+  });
+};
 
 // Health check
 app.get('/health', (req, res) => {
@@ -35,7 +58,6 @@ app.get('/health', (req, res) => {
 // Get available capacity
 app.get('/capacity/available', async (req, res) => {
   try {
-    // Calculate: Σ(vehicle_soc × battery_capacity × availability_factor)
     const result = await pool.query(`
       SELECT
         SUM(v.current_soc * v.battery_capacity_kwh * v.availability_factor) as total_capacity_kwh,
@@ -49,48 +71,56 @@ app.get('/capacity/available', async (req, res) => {
     const capacity = result.rows[0];
     res.json({
       available_capacity_kwh: parseFloat(capacity.total_capacity_kwh || 0),
-      available_capacity_kw: parseFloat(capacity.total_capacity_kwh || 0), // Simplified
+      available_capacity_kw: parseFloat(capacity.total_capacity_kwh || 0),
       resource_count: parseInt(capacity.vehicle_count || 0),
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[VPP Aggregator] Capacity retrieval error:', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
 // Register resource
-app.post('/resources/register', async (req, res) => {
+app.post('/resources/register', authenticateToken, async (req, res) => {
   const { vehicle_id, battery_capacity_kwh, v2g_enabled } = req.body;
 
+  if (!vehicle_id || typeof vehicle_id !== 'string' || typeof battery_capacity_kwh !== 'number' || typeof v2g_enabled !== 'boolean') {
+    return res.status(400).json({ error: 'Invalid input parameters' });
+  }
+
   if (battery_capacity_kwh < 50) {
-    return res.status(400).json({
-      error: 'Minimum battery capacity is 50 kWh for VPP participation'
-    });
+    return res.status(400).json({ error: 'Minimum battery capacity is 50 kWh' });
   }
 
   try {
+    const vehicleCheck = await pool.query('SELECT fleet_id FROM vehicles WHERE id = $1', [vehicle_id]);
+
+    if (vehicleCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Vehicle not found' });
+    }
+
+    if (vehicleCheck.rows[0].fleet_id !== req.user.fleet_id) {
+      return res.status(403).json({ error: 'Unauthorized: Fleet mismatch' });
+    }
+
     await pool.query(`
       INSERT INTO vpp_resources (vehicle_id, battery_capacity_kwh, v2g_enabled, registered_at)
       VALUES ($1, $2, $3, NOW())
       ON CONFLICT (vehicle_id) DO UPDATE SET
-        battery_capacity_kwh = $2,
-        v2g_enabled = $3,
-        updated_at = NOW()
+        battery_capacity_kwh = $2, v2g_enabled = $3, updated_at = NOW()
     `, [vehicle_id, battery_capacity_kwh, v2g_enabled]);
 
-    res.json({
-      success: true,
-      message: 'Resource registered for VPP participation'
-    });
+    res.json({ success: true, message: 'Resource registered' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[VPP Aggregator] Resource registration error:', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
 // Start server
 app.listen(port, () => {
   console.log(`[VPP Aggregator] Running on port ${port}`);
-  console.log('[VPP Aggregator] Safety constraint: Never discharge BESS below 20%');
 });
 
 // Graceful shutdown
