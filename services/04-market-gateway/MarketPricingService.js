@@ -1,0 +1,55 @@
+/**
+ * MarketPricingService
+ * Handles retrieval of Locational Marginal Pricing (LMP) from the database.
+ */
+class MarketPricingService {
+  /**
+   * @param {import('pg').Pool} pool - PostgreSQL connection pool
+   */
+  constructor(pool) {
+    this.pool = pool;
+  }
+
+  /**
+   * Fetches the latest LMP prices for a given ISO.
+   * @param {string} iso - The ISO name (e.g., 'CAISO')
+   * @param {number} limit - Number of records to return
+   * @returns {Promise<Array>} List of LMP price records
+   */
+  async getLatestPrices(iso, limit = 10) {
+    const result = await this.pool.query(`
+      SELECT location, price_per_mwh, timestamp
+      FROM lmp_prices
+      WHERE iso = $1
+        AND timestamp > NOW() - INTERVAL '5 minutes'
+      ORDER BY timestamp DESC
+      LIMIT $2
+    `, [iso.toUpperCase(), limit]);
+
+    return result.rows;
+  }
+
+  /**
+   * Fetches the Day-Ahead forecasted LMP prices for a given ISO.
+   * For the purpose of this implementation, we'll query the lmp_prices table
+   * assuming it contains forecasted data for the next 24 hours.
+   * @param {string} iso - The ISO name
+   * @returns {Promise<Array>} List of forecasted price records for the next 24 hours
+   */
+  async getDayAheadForecast(iso) {
+    // In a real scenario, this might query a different table or use a specific filter.
+    // Based on requirements, we'll use the existing lmp_prices table.
+    const result = await this.pool.query(`
+      SELECT location, price_per_mwh, timestamp
+      FROM lmp_prices
+      WHERE iso = $1
+        AND timestamp >= date_trunc('day', NOW() + INTERVAL '1 day')
+        AND timestamp < date_trunc('day', NOW() + INTERVAL '2 days')
+      ORDER BY timestamp ASC
+    `, [iso.toUpperCase()]);
+
+    return result.rows;
+  }
+}
+
+module.exports = MarketPricingService;
