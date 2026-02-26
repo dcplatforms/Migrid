@@ -19,7 +19,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 
 app.use(express.json());
 
-// Rate limiting state: In-memory Map to track attempts
+// Rate limiting state: In-memory Maps to track attempts
 const loginAttempts = new Map();
 const registrationAttempts = new Map();
 
@@ -55,11 +55,11 @@ const loginRateLimiter = (req, res, next) => {
 };
 
 /**
- * Middleware: Simple rate limiter for registration
- * Limits to 3 registrations per IP within a 1-hour window
+ * Middleware: IP-based rate limiter for registration
+ * Limits to 3 attempts per hour per IP address to prevent automated attacks
  */
 const registrationRateLimiter = (req, res, next) => {
-  const ip = req.ip;
+  const ip = req.ip || req.connection.remoteAddress;
   const now = Date.now();
   const windowMs = 60 * 60 * 1000; // 1 hour
   const maxAttempts = 3;
@@ -70,7 +70,7 @@ const registrationRateLimiter = (req, res, next) => {
   if (attempts.length >= maxAttempts) {
     console.warn(`[Security] Registration rate limit exceeded for IP: ${ip}`);
     return res.status(429).json({
-      error: 'Too many registrations from this IP. Please try again later.'
+      error: 'Too many registration attempts from this IP. Please try again later.'
     });
   }
 
