@@ -7,6 +7,7 @@ const express = require('express');
 const { Pool } = require('pg');
 const Decimal = require('decimal.js');
 const axios = require('axios');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const port = process.env.PORT || 3004;
@@ -17,6 +18,26 @@ const pool = new Pool({
 });
 
 app.use(express.json());
+
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
+
+// Middleware: Verify JWT token
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+  });
+};
 
 // LMP thresholds
 const LMP_THRESHOLD_BUY = new Decimal(process.env.LMP_THRESHOLD_BUY || '30.00');
@@ -34,7 +55,7 @@ app.get('/health', (req, res) => {
 });
 
 // Get current LMP prices
-app.get('/markets/:iso/prices', async (req, res) => {
+app.get('/markets/:iso/prices', authenticateToken, async (req, res) => {
   const { iso } = req.params;
 
   try {
@@ -58,12 +79,13 @@ app.get('/markets/:iso/prices', async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[Market Gateway Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
 // Submit energy bid
-app.post('/bids/submit', async (req, res) => {
+app.post('/bids/submit', authenticateToken, async (req, res) => {
   const { iso, market_type, quantity_kw, price_per_mwh, delivery_hour } = req.body;
 
   // Validate bid size
@@ -102,7 +124,8 @@ app.post('/bids/submit', async (req, res) => {
       message: 'Bid submitted to market'
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[Market Gateway Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 

@@ -6,6 +6,7 @@
 const express = require('express');
 const { Pool } = require('pg');
 const kafka = require('kafka-node');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const port = process.env.PORT || 3006;
@@ -15,6 +16,26 @@ const pool = new Pool({
 });
 
 app.use(express.json());
+
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
+
+// Middleware: Verify JWT token
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+  });
+};
 
 // Kafka consumer for charging events
 let kafkaClient, consumer;
@@ -51,11 +72,12 @@ app.get('/health', (req, res) => {
 // ============================================================================
 
 // Get global leaderboard
-app.get('/leaderboard', async (req, res) => {
-  const { fleet_id, limit = 50 } = req.query;
+app.get('/leaderboard', authenticateToken, async (req, res) => {
+  const { limit = 50 } = req.query;
+  const fleet_id = req.user.fleet_id; // Multi-tenancy isolation
 
   try {
-    let query = `
+    const query = `
       SELECT
         l.rank,
         l.total_points,
@@ -67,29 +89,29 @@ app.get('/leaderboard', async (req, res) => {
       FROM leaderboard l
       JOIN drivers d ON l.driver_id = d.id
       JOIN fleets f ON l.fleet_id = f.id
+      WHERE l.fleet_id = $1
+      ORDER BY l.rank ASC LIMIT ${parseInt(limit)}
     `;
 
-    const params = [];
-    if (fleet_id) {
-      query += ` WHERE l.fleet_id = $1`;
-      params.push(fleet_id);
-    }
-
-    query += ` ORDER BY l.rank ASC LIMIT ${parseInt(limit)}`;
-
-    const result = await pool.query(query, params);
+    const result = await pool.query(query, [fleet_id]);
 
     res.json({
       leaderboard: result.rows,
       count: result.rows.length
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[Engagement Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
 // Get driver's rank
-app.get('/leaderboard/driver/:driver_id', async (req, res) => {
+app.get('/leaderboard/driver/:driver_id', authenticateToken, async (req, res) => {
+  // IDOR check: Drivers can only view their own rank
+  if (req.params.driver_id !== req.user.driver_id.toString()) {
+    return res.status(403).json({ error: 'Unauthorized to view other driver ranks' });
+  }
+
   try {
     const result = await pool.query(`
       SELECT
@@ -109,7 +131,8 @@ app.get('/leaderboard/driver/:driver_id', async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[Engagement Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
@@ -118,7 +141,7 @@ app.get('/leaderboard/driver/:driver_id', async (req, res) => {
 // ============================================================================
 
 // Get all available achievements
-app.get('/achievements', async (req, res) => {
+app.get('/achievements', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT id, name, description, icon, points
@@ -131,12 +154,18 @@ app.get('/achievements', async (req, res) => {
       count: result.rows.length
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[Engagement Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
 // Get driver's achievements
-app.get('/achievements/driver/:driver_id', async (req, res) => {
+app.get('/achievements/driver/:driver_id', authenticateToken, async (req, res) => {
+  // IDOR check: Drivers can only view their own achievements
+  if (req.params.driver_id !== req.user.driver_id.toString()) {
+    return res.status(403).json({ error: 'Unauthorized to view other driver achievements' });
+  }
+
   try {
     const result = await pool.query(`
       SELECT
@@ -157,13 +186,19 @@ app.get('/achievements/driver/:driver_id', async (req, res) => {
       count: result.rows.length
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[Engagement Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
 // Award achievement to driver
-app.post('/achievements/award', async (req, res) => {
+app.post('/achievements/award', authenticateToken, async (req, res) => {
   const { driver_id, achievement_id } = req.body;
+
+  // IDOR check: Drivers can only award achievements to themselves (or this should be an internal service call)
+  if (driver_id !== req.user.driver_id.toString()) {
+    return res.status(403).json({ error: 'Unauthorized to award achievements to other drivers' });
+  }
 
   try {
     // Check if already earned
@@ -208,7 +243,8 @@ app.post('/achievements/award', async (req, res) => {
       points_earned: points
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[Engagement Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
@@ -217,7 +253,7 @@ app.post('/achievements/award', async (req, res) => {
 // ============================================================================
 
 // Get active challenges
-app.get('/challenges/active', async (req, res) => {
+app.get('/challenges/active', authenticateToken, async (req, res) => {
   // Hardcoded challenges for demo
   const challenges = [
     {

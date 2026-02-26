@@ -59,7 +59,8 @@ app.post('/iso15118/authenticate', async (req, res) => {
       v2g_session_id: `v2g-${Date.now()}`
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[Device Gateway Error]', err);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 

@@ -56,7 +56,7 @@ app.get('/health', (req, res) => {
 });
 
 // Get available capacity
-app.get('/capacity/available', async (req, res) => {
+app.get('/capacity/available', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT
@@ -66,7 +66,8 @@ app.get('/capacity/available', async (req, res) => {
       WHERE v.is_plugged_in = true
         AND v.v2g_enabled = true
         AND v.current_soc > v.min_soc_threshold
-    `);
+        AND v.fleet_id = $1
+    `, [req.user.fleet_id]);
 
     const capacity = result.rows[0];
     res.json({
