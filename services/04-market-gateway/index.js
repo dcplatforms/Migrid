@@ -8,6 +8,7 @@ const { Pool } = require('pg');
 const Decimal = require('decimal.js');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
+const BiddingOptimizer = require('./BiddingOptimizer');
 
 const app = express();
 const port = process.env.PORT || 3004;
@@ -81,6 +82,34 @@ app.get('/markets/:iso/prices', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('[Market Gateway Error]', error);
     res.status(500).json({ error: 'An internal server error occurred' });
+  }
+});
+
+// Generate and submit optimized bids
+app.post('/bids/optimize', authenticateToken, async (req, res) => {
+  const { iso } = req.body;
+
+  if (!iso) {
+    return res.status(400).json({ error: 'ISO is required' });
+  }
+
+  try {
+    const optimizer = new BiddingOptimizer(pool, process.env.REDIS_URL || 'redis://localhost:6379');
+    const bids = await optimizer.generateDayAheadBids(iso);
+
+    // In a real scenario, we would send these FIX messages to CAISO
+    // For now, we'll return them and log them
+    console.log(`[Market Gateway] Generated ${bids.length} optimized bids for ${iso}`);
+
+    res.json({
+      success: true,
+      iso,
+      bid_count: bids.length,
+      bids: bids // Returning FIX messages for verification
+    });
+  } catch (error) {
+    console.error('[Market Gateway Optimization Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred during optimization' });
   }
 });
 
