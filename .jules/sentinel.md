@@ -10,12 +10,7 @@
 **Learning:** Public-facing authentication endpoints are primary targets for brute-force attacks. Additionally, returning raw database error messages (`error.message`) leaks internal schema details.
 **Prevention:** Implement rate limiting on sensitive endpoints and ensure all API responses use generic error messages, with detailed errors logged only on the server.
 
-## 2025-05-22 - [Widespread Information Leakage in API Errors]
-**Vulnerability:** API endpoints returning raw database and internal error messages (`err.message`).
-**Learning:** Development-focused error handling often prioritizes quick debugging over security, but returning raw errors in production can leak schema details and internal logic.
-**Prevention:** Always use generic error messages in API responses (e.g., 'An internal server error occurred') and log detailed errors to the server console or a logging service.
-
-## 2026-02-07 - [Unauthenticated State-Changing Endpoints]
-**Vulnerability:** Resource registration endpoints accessible without authentication and lack of tenant ownership verification.
-**Learning:** Even internal-facing microservices must enforce authentication and authorization, especially when they modify state or manage sensitive grid resources. Relying on "security by obscurity" or network isolation is insufficient.
-**Prevention:** Implement JWT authentication on all state-changing endpoints and always verify that the resource being modified (e.g., a vehicle) belongs to the authenticated user's tenant (e.g., fleet_id).
+## 2025-05-21 - [Unauthenticated Sensitive Endpoints and Rate Limiting]
+**Vulnerability:** Registration endpoints lacked rate limiting, and several internal services (Commerce, VPP Aggregator) expose unauthenticated sensitive endpoints.
+**Learning:** Public registration endpoints are highly susceptible to automated abuse if not IP-rate limited. Some services were found with unauthenticated `POST /tariffs` and `POST /resources/register` endpoints, representing significant security gaps.
+**Prevention:** Always apply IP-based rate limiting to registration and ensure all sensitive endpoints across all microservices are protected by the `authenticateToken` middleware.
