@@ -94,6 +94,15 @@ app.get('/leaderboard', authenticateToken, async (req, res) => {
     `;
 
     const result = await pool.query(query, [fleet_id]);
+    const params = [];
+    if (fleet_id) {
+      query += ' WHERE l.fleet_id = $1';
+      params.push(fleet_id);
+    }
+
+    query += ` ORDER BY l.rank ASC LIMIT ${parseInt(limit)}`;
+
+    const result = await pool.query(query, params);
 
     res.json({
       leaderboard: result.rows,

@@ -244,7 +244,7 @@ setInterval(async () => {
     const totalLoad = buildingLoad + evLoad;
 
     // Get fleet_id (simplified - use first fleet)
-    const fleetResult = await pool.query(`SELECT id FROM fleets LIMIT 1`);
+    const fleetResult = await pool.query('SELECT id FROM fleets LIMIT 1');
     if (fleetResult.rows.length > 0) {
       await pool.query(`
         INSERT INTO site_load_measurements

@@ -72,7 +72,7 @@ app.get('/health', (req, res) => {
 async function start() {
   try {
     await pgClient.connect();
-    console.log("✅ [L10 Token Engine] Connected to Ledger.");
+    console.log('✅ [L10 Token Engine] Connected to Ledger.');
 
     await consumer.connect();
     await consumer.subscribe({ topic: 'driver_actions', fromBeginning: true });
@@ -135,9 +135,9 @@ async function start() {
       },
     });
 
-    console.log("✅ [L10 Token Engine] Listening for driver_actions.");
+    console.log('✅ [L10 Token Engine] Listening for driver_actions.');
   } catch (error) {
-    console.error("❌ [L10 Token Engine] Startup error:", error);
+    console.error('❌ [L10 Token Engine] Startup error:', error);
     process.exit(1);
   }
 }
@@ -145,7 +145,7 @@ async function start() {
 start();
 
 process.on('SIGINT', async () => {
-  console.log("👋 [L10 Token Engine] Shutting down...");
+  console.log('👋 [L10 Token Engine] Shutting down...');
   await consumer.disconnect();
   await pgClient.end();
   process.exit(0);
