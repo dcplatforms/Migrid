@@ -61,7 +61,7 @@ async function seed() {
 
     // Register vehicles as VPP resources
     for (const vehicle of vehicles.rows) {
-      const v = await pool.query(`SELECT id, battery_capacity_kwh, v2g_enabled FROM vehicles WHERE id = $1`, [vehicle.id]);
+      const v = await pool.query('SELECT id, battery_capacity_kwh, v2g_enabled FROM vehicles WHERE id = $1', [vehicle.id]);
       await pool.query(`
         INSERT INTO vpp_resources (vehicle_id, battery_capacity_kwh, v2g_enabled)
         VALUES ($1, $2, $3)
@@ -132,12 +132,12 @@ async function seed() {
 
     console.log('\n✅ Database seeded successfully!');
     console.log('\n📊 Summary:');
-    console.log(`   • 1 Fleet`);
+    console.log('   • 1 Fleet');
     console.log(`   • ${drivers.rows.length} Drivers`);
     console.log(`   • ${vehicles.rows.length} Vehicles`);
     console.log(`   • ${chargers.rows.length} Chargers`);
-    console.log(`   • 20 Charging Sessions`);
-    console.log(`   • 24 Hours of LMP Data`);
+    console.log('   • 20 Charging Sessions');
+    console.log('   • 24 Hours of LMP Data');
     console.log('\n🔐 Demo Credentials:');
     console.log('   Email: alice@demo.com');
     console.log('   Password: demo123');

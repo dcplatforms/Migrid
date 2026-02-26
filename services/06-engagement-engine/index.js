@@ -71,7 +71,7 @@ app.get('/leaderboard', async (req, res) => {
 
     const params = [];
     if (fleet_id) {
-      query += ` WHERE l.fleet_id = $1`;
+      query += ' WHERE l.fleet_id = $1';
       params.push(fleet_id);
     }
 
