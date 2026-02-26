@@ -101,7 +101,8 @@ app.post('/iso15118/authenticate', async (req, res) => {
     const token = jwt.sign({ vehicle_id: vehicle.id, fleet_id: vehicle.fleet_id }, process.env.JWT_SECRET || 'secret');
     res.json({ status: 'ACCEPTED', auth_token: token });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[Device Gateway Error]', err);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 

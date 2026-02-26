@@ -5,6 +5,7 @@
 
 const express = require('express');
 const { Pool } = require('pg');
+const jwt = require('jsonwebtoken');
 // const ModbusRTU = require('modbus-serial');  // Uncomment for real Modbus
 
 const app = express();
@@ -20,6 +21,26 @@ const MODBUS_HOST = process.env.MODBUS_HOST || '192.168.1.100';
 const MODBUS_PORT = parseInt(process.env.MODBUS_PORT || 502);
 
 app.use(express.json());
+
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
+
+// Middleware: Verify JWT token
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+  });
+};
 
 // Simulated Modbus client for demo
 let currentBuildingLoad = 200; // kW
@@ -43,17 +64,18 @@ app.get('/health', (req, res) => {
 // ============================================================================
 
 // Get current site load
-app.get('/load/current', async (req, res) => {
+app.get('/load/current', authenticateToken, async (req, res) => {
   try {
     // In production, read from Modbus device
     const buildingLoad = await readBuildingLoad();
 
     // Get active EV charging load
+    // Security Fix: Added fleet_id filter
     const evResult = await pool.query(`
       SELECT COALESCE(SUM(c.max_power_kw), 0) as ev_load_kw
       FROM chargers c
-      WHERE c.status = 'charging'
-    `);
+      WHERE c.status = 'charging' AND c.fleet_id = $1
+    `, [req.user.fleet_id]);
 
     const evLoad = parseFloat(evResult.rows[0]?.ev_load_kw || 0);
     const totalLoad = buildingLoad + evLoad;
@@ -69,15 +91,17 @@ app.get('/load/current', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[Energy Manager Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
 // Get load history
-app.get('/load/history', async (req, res) => {
+app.get('/load/history', authenticateToken, async (req, res) => {
   const { hours = 24 } = req.query;
 
   try {
+    // Security Fix: Use parameterized interval and added fleet_id filter
     const result = await pool.query(`
       SELECT
         timestamp,
@@ -86,16 +110,18 @@ app.get('/load/history', async (req, res) => {
         total_load_kw,
         grid_limit_kw
       FROM site_load_measurements
-      WHERE timestamp > NOW() - INTERVAL '${parseInt(hours)} hours'
+      WHERE fleet_id = $1
+        AND timestamp > NOW() - (INTERVAL '1 hour' * $2)
       ORDER BY timestamp ASC
-    `);
+    `, [req.user.fleet_id, parseInt(hours)]);
 
     res.json({
       measurements: result.rows,
       count: result.rows.length
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[Energy Manager Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
@@ -104,17 +130,18 @@ app.get('/load/history', async (req, res) => {
 // ============================================================================
 
 // Calculate available charging capacity
-app.get('/dlm/available-capacity', async (req, res) => {
+app.get('/dlm/available-capacity', authenticateToken, async (req, res) => {
   try {
     const buildingLoad = await readBuildingLoad();
     const availableForEV = Math.max(0, GRID_LIMIT_KW - buildingLoad);
 
     // Get number of active chargers
+    // Security Fix: Added fleet_id filter
     const chargerResult = await pool.query(`
       SELECT COUNT(*) as active_count
       FROM chargers
-      WHERE status IN ('charging', 'preparing')
-    `);
+      WHERE status IN ('charging', 'preparing') AND fleet_id = $1
+    `, [req.user.fleet_id]);
 
     const activeChargers = parseInt(chargerResult.rows[0]?.active_count || 0);
     const perChargerLimit = activeChargers > 0 ? availableForEV / activeChargers : 0;
@@ -126,17 +153,19 @@ app.get('/dlm/available-capacity', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[Energy Manager Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 
 // Apply DLM - distribute power to chargers
-app.post('/dlm/apply', async (req, res) => {
+app.post('/dlm/apply', authenticateToken, async (req, res) => {
   try {
     const buildingLoad = await readBuildingLoad();
     const availableForEV = Math.max(0, GRID_LIMIT_KW - buildingLoad);
 
     // Get active charging sessions
+    // Security Fix: Added fleet_id filter
     const sessions = await pool.query(`
       SELECT
         cs.id as session_id,
@@ -149,8 +178,8 @@ app.post('/dlm/apply', async (req, res) => {
       FROM charging_sessions cs
       JOIN chargers c ON cs.charger_id = c.id
       JOIN vehicles v ON cs.vehicle_id = v.id
-      WHERE cs.end_time IS NULL
-    `);
+      WHERE cs.end_time IS NULL AND c.fleet_id = $1
+    `, [req.user.fleet_id]);
 
     if (sessions.rows.length === 0) {
       return res.json({
@@ -179,7 +208,8 @@ app.post('/dlm/apply', async (req, res) => {
       allocations
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[Energy Manager Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
 

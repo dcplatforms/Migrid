@@ -1,6 +1,10 @@
 const { Client } = require('pg');
 const { Kafka } = require('kafkajs');
 const axios = require('axios');
+const express = require('express');
+
+const app = express();
+const port = process.env.PORT || 3010;
 
 const pgClient = new Client({ connectionString: process.env.DATABASE_URL });
 const kafka = new Kafka({
@@ -53,6 +57,16 @@ async function updateRewardTransactionStatus(logId, newStatus, openWalletTransac
   );
 }
 
+// --- Health Check ---
+app.get('/health', (req, res) => {
+  res.json({
+    service: 'token-engine',
+    version: '1.0.0',
+    status: 'healthy',
+    layer: 'L10'
+  });
+});
+
 // --- Main Application Logic ---
 
 async function start() {
@@ -62,6 +76,10 @@ async function start() {
 
     await consumer.connect();
     await consumer.subscribe({ topic: 'driver_actions', fromBeginning: true });
+
+    app.listen(port, () => {
+      console.log(`✅ [L10 Token Engine] Health check server running on port ${port}`);
+    });
 
     await consumer.run({
       eachMessage: async ({ topic, partition, message }) => {
