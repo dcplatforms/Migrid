@@ -988,6 +988,27 @@
 
     <!-- Core Philosophy -->
     <section class="philosophy" style="background: linear-gradient(180deg, #0a0f14 0%, #111820 100%); padding: 4rem 1.5rem;">
+        <div style="max-width: 1200px; margin: 0 auto; margin-bottom: 4rem; padding: 2rem; background: rgba(15, 23, 42, 0.4); border-radius: 1rem; border: 1px solid var(--border-color);">
+            <h2 style="font-size: 1.5rem; margin-bottom: 1.5rem; color: var(--accent-cyan);">Platform Engineering</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem;">
+                <div>
+                    <h3 style="font-size: 1.1rem; margin-bottom: 0.75rem;">Core Architectural Pillars</h3>
+                    <ul style="color: var(--text-secondary); font-size: 0.875rem; list-style-type: none; padding: 0;">
+                        <li style="margin-bottom: 0.5rem;"><strong style="color: var(--text-primary);">Physics-First Verification (L1):</strong> All energy transactions are validated against "Digital Twin" models to detect anomalies.</li>
+                        <li style="margin-bottom: 0.5rem;"><strong style="color: var(--text-primary);">Real-Time Data:</strong> Redis sub-millisecond state caching & Apache Kafka event streaming.</li>
+                        <li><strong style="color: var(--text-primary);">Edge-to-Cloud Resilience:</strong> Edge Runtime ensures site-level orchestration continues without cloud connectivity.</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 style="font-size: 1.1rem; margin-bottom: 0.75rem;">Technology Stack</h3>
+                    <ul style="color: var(--text-secondary); font-size: 0.875rem; list-style-type: none; padding: 0;">
+                        <li style="margin-bottom: 0.5rem;"><strong style="color: var(--text-primary);">Data Layer:</strong> TimescaleDB for energy metrics + PostgreSQL for core relational data.</li>
+                        <li style="margin-bottom: 0.5rem;"><strong style="color: var(--text-primary);">Security:</strong> Zero-Trust Architecture with mTLS; NERC CIP & IEC 62351 compliance.</li>
+                        <li><strong style="color: var(--text-primary);">Standards:</strong> OpenADR 3.0, OCPP 2.0.1, ISO 15118.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
         <div style="max-width: 1200px; margin: 0 auto;">
             <div class="section-header">
                 <h2>Core Philosophy</h2>
@@ -1616,10 +1637,10 @@
                     <div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
                             <span style="color: #94a3b8; font-size: 0.875rem;">Phase 5: Enterprise Scale</span>
-                            <span style="color: #22c55e; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace;">[✓] 100% • Q1 2026</span>
+                            <span style="color: #f59e0b; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace;">[~] 50% • Q1 2026</span>
                         </div>
                         <div style="background: #1a232d; height: 8px; border-radius: 4px; overflow: hidden;">
-                            <div style="background: linear-gradient(90deg, #22c55e, #16a34a); height: 100%; width: 100%;"></div>
+                            <div style="background: linear-gradient(90deg, #f59e0b, #d97706); height: 100%; width: 50%;"></div>
                         </div>
                     </div>
                     <div>
@@ -1659,6 +1680,76 @@
         </div>
     </section>
 
+    <!-- API Reference -->
+    <section id="api" class="docs-section" style="background: var(--bg-secondary);">
+        <div class="section-header">
+            <h2>API Reference</h2>
+            <p>OpenAPI 3.1.0 specifications for the 10-layer microservices stack</p>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; max-width: 1200px; margin: 0 auto;">
+            <a href="api/l1-physics-engine.yaml" class="doc-card" style="padding: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="font-family: 'JetBrains Mono', monospace; color: #22d3d3;">L1</span>
+                    <h3 style="font-size: 0.9rem; margin: 0;">Physics Engine</h3>
+                </div>
+            </a>
+            <a href="api/l2-grid-signal.yaml" class="doc-card" style="padding: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="font-family: 'JetBrains Mono', monospace; color: #22c55e;">L2</span>
+                    <h3 style="font-size: 0.9rem; margin: 0;">Grid Signal</h3>
+                </div>
+            </a>
+            <a href="api/l3-vpp-aggregator.yaml" class="doc-card" style="padding: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="font-family: 'JetBrains Mono', monospace; color: #3b82f6;">L3</span>
+                    <h3 style="font-size: 0.9rem; margin: 0;">VPP Aggregator</h3>
+                </div>
+            </a>
+            <a href="api/l4-market-gateway.yaml" class="doc-card" style="padding: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="font-family: 'JetBrains Mono', monospace; color: #8b5cf6;">L4</span>
+                    <h3 style="font-size: 0.9rem; margin: 0;">Market Gateway</h3>
+                </div>
+            </a>
+            <a href="api/l5-driver-experience.yaml" class="doc-card" style="padding: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="font-family: 'JetBrains Mono', monospace; color: #ec4899;">L5</span>
+                    <h3 style="font-size: 0.9rem; margin: 0;">Driver Experience</h3>
+                </div>
+            </a>
+            <a href="api/l6-engagement-engine.yaml" class="doc-card" style="padding: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="font-family: 'JetBrains Mono', monospace; color: #f43f5e;">L6</span>
+                    <h3 style="font-size: 0.9rem; margin: 0;">Engagement Engine</h3>
+                </div>
+            </a>
+            <a href="api/l7-device-gateway.yaml" class="doc-card" style="padding: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="font-family: 'JetBrains Mono', monospace; color: #f97316;">L7</span>
+                    <h3 style="font-size: 0.9rem; margin: 0;">Device Gateway</h3>
+                </div>
+            </a>
+            <a href="api/l8-energy-manager.yaml" class="doc-card" style="padding: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="font-family: 'JetBrains Mono', monospace; color: #eab308;">L8</span>
+                    <h3 style="font-size: 0.9rem; margin: 0;">Energy Manager</h3>
+                </div>
+            </a>
+            <a href="api/l9-commerce-engine.yaml" class="doc-card" style="padding: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="font-family: 'JetBrains Mono', monospace; color: #14b8a6;">L9</span>
+                    <h3 style="font-size: 0.9rem; margin: 0;">Commerce Engine</h3>
+                </div>
+            </a>
+            <a href="api/l10-token-engine.yaml" class="doc-card" style="padding: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="font-family: 'JetBrains Mono', monospace; color: #6366f1;">L10</span>
+                    <h3 style="font-size: 0.9rem; margin: 0;">Token Bridge</h3>
+                </div>
+            </a>
+        </div>
+    </section>
+
     <!-- Documentation -->
     <section id="docs" class="docs-section">
         <div class="section-header">
@@ -1677,7 +1768,7 @@
                 <h3>Architecture Decision Records</h3>
                 <p>ADRs documenting key architectural decisions and their rationale</p>
             </a>
-            <a href="https://github.com/dcplatforms/Migrid/tree/main/docs/api-specs" class="doc-card" target="_blank">
+            <a href="#api" class="doc-card">
                 <div class="doc-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>

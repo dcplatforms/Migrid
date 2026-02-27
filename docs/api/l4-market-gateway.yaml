@@ -1,0 +1,73 @@
+openapi: 3.1.0
+info:
+  title: L4 Market Gateway API
+  version: 3.1.0
+  description: Arbitrage engine for wholesale energy markets.
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /markets:
+    get:
+      summary: Get available markets
+      responses:
+        '200':
+          description: List of markets
+  /markets/{iso}/prices:
+    get:
+      summary: Get current LMP prices
+      parameters:
+        - name: iso
+          in: path
+          required: true
+          schema: { type: string }
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Market prices and strategy
+  /bids/optimize:
+    post:
+      summary: Generate and submit optimized bids
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                iso: { type: string }
+      responses:
+        '200':
+          description: Optimized bids generated
+  /bids/submit:
+    post:
+      summary: Submit a manual energy bid
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                iso: { type: string }
+                market_type: { type: string }
+                quantity_kw: { type: number }
+                price_per_mwh: { type: number }
+                delivery_hour: { type: integer }
+      responses:
+        '200':
+          description: Bid submitted
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

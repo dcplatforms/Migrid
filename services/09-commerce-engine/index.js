@@ -43,7 +43,7 @@ app.get('/health', (req, res) => {
  * Manage Tariffs
  */
 app.post('/tariffs', authenticateToken, async (req, res) => {
-  const { fleet_id, name, base_rate_kwh, peak_rate_kwh, peak_start_time, peak_end_time, currency } = req.body;
+  const { fleet_id, name, base_rate_kwh, peak_rate_kwh, peak_start_time, peak_end_time, currency, type, monthly_fee } = req.body;
 
   // Multi-tenancy isolation
   if (fleet_id !== req.user.fleet_id.toString()) {
@@ -52,8 +52,8 @@ app.post('/tariffs', authenticateToken, async (req, res) => {
 
   try {
     const result = await pool.query(
-      'INSERT INTO tariffs (fleet_id, name, base_rate_kwh, peak_rate_kwh, peak_start_time, peak_end_time, currency) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [fleet_id, name, base_rate_kwh, peak_rate_kwh, peak_start_time, peak_end_time, currency]
+      'INSERT INTO tariffs (fleet_id, name, base_rate_kwh, peak_rate_kwh, peak_start_time, peak_end_time, currency, type, monthly_fee) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
+      [fleet_id, name, base_rate_kwh, peak_rate_kwh, peak_start_time, peak_end_time, currency, type || 'CONSUMPTION', monthly_fee || 0]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -109,6 +109,28 @@ async function calculateSessionCost(sessionId) {
   return cost;
 }
 
+/**
+ * Manage Driver Assignments & Split Billing
+ */
+app.post('/drivers/assign', authenticateToken, async (req, res) => {
+  const { fleet_id, driver_id, split_percentage } = req.body;
+
+  if (fleet_id !== req.user.fleet_id.toString()) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO fleet_driver_assignments (fleet_id, driver_id, split_percentage) VALUES ($1, $2, $3) RETURNING *',
+      [fleet_id, driver_id, split_percentage]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('[Driver Assignment Error]', err);
+    res.status(500).json({ error: 'An internal server error occurred' });
+  }
+});
+
 app.post('/billing/calculate/:sessionId', authenticateToken, async (req, res) => {
   try {
     // In production, verify session ownership
@@ -155,13 +177,20 @@ app.post('/invoices/generate', authenticateToken, async (req, res) => {
       return res.status(404).json({ message: 'No billable sessions found for this period' });
     }
 
-    // 3. Create Invoice
+    // 3. Check for Subscription fees
+    const activeTariff = await pool.query('SELECT * FROM tariffs WHERE fleet_id = $1 AND is_active = true LIMIT 1', [fleet_id]);
+    let finalAmount = parseFloat(total_amount);
+    if (activeTariff.rows[0] && activeTariff.rows[0].type === 'SUBSCRIPTION') {
+      finalAmount += parseFloat(activeTariff.rows[0].monthly_fee);
+    }
+
+    // 4. Create Invoice
     const invoice = await pool.query(
-      'INSERT INTO invoices (fleet_id, billing_period_start, billing_period_end, total_energy_kwh, total_amount, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [fleet_id, start_date, end_date, total_energy, total_amount, 'DRAFT']
+      'INSERT INTO invoices (fleet_id, billing_period_start, billing_period_end, total_energy_kwh, total_amount, status, type) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [fleet_id, start_date, end_date, total_energy, finalAmount, 'DRAFT', 'FLEET']
     );
 
-    // 4. Link sessions to invoice
+    // 5. Link sessions to invoice
     await pool.query(
       'UPDATE charging_sessions SET invoice_id = $1 WHERE id IN (SELECT cs.id FROM charging_sessions cs JOIN vehicles v ON cs.vehicle_id = v.id WHERE v.fleet_id = $2 AND cs.start_time >= $3 AND cs.start_time <= $4 AND cs.invoice_id IS NULL)',
       [invoice.rows[0].id, fleet_id, start_date, end_date]

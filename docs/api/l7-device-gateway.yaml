@@ -1,0 +1,64 @@
+openapi: 3.1.0
+info:
+  title: L7 Device Gateway API
+  version: 5.0.0
+  description: Hardware abstraction layer for OCPP and ISO 15118.
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /iso15118/authenticate:
+    post:
+      summary: Authenticate a vehicle via ISO 15118 certificates
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                contract_id: { type: string }
+                certificate_chain:
+                  type: array
+                  items: { type: string }
+      responses:
+        '200':
+          description: Authenticated
+        '400':
+          description: Invalid certificates
+  /iso15118/v2g-discharge:
+    post:
+      summary: Initiate V2G discharge (Enforces Fuse Rule)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                auth_token: { type: string }
+                evse_id: { type: string }
+                discharge_amount_kw: { type: number }
+      responses:
+        '200':
+          description: Executing
+        '403':
+          description: Capacity Violation (Fuse Rule)
+  /iso15118/start-charge:
+    post:
+      summary: Start a charging session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                auth_token: { type: string }
+                evse_id: { type: string }
+      responses:
+        '201':
+          description: Charging started
