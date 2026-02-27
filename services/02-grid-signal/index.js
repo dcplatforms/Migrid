@@ -6,6 +6,7 @@
 const express = require('express');
 const { Pool } = require('pg');
 const { Kafka } = require('kafkajs');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const port = process.env.PORT || 3002;
@@ -23,6 +24,28 @@ const producer = kafka.producer();
 
 app.use(express.json());
 
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
+
+/**
+ * Middleware: Verify JWT token
+ */
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+  });
+};
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({
@@ -36,7 +59,7 @@ app.get('/health', (req, res) => {
 /**
  * Receive OpenADR 3.0 Event (VEN)
  */
-app.post('/openadr/v3/events', async (req, res) => {
+app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
   const event = req.body;
 
   try {
