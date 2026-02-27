@@ -5,957 +5,43 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MiGrid Documentation | The Operating System for Sustainable Fleets</title>
     <meta name="description" content="Open source platform for EV fleet management, grid integration, and physics-verified charging">
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300e6b8' stroke-width='2'><path d='M13 2L3 14h9l-1 8 10-12h-9l1-8z'/></svg>">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-primary: #0a0f14;
-            --bg-secondary: #111820;
-            --bg-tertiary: #1a232d;
-            --border-color: #2a3544;
-            --text-primary: #ffffff;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            --accent-cyan: #00e6b8;
-            --accent-blue: #00a8ff;
-            --accent-teal: #14b8a6;
-            --gradient-start: #00e6b8;
-            --gradient-end: #00a8ff;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        html {
-            scroll-behavior: smooth;
-        }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            line-height: 1.6;
-        }
-
-        /* Navigation */
-        .navbar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 1000;
-            background: rgba(10, 15, 20, 0.95);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid var(--border-color);
-            padding: 0 2rem;
-        }
-
-        .navbar-inner {
-            max-width: 1400px;
-            margin: 0 auto;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            height: 64px;
-        }
-
-        .logo {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            text-decoration: none;
-            color: var(--text-primary);
-            font-weight: 700;
-            font-size: 1.25rem;
-        }
-
-        .logo svg {
-            width: 32px;
-            height: 32px;
-        }
-
-        .logo-text {
-            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .nav-links {
-            display: flex;
-            align-items: center;
-            gap: 2rem;
-        }
-
-        .nav-links a {
-            color: var(--text-secondary);
-            text-decoration: none;
-            font-size: 0.875rem;
-            font-weight: 500;
-            transition: color 0.2s;
-        }
-
-        .nav-links a:hover {
-            color: var(--accent-cyan);
-        }
-
-        .github-link {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            color: var(--text-primary) !important;
-            transition: all 0.2s;
-        }
-
-        .github-link:hover {
-            border-color: var(--accent-cyan);
-            background: rgba(0, 230, 184, 0.1);
-        }
-
-        /* Hero Section */
-        .hero {
-            padding: 8rem 2rem 4rem;
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .hero::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 800px;
-            height: 400px;
-            background: radial-gradient(ellipse, rgba(0, 230, 184, 0.15), transparent 70%);
-            pointer-events: none;
-        }
-
-        .hero h1 {
-            font-size: 3.5rem;
-            font-weight: 700;
-            margin-bottom: 1rem;
-            background: linear-gradient(135deg, var(--text-primary), var(--accent-cyan));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .hero-subtitle {
-            font-size: 1.25rem;
-            color: var(--text-secondary);
-            max-width: 600px;
-            margin: 0 auto 2rem;
-        }
-
-        .hero-badges {
-            display: flex;
-            justify-content: center;
-            gap: 1rem;
-            flex-wrap: wrap;
-            margin-bottom: 3rem;
-        }
-
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-color);
-            border-radius: 100px;
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-        }
-
-        .badge svg {
-            width: 16px;
-            height: 16px;
-            color: var(--accent-cyan);
-        }
-
-        /* Interactive Architecture Explorer */
-        .explorer-section {
-            padding: 2rem;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .explorer-container {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
-        }
-
-        .explorer-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 1rem 1.5rem;
-            background: var(--bg-tertiary);
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .explorer-title {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            font-weight: 600;
-        }
-
-        .explorer-title svg {
-            width: 20px;
-            height: 20px;
-            color: var(--accent-cyan);
-        }
-
-        .explorer-tabs {
-            display: flex;
-            gap: 0.5rem;
-        }
-
-        .explorer-tab {
-            padding: 0.5rem 1rem;
-            background: transparent;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            color: var(--text-secondary);
-            font-size: 0.75rem;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-family: inherit;
-        }
-
-        .explorer-tab:hover {
-            border-color: var(--accent-cyan);
-            color: var(--accent-cyan);
-        }
-
-        .explorer-tab.active {
-            background: var(--accent-cyan);
-            border-color: var(--accent-cyan);
-            color: var(--bg-primary);
-        }
-
-        .explorer-content {
-            padding: 2rem;
-            min-height: 600px;
-        }
-
-        /* Hub View */
-        .hub-view {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            position: relative;
-        }
-
-        .hub-center {
-            width: 120px;
-            height: 120px;
-            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
-            border-radius: 50%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            z-index: 10;
-            box-shadow: 0 0 60px rgba(0, 230, 184, 0.4);
-            cursor: pointer;
-            transition: transform 0.3s;
-        }
-
-        .hub-center:hover {
-            transform: scale(1.05);
-        }
-
-        .hub-center svg {
-            width: 40px;
-            height: 40px;
-            color: var(--bg-primary);
-        }
-
-        .hub-center span {
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: var(--bg-primary);
-            margin-top: 0.25rem;
-        }
-
-        .orbit {
-            position: absolute;
-            border: 1px dashed var(--border-color);
-            border-radius: 50%;
-            pointer-events: none;
-        }
-
-        .orbit-1 { width: 280px; height: 280px; }
-        .orbit-2 { width: 440px; height: 440px; }
-        .orbit-3 { width: 600px; height: 600px; }
-
-        .layer-node {
-            position: absolute;
-            width: 100px;
-            height: 80px;
-            background: var(--bg-tertiary);
-            border: 2px solid var(--border-color);
-            border-radius: 12px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.3s;
-            text-decoration: none;
-            color: inherit;
-        }
-
-        .layer-node:hover {
-            transform: scale(1.1);
-            border-color: var(--node-color, var(--accent-cyan));
-            box-shadow: 0 0 20px rgba(0, 230, 184, 0.3);
-        }
-
-        .layer-node .layer-badge {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.625rem;
-            font-weight: 600;
-            padding: 0.125rem 0.375rem;
-            background: rgba(0, 230, 184, 0.2);
-            color: var(--node-color, var(--accent-cyan));
-            border-radius: 4px;
-            margin-bottom: 0.25rem;
-        }
-
-        .layer-node .layer-name {
-            font-size: 0.625rem;
-            font-weight: 500;
-            text-align: center;
-            line-height: 1.2;
-            color: var(--text-primary);
-        }
-
-        /* Layer Colors */
-        .layer-node[data-layer="L1"] { --node-color: #22d3d3; }
-        .layer-node[data-layer="L2"] { --node-color: #22c55e; }
-        .layer-node[data-layer="L3"] { --node-color: #3b82f6; }
-        .layer-node[data-layer="L4"] { --node-color: #8b5cf6; }
-        .layer-node[data-layer="L5"] { --node-color: #ec4899; }
-        .layer-node[data-layer="L6"] { --node-color: #f43f5e; }
-        .layer-node[data-layer="L7"] { --node-color: #f97316; }
-        .layer-node[data-layer="L8"] { --node-color: #eab308; }
-        .layer-node[data-layer="L9"] { --node-color: #14b8a6; }
-        .layer-node[data-layer="L10"] { --node-color: #6366f1; }
-
-        /* Node Positions */
-        .node-l1 { top: 50%; left: 50%; transform: translate(-50%, -250px); }
-        .node-l2 { top: 50%; left: 50%; transform: translate(180px, -180px); }
-        .node-l3 { top: 50%; left: 50%; transform: translate(250px, 0); }
-        .node-l4 { top: 50%; left: 50%; transform: translate(180px, 180px); }
-        .node-l5 { top: 50%; left: 50%; transform: translate(0, 250px); }
-        .node-l6 { top: 50%; left: 50%; transform: translate(-180px, 180px); }
-        .node-l7 { top: 50%; left: 50%; transform: translate(-250px, 0); }
-        .node-l8 { top: 50%; left: 50%; transform: translate(-180px, -180px); }
-        .node-l9 { top: 50%; left: 50%; transform: translate(-100px, -100px); }
-        .node-l10 { top: 50%; left: 50%; transform: translate(100px, 100px); }
-
-        /* Table View */
-        .table-view {
-            display: none;
-        }
-
-        .table-view.active {
-            display: block;
-        }
-
-        .hub-view.active {
-            display: flex;
-        }
-
-        .hub-view {
-            display: none;
-        }
-
-        .arch-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .arch-table th,
-        .arch-table td {
-            padding: 1rem;
-            text-align: left;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .arch-table th {
-            background: var(--bg-tertiary);
-            font-weight: 600;
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--text-secondary);
-        }
-
-        .arch-table tr:hover {
-            background: rgba(0, 230, 184, 0.05);
-        }
-
-        .arch-table .layer-cell {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-
-        .arch-table .layer-icon {
-            width: 36px;
-            height: 36px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-
-        .arch-table .layer-icon[data-layer="L1"] { background: rgba(34, 211, 211, 0.2); color: #22d3d3; }
-        .arch-table .layer-icon[data-layer="L2"] { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
-        .arch-table .layer-icon[data-layer="L3"] { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
-        .arch-table .layer-icon[data-layer="L4"] { background: rgba(139, 92, 246, 0.2); color: #8b5cf6; }
-        .arch-table .layer-icon[data-layer="L5"] { background: rgba(236, 72, 153, 0.2); color: #ec4899; }
-        .arch-table .layer-icon[data-layer="L6"] { background: rgba(244, 63, 94, 0.2); color: #f43f5e; }
-        .arch-table .layer-icon[data-layer="L7"] { background: rgba(249, 115, 22, 0.2); color: #f97316; }
-        .arch-table .layer-icon[data-layer="L8"] { background: rgba(234, 179, 8, 0.2); color: #eab308; }
-        .arch-table .layer-icon[data-layer="L9"] { background: rgba(20, 184, 166, 0.2); color: #14b8a6; }
-        .arch-table .layer-icon[data-layer="L10"] { background: rgba(99, 102, 241, 0.2); color: #6366f1; }
-
-        .arch-table .service-name {
-            font-weight: 600;
-        }
-
-        .arch-table .service-desc {
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-        }
-
-        .arch-table .standards-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.375rem;
-        }
-
-        .arch-table .standard-tag {
-            padding: 0.25rem 0.5rem;
-            background: var(--bg-tertiary);
-            border-radius: 4px;
-            font-size: 0.625rem;
-            font-family: 'JetBrains Mono', monospace;
-            color: var(--text-secondary);
-        }
-
-        .arch-table .repo-link {
-            color: var(--accent-cyan);
-            text-decoration: none;
-            font-size: 0.75rem;
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        .arch-table .repo-link:hover {
-            text-decoration: underline;
-        }
-
-        /* Flow View */
-        .flow-view {
-            display: none;
-            padding: 2rem 0;
-        }
-
-        .flow-view.active {
-            display: block;
-        }
-
-        .flow-diagram {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-            max-width: 800px;
-            margin: 0 auto;
-        }
-
-        .flow-row {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 1rem;
-        }
-
-        .flow-node {
-            padding: 1rem 1.5rem;
-            background: var(--bg-tertiary);
-            border: 2px solid var(--border-color);
-            border-radius: 12px;
-            text-align: center;
-            min-width: 140px;
-            transition: all 0.3s;
-        }
-
-        .flow-node:hover {
-            border-color: var(--accent-cyan);
-            transform: translateY(-2px);
-        }
-
-        .flow-node .node-label {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.625rem;
-            color: var(--accent-cyan);
-            margin-bottom: 0.25rem;
-        }
-
-        .flow-node .node-title {
-            font-weight: 600;
-            font-size: 0.875rem;
-        }
-
-        .flow-arrow {
-            color: var(--text-muted);
-            font-size: 1.5rem;
-        }
-
-        .flow-arrow-down {
-            text-align: center;
-            color: var(--text-muted);
-            font-size: 1.5rem;
-        }
-
-        .flow-group {
-            background: rgba(0, 230, 184, 0.05);
-            border: 1px dashed var(--border-color);
-            border-radius: 12px;
-            padding: 1rem;
-        }
-
-        .flow-group-label {
-            font-size: 0.625rem;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            color: var(--text-muted);
-            margin-bottom: 0.5rem;
-            text-align: center;
-        }
-
-        /* Architecture Section */
-        .architecture {
-            padding: 4rem 2rem;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .section-header {
-            text-align: center;
-            margin-bottom: 3rem;
-        }
-
-        .section-header h2 {
-            font-size: 2rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .section-header p {
-            color: var(--text-secondary);
-        }
-
-        .layers-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 1.5rem;
-        }
-
-        .layer-card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 1.5rem;
-            transition: all 0.3s;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .layer-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: var(--layer-color, var(--accent-cyan));
-        }
-
-        .layer-card:hover {
-            border-color: var(--layer-color, var(--accent-cyan));
-            transform: translateY(-4px);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-        }
-
-        .layer-header {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            margin-bottom: 1rem;
-        }
-
-        .layer-card .layer-badge {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.75rem;
-            font-weight: 600;
-            padding: 0.25rem 0.5rem;
-            background: rgba(0, 230, 184, 0.1);
-            color: var(--layer-color, var(--accent-cyan));
-            border-radius: 4px;
-        }
-
-        .layer-card .layer-name {
-            font-weight: 600;
-            font-size: 1.1rem;
-        }
-
-        .layer-description {
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-            margin-bottom: 1rem;
-        }
-
-        .layer-links {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-        }
-
-        .layer-link {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.25rem;
-            padding: 0.375rem 0.75rem;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            color: var(--text-secondary);
-            font-size: 0.75rem;
-            text-decoration: none;
-            font-family: 'JetBrains Mono', monospace;
-            transition: all 0.2s;
-        }
-
-        .layer-link:hover {
-            border-color: var(--accent-cyan);
-            color: var(--accent-cyan);
-        }
-
-        .layer-link svg {
-            width: 12px;
-            height: 12px;
-        }
-
-        /* Quick Start */
-        .quickstart {
-            padding: 4rem 2rem;
-            background: var(--bg-secondary);
-        }
-
-        .quickstart-inner {
-            max-width: 900px;
-            margin: 0 auto;
-        }
-
-        .code-block {
-            background: var(--bg-primary);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            overflow: hidden;
-            margin-top: 2rem;
-        }
-
-        .code-header {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.75rem 1rem;
-            background: var(--bg-tertiary);
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .code-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-        }
-
-        .code-dot.red { background: #ff5f57; }
-        .code-dot.yellow { background: #febc2e; }
-        .code-dot.green { background: #28c840; }
-
-        .code-content {
-            padding: 1.5rem;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.875rem;
-            overflow-x: auto;
-        }
-
-        .code-content pre {
-            margin: 0;
-        }
-
-        .code-comment {
-            color: var(--text-muted);
-        }
-
-        .code-command {
-            color: var(--accent-cyan);
-        }
-
-        /* Docs Grid */
-        .docs-section {
-            padding: 4rem 2rem;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .docs-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1.5rem;
-        }
-
-        .doc-card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 1.5rem;
-            text-decoration: none;
-            color: var(--text-primary);
-            transition: all 0.3s;
-        }
-
-        .doc-card:hover {
-            border-color: var(--accent-cyan);
-            transform: translateY(-4px);
-        }
-
-        .doc-icon {
-            width: 48px;
-            height: 48px;
-            background: rgba(0, 230, 184, 0.1);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 1rem;
-        }
-
-        .doc-icon svg {
-            width: 24px;
-            height: 24px;
-            color: var(--accent-cyan);
-        }
-
-        .doc-card h3 {
-            font-size: 1.1rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .doc-card p {
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-        }
-
-        /* Standards Section */
-        .standards {
-            padding: 4rem 2rem;
-            background: var(--bg-secondary);
-        }
-
-        .standards-inner {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .standards-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-top: 2rem;
-        }
-
-        .standard-badge {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 1rem;
-            background: var(--bg-primary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-        }
-
-        .standard-icon {
-            width: 40px;
-            height: 40px;
-            background: rgba(0, 168, 255, 0.1);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 0.75rem;
-            color: var(--accent-blue);
-        }
-
-        .standard-info {
-            flex: 1;
-        }
-
-        .standard-name {
-            font-weight: 600;
-            font-size: 0.875rem;
-        }
-
-        .standard-desc {
-            color: var(--text-muted);
-            font-size: 0.75rem;
-        }
-
-        /* Footer */
-        .footer {
-            padding: 3rem 2rem;
-            border-top: 1px solid var(--border-color);
-            text-align: center;
-        }
-
-        .footer-inner {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .footer-links {
-            display: flex;
-            justify-content: center;
-            gap: 2rem;
-            margin-bottom: 1.5rem;
-            flex-wrap: wrap;
-        }
-
-        .footer-links a {
-            color: var(--text-secondary);
-            text-decoration: none;
-            font-size: 0.875rem;
-            transition: color 0.2s;
-        }
-
-        .footer-links a:hover {
-            color: var(--accent-cyan);
-        }
-
-        .footer-copy {
-            color: var(--text-muted);
-            font-size: 0.75rem;
-        }
-
-        /* Mobile */
-        @media (max-width: 768px) {
-            .nav-links {
-                display: none;
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2322d3ee' stroke-width='2'><path d='M13 2L3 14h9l-1 8 10-12h-9l1-8z'/></svg>">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="assets/style.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: {
+                            950: '#000000',
+                            900: '#09090b',
+                            800: '#18181b',
+                            700: '#27272a'
+                        }
+                    }
+                }
             }
-
-            .hero h1 {
-                font-size: 2rem;
-            }
-
-            .explorer-content {
-                min-height: 400px;
-                overflow-x: auto;
-            }
-
-            .layers-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .layer-node {
-                width: 70px;
-                height: 60px;
-            }
-
-            .layer-node .layer-name {
-                font-size: 0.5rem;
-            }
-
-            .orbit-1 { width: 180px; height: 180px; }
-            .orbit-2 { width: 280px; height: 280px; }
-            .orbit-3 { width: 380px; height: 380px; }
-
-            .node-l1 { transform: translate(-50%, -160px); }
-            .node-l2 { transform: translate(110px, -110px); }
-            .node-l3 { transform: translate(160px, 0); }
-            .node-l4 { transform: translate(110px, 110px); }
-            .node-l5 { transform: translate(0, 160px); }
-            .node-l6 { transform: translate(-110px, 110px); }
-            .node-l7 { transform: translate(-160px, 0); }
-            .node-l8 { transform: translate(-110px, -110px); }
-            .node-l9 { transform: translate(-60px, -60px); }
-            .node-l10 { transform: translate(60px, 60px); }
         }
-
-        /* Layer Colors */
-        .layer-card[data-layer="L1"] { --layer-color: #22d3d3; }
-        .layer-card[data-layer="L2"] { --layer-color: #22c55e; }
-        .layer-card[data-layer="L3"] { --layer-color: #3b82f6; }
-        .layer-card[data-layer="L4"] { --layer-color: #8b5cf6; }
-        .layer-card[data-layer="L5"] { --layer-color: #ec4899; }
-        .layer-card[data-layer="L6"] { --layer-color: #f43f5e; }
-        .layer-card[data-layer="L7"] { --layer-color: #f97316; }
-        .layer-card[data-layer="L8"] { --layer-color: #eab308; }
-        .layer-card[data-layer="L9"] { --layer-color: #14b8a6; }
-        .layer-card[data-layer="L10"] { --layer-color: #6366f1; }
-    </style>
+    </script>
 </head>
-<body>
+<body class="bg-black text-white min-h-screen">
+    <div class="bg-grid"></div>
+
     <!-- Navigation -->
-    <nav class="navbar">
-        <div class="navbar-inner">
-            <a href="#" class="logo">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="url(#logo-gradient)"/>
-                    <defs>
-                        <linearGradient id="logo-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stop-color="#00e6b8"/>
-                            <stop offset="100%" stop-color="#00a8ff"/>
-                        </linearGradient>
-                    </defs>
+    <nav class="fixed top-0 left-0 right-0 z-50 nav-blur border-b border-zinc-800">
+        <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+            <a href="index.html" class="flex items-center gap-2 text-xl font-bold">
+                <svg class="w-8 h-8 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
                 </svg>
-                <span class="logo-text">MiGrid</span>
+                <span class="text-gradient">MiGrid</span>
             </a>
-            <div class="nav-links">
-                <a href="#architecture">Architecture</a>
-                <a href="architecture.html">Full Architecture</a>
-                <a href="#quickstart">Quick Start</a>
-                <a href="#docs">Documentation</a>
-                <a href="#standards">Standards</a>
-                <a href="roadmap.html">Roadmap</a>
-                <a href="https://github.com/dcplatforms/Migrid" class="github-link" target="_blank">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-                    </svg>
+            <div class="hidden md:flex items-center gap-8">
+                <a href="architecture.html" class="text-zinc-400 hover:text-white text-sm font-medium transition-colors">Architecture</a>
+                <a href="roadmap.html" class="text-zinc-400 hover:text-white text-sm font-medium transition-colors">Roadmap</a>
+                <a href="https://github.com/dcplatforms/Migrid" target="_blank" class="flex items-center gap-2 px-3 py-1.5 glass-card text-sm font-medium hover:border-cyan-400/50 transition-all">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
                     GitHub
                 </a>
             </div>
@@ -963,940 +49,337 @@
     </nav>
 
     <!-- Hero -->
-    <section class="hero">
-        <h1>MiGrid Documentation</h1>
-        <p class="hero-subtitle">The open source operating system for sustainable fleet electrification. Verify the physics. Unlock the grid.</p>
-        <div class="hero-badges">
-            <span class="badge">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                Physics Verified
-            </span>
-            <span class="badge">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                OpenADR 3.0
-            </span>
-            <span class="badge">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-                10 Microservices
-            </span>
-            <span class="badge">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22V8M5 12H2a10 10 0 0 0 20 0h-3"/></svg>
-                Apache 2.0
-            </span>
+    <section class="pt-40 pb-20 px-6 text-center">
+        <div class="max-w-4xl mx-auto">
+            <h1 class="text-6xl md:text-7xl font-extrabold tracking-tight mb-6">
+                <span class="text-gradient">MiGrid Documentation</span>
+            </h1>
+            <p class="text-xl text-zinc-400 mb-10 leading-relaxed max-w-2xl mx-auto">
+                The open source operating system for sustainable fleet electrification. <br class="hidden md:block">
+                <span class="text-accent-gradient font-semibold">Verify the physics. Unlock the grid.</span>
+            </p>
+            <div class="flex flex-wrap justify-center gap-4">
+                <div class="badge badge-cyan">Physics Verified</div>
+                <div class="badge badge-cyan">OpenADR 3.0</div>
+                <div class="badge badge-cyan">10 Microservices</div>
+                <div class="badge badge-cyan">Apache 2.0</div>
+            </div>
         </div>
     </section>
 
     <!-- Core Philosophy -->
-    <section class="philosophy" style="background: linear-gradient(180deg, #0a0f14 0%, #111820 100%); padding: 4rem 1.5rem;">
-        <div style="max-width: 1200px; margin: 0 auto; margin-bottom: 4rem; padding: 2rem; background: rgba(15, 23, 42, 0.4); border-radius: 1rem; border: 1px solid var(--border-color);">
-            <h2 style="font-size: 1.5rem; margin-bottom: 1.5rem; color: var(--accent-cyan);">Platform Engineering</h2>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem;">
-                <div>
-                    <h3 style="font-size: 1.1rem; margin-bottom: 0.75rem;">Core Architectural Pillars</h3>
-                    <ul style="color: var(--text-secondary); font-size: 0.875rem; list-style-type: none; padding: 0;">
-                        <li style="margin-bottom: 0.5rem;"><strong style="color: var(--text-primary);">Physics-First Verification (L1):</strong> All energy transactions are validated against "Digital Twin" models to detect anomalies.</li>
-                        <li style="margin-bottom: 0.5rem;"><strong style="color: var(--text-primary);">Real-Time Data:</strong> Redis sub-millisecond state caching & Apache Kafka event streaming.</li>
-                        <li><strong style="color: var(--text-primary);">Edge-to-Cloud Resilience:</strong> Edge Runtime ensures site-level orchestration continues without cloud connectivity.</li>
-                    </ul>
-                </div>
-                <div>
-                    <h3 style="font-size: 1.1rem; margin-bottom: 0.75rem;">Technology Stack</h3>
-                    <ul style="color: var(--text-secondary); font-size: 0.875rem; list-style-type: none; padding: 0;">
-                        <li style="margin-bottom: 0.5rem;"><strong style="color: var(--text-primary);">Data Layer:</strong> TimescaleDB for energy metrics + PostgreSQL for core relational data.</li>
-                        <li style="margin-bottom: 0.5rem;"><strong style="color: var(--text-primary);">Security:</strong> Zero-Trust Architecture with mTLS; NERC CIP & IEC 62351 compliance.</li>
-                        <li><strong style="color: var(--text-primary);">Standards:</strong> OpenADR 3.0, OCPP 2.0.1, ISO 15118.</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-        <div style="max-width: 1200px; margin: 0 auto;">
-            <div class="section-header">
-                <h2>Core Philosophy</h2>
-                <p>Three principles that guide every architectural decision</p>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin-top: 3rem;">
-                <div style="background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); border-radius: 1rem; padding: 2rem; border-left: 4px solid #00e6b8;">
-                    <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-                        <span style="background: rgba(0, 230, 184, 0.2); color: #00e6b8; padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: bold; font-family: 'JetBrains Mono', monospace;">[I]</span>
-                        <h3 style="color: #ffffff; font-size: 1.25rem; margin: 0;">Verify the Physics</h3>
+    <section class="py-20 px-6">
+        <div class="max-w-7xl mx-auto">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="glass-card p-8 layer-l1">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="mono text-cyan-400 font-bold">[I]</span>
+                        <h3 class="text-xl font-bold">Verify the Physics</h3>
                     </div>
-                    <p style="color: #64748b; font-style: italic; margin-bottom: 1rem;">"Verify the physics. Unlock the grid."</p>
-                    <p style="color: #94a3b8; line-height: 1.6;">Every charging session is audited to ensure energy dispensed matches energy received with a strict 15% variance threshold.</p>
+                    <p class="text-zinc-400 mb-4 italic text-sm">"Verify the physics. Unlock the grid."</p>
+                    <p class="text-zinc-400 text-sm leading-relaxed">Every charging session is audited to ensure energy dispensed matches energy received with a strict 15% variance threshold.</p>
                 </div>
-                <div style="background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); border-radius: 1rem; padding: 2rem; border-left: 4px solid #00a8ff;">
-                    <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-                        <span style="background: rgba(0, 168, 255, 0.2); color: #00a8ff; padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: bold; font-family: 'JetBrains Mono', monospace;">[II]</span>
-                        <h3 style="color: #ffffff; font-size: 1.25rem; margin: 0;">Grid as Partner</h3>
+                <div class="glass-card p-8 layer-l3">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="mono text-blue-400 font-bold">[II]</span>
+                        <h3 class="text-xl font-bold">Grid as Partner</h3>
                     </div>
-                    <p style="color: #64748b; font-style: italic; margin-bottom: 1rem;">"The Grid is a partner, not just a plug."</p>
-                    <p style="color: #94a3b8; line-height: 1.6;">Active site load management, utility signal response, and grid stability prioritization in every decision.</p>
+                    <p class="text-zinc-400 mb-4 italic text-sm">"The Grid is a partner, not just a plug."</p>
+                    <p class="text-zinc-400 text-sm leading-relaxed">Active site load management, utility signal response, and grid stability prioritization in every decision.</p>
                 </div>
-                <div style="background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); border-radius: 1rem; padding: 2rem; border-left: 4px solid #14b8a6;">
-                    <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-                        <span style="background: rgba(20, 184, 166, 0.2); color: #14b8a6; padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: bold; font-family: 'JetBrains Mono', monospace;">[III]</span>
-                        <h3 style="color: #ffffff; font-size: 1.25rem; margin: 0;">Tokenize Everything</h3>
+                <div class="glass-card p-8 layer-l9">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="mono text-teal-400 font-bold">[III]</span>
+                        <h3 class="text-xl font-bold">Tokenize Everything</h3>
                     </div>
-                    <p style="color: #64748b; font-style: italic; margin-bottom: 1rem;">"Every electron must be a tokenized asset."</p>
-                    <p style="color: #94a3b8; line-height: 1.6;">Grid-supportive actions are measured, valued, and rewarded through Web3 incentives and gamification.</p>
+                    <p class="text-zinc-400 mb-4 italic text-sm">"Every electron must be a tokenized asset."</p>
+                    <p class="text-zinc-400 text-sm leading-relaxed">Grid-supportive actions are measured, valued, and rewarded through Web3 incentives and gamification.</p>
                 </div>
             </div>
         </div>
     </section>
 
     <!-- Interactive Architecture Explorer -->
-    <section class="explorer-section">
-        <div class="explorer-container">
-            <div class="explorer-header">
-                <div class="explorer-title">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                        <line x1="3" y1="9" x2="21" y2="9"/>
-                        <line x1="9" y1="21" x2="9" y2="9"/>
-                    </svg>
-                    Interactive Architecture Explorer
+    <section class="py-20 px-6">
+        <div class="max-w-7xl mx-auto">
+            <div class="glass-card overflow-hidden">
+                <div class="p-6 border-b border-zinc-800 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 bg-cyan-400/10 rounded-lg flex items-center justify-center">
+                            <svg class="w-5 h-5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>
+                            </svg>
+                        </div>
+                        <h2 class="text-xl font-bold">Architecture Explorer</h2>
+                    </div>
+                    <div class="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800">
+                        <button class="explorer-tab px-4 py-1.5 text-sm font-medium rounded-md transition-all active bg-white text-black" data-view="flow">Data Flow</button>
+                        <button class="explorer-tab px-4 py-1.5 text-sm font-medium rounded-md text-zinc-400 hover:text-white transition-all" data-view="table">Table View</button>
+                    </div>
                 </div>
-                <div class="explorer-tabs">
-                    <button class="explorer-tab active" data-view="hub">Hub View</button>
-                    <button class="explorer-tab" data-view="table">Table View</button>
-                    <button class="explorer-tab" data-view="flow">Data Flow</button>
-                </div>
-            </div>
-            <div class="explorer-content">
-                <!-- Hub View -->
-                <div class="hub-view active" id="hub-view">
-                    <div class="orbit orbit-1"></div>
-                    <div class="orbit orbit-2"></div>
-                    <div class="orbit orbit-3"></div>
-                    
-                    <div class="hub-center">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-                        </svg>
-                        <span>MiGrid Core</span>
+                <div class="p-8 min-h-[500px]">
+                    <!-- Table View -->
+                    <div class="hidden" id="table-view">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left">
+                                <thead>
+                                    <tr class="text-zinc-500 text-xs uppercase tracking-wider border-b border-zinc-800">
+                                        <th class="pb-4 font-semibold">Layer</th>
+                                        <th class="pb-4 font-semibold">Service</th>
+                                        <th class="pb-4 font-semibold">Standards</th>
+                                        <th class="pb-4 font-semibold text-right">Repository</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="text-sm">
+                                    <tr class="border-b border-zinc-900 hover:bg-zinc-900/50 transition-colors">
+                                        <td class="py-4"><span class="mono text-cyan-400 font-bold">L1</span></td>
+                                        <td class="py-4">
+                                            <div class="font-semibold">Physics Engine</div>
+                                            <div class="text-zinc-500 text-xs mt-1 italic">Verifies kWh dispensed vs received</div>
+                                        </td>
+                                        <td class="py-4"><span class="px-2 py-0.5 bg-zinc-800 rounded text-[10px] mono text-zinc-400">Variance <15%</span></td>
+                                        <td class="py-4 text-right"><a href="#" class="text-cyan-400 hover:underline mono text-xs">/services/01-physics-engine</a></td>
+                                    </tr>
+                                    <tr class="border-b border-zinc-900 hover:bg-zinc-900/50 transition-colors">
+                                        <td class="py-4"><span class="mono text-green-400 font-bold">L2</span></td>
+                                        <td class="py-4">
+                                            <div class="font-semibold">Grid Signal</div>
+                                            <div class="text-zinc-500 text-xs mt-1 italic">OpenADR 3.0 utility communication</div>
+                                        </td>
+                                        <td class="py-4">
+                                            <div class="flex gap-2">
+                                                <span class="px-2 py-0.5 bg-zinc-800 rounded text-[10px] mono text-zinc-400">OpenADR 3.0</span>
+                                                <span class="px-2 py-0.5 bg-zinc-800 rounded text-[10px] mono text-zinc-400">OAuth 2.0</span>
+                                            </div>
+                                        </td>
+                                        <td class="py-4 text-right"><a href="#" class="text-cyan-400 hover:underline mono text-xs">/services/02-grid-signal</a></td>
+                                    </tr>
+                                    <tr class="border-b border-zinc-900 hover:bg-zinc-900/50 transition-colors">
+                                        <td class="py-4"><span class="mono text-blue-400 font-bold">L3</span></td>
+                                        <td class="py-4">
+                                            <div class="font-semibold">VPP Aggregator</div>
+                                            <div class="text-zinc-500 text-xs mt-1 italic">Aggregates EVs & BESS for markets</div>
+                                        </td>
+                                        <td class="py-4"><span class="px-2 py-0.5 bg-zinc-800 rounded text-[10px] mono text-zinc-400">IEEE 2030.5</span></td>
+                                        <td class="py-4 text-right"><a href="#" class="text-cyan-400 hover:underline mono text-xs">/services/03-vpp-aggregator</a></td>
+                                    </tr>
+                                    <tr class="border-b border-zinc-900 hover:bg-zinc-900/50 transition-colors">
+                                        <td class="py-4"><span class="mono text-purple-400 font-bold">L4</span></td>
+                                        <td class="py-4">
+                                            <div class="font-semibold">Market Gateway</div>
+                                            <div class="text-zinc-500 text-xs mt-1 italic">CAISO, PJM, Nord Pool adapters</div>
+                                        </td>
+                                        <td class="py-4">
+                                            <div class="flex gap-2">
+                                                <span class="px-2 py-0.5 bg-zinc-800 rounded text-[10px] mono text-zinc-400">CAISO</span>
+                                                <span class="px-2 py-0.5 bg-zinc-800 rounded text-[10px] mono text-zinc-400">PJM</span>
+                                            </div>
+                                        </td>
+                                        <td class="py-4 text-right"><a href="#" class="text-cyan-400 hover:underline mono text-xs">/services/04-market-gateway</a></td>
+                                    </tr>
+                                    <tr class="border-b border-zinc-900 hover:bg-zinc-900/50 transition-colors">
+                                        <td class="py-4"><span class="mono text-pink-400 font-bold">L5</span></td>
+                                        <td class="py-4">
+                                            <div class="font-semibold">Driver DX</div>
+                                            <div class="text-zinc-500 text-xs mt-1 italic">Smart routing, voice commands</div>
+                                        </td>
+                                        <td class="py-4"><span class="px-2 py-0.5 bg-zinc-800 rounded text-[10px] mono text-zinc-400">REST / GraphQL</span></td>
+                                        <td class="py-4 text-right"><a href="#" class="text-cyan-400 hover:underline mono text-xs">/services/05-driver-bff</a></td>
+                                    </tr>
+                                    <tr class="border-b border-zinc-900 hover:bg-zinc-900/50 transition-colors">
+                                        <td class="py-4"><span class="mono text-rose-400 font-bold">L6</span></td>
+                                        <td class="py-4">
+                                            <div class="font-semibold">Engagement</div>
+                                            <div class="text-zinc-500 text-xs mt-1 italic">CRM, banners, support tickets</div>
+                                        </td>
+                                        <td class="py-4"><span class="px-2 py-0.5 bg-zinc-800 rounded text-[10px] mono text-zinc-400">WebSocket</span></td>
+                                        <td class="py-4 text-right"><a href="#" class="text-cyan-400 hover:underline mono text-xs">/services/06-engagement</a></td>
+                                    </tr>
+                                    <tr class="border-b border-zinc-900 hover:bg-zinc-900/50 transition-colors">
+                                        <td class="py-4"><span class="mono text-orange-400 font-bold">L7</span></td>
+                                        <td class="py-4">
+                                            <div class="font-semibold">Device Gateway</div>
+                                            <div class="text-zinc-500 text-xs mt-1 italic">Hardware abstraction for chargers</div>
+                                        </td>
+                                        <td class="py-4">
+                                            <div class="flex gap-2">
+                                                <span class="px-2 py-0.5 bg-zinc-800 rounded text-[10px] mono text-zinc-400">OCPP 2.0.1</span>
+                                                <span class="px-2 py-0.5 bg-zinc-800 rounded text-[10px] mono text-zinc-400">ISO 15118</span>
+                                            </div>
+                                        </td>
+                                        <td class="py-4 text-right"><a href="#" class="text-cyan-400 hover:underline mono text-xs">/services/07-device-gateway</a></td>
+                                    </tr>
+                                    <tr class="border-b border-zinc-900 hover:bg-zinc-900/50 transition-colors">
+                                        <td class="py-4"><span class="mono text-yellow-400 font-bold">L8</span></td>
+                                        <td class="py-4">
+                                            <div class="font-semibold">Energy Manager</div>
+                                            <div class="text-zinc-500 text-xs mt-1 italic">Dynamic Load Management, site safety</div>
+                                        </td>
+                                        <td class="py-4"><span class="px-2 py-0.5 bg-zinc-800 rounded text-[10px] mono text-zinc-400">Modbus / BACnet</span></td>
+                                        <td class="py-4 text-right"><a href="#" class="text-cyan-400 hover:underline mono text-xs">/services/08-energy-manager</a></td>
+                                    </tr>
+                                    <tr class="border-b border-zinc-900 hover:bg-zinc-900/50 transition-colors">
+                                        <td class="py-4"><span class="mono text-teal-400 font-bold">L9</span></td>
+                                        <td class="py-4">
+                                            <div class="font-semibold">Commerce Engine</div>
+                                            <div class="text-zinc-500 text-xs mt-1 italic">Billing, tariffs, subscriptions</div>
+                                        </td>
+                                        <td class="py-4"><span class="px-2 py-0.5 bg-zinc-800 rounded text-[10px] mono text-zinc-400">Stripe / OCPI</span></td>
+                                        <td class="py-4 text-right"><a href="#" class="text-cyan-400 hover:underline mono text-xs">/services/09-commerce-engine</a></td>
+                                    </tr>
+                                    <tr class="hover:bg-zinc-900/50 transition-colors">
+                                        <td class="py-4"><span class="mono text-indigo-400 font-bold">L10</span></td>
+                                        <td class="py-4">
+                                            <div class="font-semibold">Token Bridge</div>
+                                            <div class="text-zinc-500 text-xs mt-1 italic">Rewards via Open-Wallet Framework</div>
+                                        </td>
+                                        <td class="py-4"><span class="px-2 py-0.5 bg-zinc-800 rounded text-[10px] mono text-zinc-400">ERC-20 / Polygon</span></td>
+                                        <td class="py-4 text-right"><a href="#" class="text-cyan-400 hover:underline mono text-xs">/services/10-token-engine</a></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
 
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/01-physics-engine" target="_blank" class="layer-node node-l1" data-layer="L1">
-                        <span class="layer-badge">L1</span>
-                        <span class="layer-name">Physics Engine</span>
-                    </a>
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/02-grid-signal" target="_blank" class="layer-node node-l2" data-layer="L2">
-                        <span class="layer-badge">L2</span>
-                        <span class="layer-name">Grid Signal</span>
-                    </a>
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/03-vpp-aggregator" target="_blank" class="layer-node node-l3" data-layer="L3">
-                        <span class="layer-badge">L3</span>
-                        <span class="layer-name">VPP Aggregator</span>
-                    </a>
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/04-market-gateway" target="_blank" class="layer-node node-l4" data-layer="L4">
-                        <span class="layer-badge">L4</span>
-                        <span class="layer-name">Market Gateway</span>
-                    </a>
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/05-driver-bff" target="_blank" class="layer-node node-l5" data-layer="L5">
-                        <span class="layer-badge">L5</span>
-                        <span class="layer-name">Driver DX</span>
-                    </a>
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/06-engagement" target="_blank" class="layer-node node-l6" data-layer="L6">
-                        <span class="layer-badge">L6</span>
-                        <span class="layer-name">Engagement</span>
-                    </a>
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/07-device-gateway" target="_blank" class="layer-node node-l7" data-layer="L7">
-                        <span class="layer-badge">L7</span>
-                        <span class="layer-name">Device Gateway</span>
-                    </a>
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/08-energy-manager" target="_blank" class="layer-node node-l8" data-layer="L8">
-                        <span class="layer-badge">L8</span>
-                        <span class="layer-name">Energy Manager</span>
-                    </a>
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/09-commerce-engine" target="_blank" class="layer-node node-l9" data-layer="L9">
-                        <span class="layer-badge">L9</span>
-                        <span class="layer-name">Commerce</span>
-                    </a>
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/10-token-engine" target="_blank" class="layer-node node-l10" data-layer="L10">
-                        <span class="layer-badge">L10</span>
-                        <span class="layer-name">Token Bridge</span>
-                    </a>
-                </div>
+                    <!-- Flow View -->
+                    <div id="flow-view" class="flex flex-col items-center gap-12 py-10">
+                        <!-- Physical Layer -->
+                        <div class="flex flex-col items-center gap-6 w-full max-w-4xl">
+                            <span class="text-xs font-bold uppercase tracking-widest text-zinc-600">Physical Layer</span>
+                            <div class="flex flex-wrap justify-center gap-6">
+                                <div class="glass-card p-4 text-center min-w-[160px] layer-l7">
+                                    <div class="mono text-[10px] text-zinc-500 mb-1">L7</div>
+                                    <div class="font-bold text-sm">Device Gateway</div>
+                                </div>
+                                <div class="flex items-center text-zinc-700">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                </div>
+                                <div class="glass-card p-4 text-center min-w-[160px] layer-l8">
+                                    <div class="mono text-[10px] text-zinc-500 mb-1">L8</div>
+                                    <div class="font-bold text-sm">Energy Manager</div>
+                                </div>
+                            </div>
+                        </div>
 
-                <!-- Table View -->
-                <div class="table-view" id="table-view">
-                    <table class="arch-table">
-                        <thead>
-                            <tr>
-                                <th>Layer</th>
-                                <th>Service</th>
-                                <th>Standards</th>
-                                <th>Repository</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td><div class="layer-cell"><span class="layer-icon" data-layer="L1">L1</span></div></td>
-                                <td>
-                                    <div class="service-name">Physics Engine</div>
-                                    <div class="service-desc">Green Audit — Verifies kWh dispensed vs received</div>
-                                </td>
-                                <td>
-                                    <div class="standards-list">
-                                        <span class="standard-tag">Variance &lt;15%</span>
-                                    </div>
-                                </td>
-                                <td><a href="https://github.com/dcplatforms/Migrid/tree/main/services/01-physics-engine" target="_blank" class="repo-link">/services/01-physics-engine</a></td>
-                            </tr>
-                            <tr>
-                                <td><div class="layer-cell"><span class="layer-icon" data-layer="L2">L2</span></div></td>
-                                <td>
-                                    <div class="service-name">Grid Signal</div>
-                                    <div class="service-desc">OpenADR 3.0 VEN for utility communication</div>
-                                </td>
-                                <td>
-                                    <div class="standards-list">
-                                        <span class="standard-tag">OpenADR 3.0</span>
-                                        <span class="standard-tag">OAuth 2.0</span>
-                                    </div>
-                                </td>
-                                <td><a href="https://github.com/dcplatforms/Migrid/tree/main/services/02-grid-signal" target="_blank" class="repo-link">/services/02-grid-signal</a></td>
-                            </tr>
-                            <tr>
-                                <td><div class="layer-cell"><span class="layer-icon" data-layer="L3">L3</span></div></td>
-                                <td>
-                                    <div class="service-name">VPP Aggregator</div>
-                                    <div class="service-desc">Aggregates EVs & BESS for wholesale markets</div>
-                                </td>
-                                <td>
-                                    <div class="standards-list">
-                                        <span class="standard-tag">IEEE 2030.5</span>
-                                    </div>
-                                </td>
-                                <td><a href="https://github.com/dcplatforms/Migrid/tree/main/services/03-vpp-aggregator" target="_blank" class="repo-link">/services/03-vpp-aggregator</a></td>
-                            </tr>
-                            <tr>
-                                <td><div class="layer-cell"><span class="layer-icon" data-layer="L4">L4</span></div></td>
-                                <td>
-                                    <div class="service-name">Market Gateway</div>
-                                    <div class="service-desc">CAISO, PJM, Nord Pool market adapters</div>
-                                </td>
-                                <td>
-                                    <div class="standards-list">
-                                        <span class="standard-tag">CAISO</span>
-                                        <span class="standard-tag">PJM</span>
-                                        <span class="standard-tag">ENTSO-E</span>
-                                    </div>
-                                </td>
-                                <td><a href="https://github.com/dcplatforms/Migrid/tree/main/services/04-market-gateway" target="_blank" class="repo-link">/services/04-market-gateway</a></td>
-                            </tr>
-                            <tr>
-                                <td><div class="layer-cell"><span class="layer-icon" data-layer="L5">L5</span></div></td>
-                                <td>
-                                    <div class="service-name">Driver DX</div>
-                                    <div class="service-desc">Smart routing, voice commands, real-time availability</div>
-                                </td>
-                                <td>
-                                    <div class="standards-list">
-                                        <span class="standard-tag">REST</span>
-                                        <span class="standard-tag">GraphQL</span>
-                                    </div>
-                                </td>
-                                <td><a href="https://github.com/dcplatforms/Migrid/tree/main/services/05-driver-bff" target="_blank" class="repo-link">/services/05-driver-bff</a></td>
-                            </tr>
-                            <tr>
-                                <td><div class="layer-cell"><span class="layer-icon" data-layer="L6">L6</span></div></td>
-                                <td>
-                                    <div class="service-name">Engagement</div>
-                                    <div class="service-desc">CRM, banners, contextual support ticketing</div>
-                                </td>
-                                <td>
-                                    <div class="standards-list">
-                                        <span class="standard-tag">WebSocket</span>
-                                    </div>
-                                </td>
-                                <td><a href="https://github.com/dcplatforms/Migrid/tree/main/services/06-engagement" target="_blank" class="repo-link">/services/06-engagement</a></td>
-                            </tr>
-                            <tr>
-                                <td><div class="layer-cell"><span class="layer-icon" data-layer="L7">L7</span></div></td>
-                                <td>
-                                    <div class="service-name">Device Gateway</div>
-                                    <div class="service-desc">Hardware abstraction layer for chargers</div>
-                                </td>
-                                <td>
-                                    <div class="standards-list">
-                                        <span class="standard-tag">OCPP 2.0.1</span>
-                                        <span class="standard-tag">OCPI 2.2</span>
-                                        <span class="standard-tag">ISO 15118</span>
-                                    </div>
-                                </td>
-                                <td><a href="https://github.com/dcplatforms/Migrid/tree/main/services/07-device-gateway" target="_blank" class="repo-link">/services/07-device-gateway</a></td>
-                            </tr>
-                            <tr>
-                                <td><div class="layer-cell"><span class="layer-icon" data-layer="L8">L8</span></div></td>
-                                <td>
-                                    <div class="service-name">Energy Manager</div>
-                                    <div class="service-desc">Dynamic Load Management, site safety</div>
-                                </td>
-                                <td>
-                                    <div class="standards-list">
-                                        <span class="standard-tag">Modbus</span>
-                                        <span class="standard-tag">BACnet</span>
-                                    </div>
-                                </td>
-                                <td><a href="https://github.com/dcplatforms/Migrid/tree/main/services/08-energy-manager" target="_blank" class="repo-link">/services/08-energy-manager</a></td>
-                            </tr>
-                            <tr>
-                                <td><div class="layer-cell"><span class="layer-icon" data-layer="L9">L9</span></div></td>
-                                <td>
-                                    <div class="service-name">Commerce Engine</div>
-                                    <div class="service-desc">Billing, tariffs, subscriptions</div>
-                                </td>
-                                <td>
-                                    <div class="standards-list">
-                                        <span class="standard-tag">Stripe</span>
-                                        <span class="standard-tag">OCPI CDR</span>
-                                    </div>
-                                </td>
-                                <td><a href="https://github.com/dcplatforms/Migrid/tree/main/services/09-commerce-engine" target="_blank" class="repo-link">/services/09-commerce-engine</a></td>
-                            </tr>
-                            <tr>
-                                <td><div class="layer-cell"><span class="layer-icon" data-layer="L10">L10</span></div></td>
-                                <td>
-                                    <div class="service-name">Token Bridge</div>
-                                    <div class="service-desc">Rewards via Open-Wallet Framework</div>
-                                </td>
-                                <td>
-                                    <div class="standards-list">
-                                        <span class="standard-tag">ERC-20</span>
-                                        <span class="standard-tag">Polygon</span>
-                                    </div>
-                                </td>
-                                <td><a href="https://github.com/dcplatforms/Migrid/tree/main/services/10-token-engine" target="_blank" class="repo-link">/services/10-token-engine</a></td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                        <div class="text-zinc-800">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 14l-7 7m0 0l-7-7m7 7V3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </div>
 
-                <!-- Flow View -->
-                <div class="flow-view" id="flow-view">
-                    <div class="flow-diagram">
-                        <div class="flow-row">
-                            <div class="flow-group">
-                                <div class="flow-group-label">Physical Layer</div>
-                                <div class="flow-row">
-                                    <div class="flow-node">
-                                        <div class="node-label">L7</div>
-                                        <div class="node-title">Device Gateway</div>
-                                    </div>
-                                    <span class="flow-arrow">→</span>
-                                    <div class="flow-node">
-                                        <div class="node-label">L8</div>
-                                        <div class="node-title">Energy Manager</div>
-                                    </div>
+                        <!-- Core Logic -->
+                        <div class="glass-card p-6 text-center min-w-[200px] layer-l1">
+                            <div class="mono text-[10px] text-zinc-500 mb-1">L1</div>
+                            <div class="font-bold">Physics Engine</div>
+                        </div>
+
+                        <div class="text-zinc-800">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 14l-7 7m0 0l-7-7m7 7V3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </div>
+
+                        <!-- Grid Layer -->
+                        <div class="flex flex-col items-center gap-6 w-full max-w-4xl">
+                            <span class="text-xs font-bold uppercase tracking-widest text-zinc-600">Grid Integration</span>
+                            <div class="flex flex-wrap justify-center gap-4">
+                                <div class="glass-card p-4 text-center min-w-[140px] layer-l2">
+                                    <div class="mono text-[10px] text-zinc-500 mb-1">L2</div>
+                                    <div class="font-bold text-sm">Grid Signal</div>
+                                </div>
+                                <div class="flex items-center text-zinc-700">→</div>
+                                <div class="glass-card p-4 text-center min-w-[140px] layer-l3">
+                                    <div class="mono text-[10px] text-zinc-500 mb-1">L3</div>
+                                    <div class="font-bold text-sm">VPP Aggregator</div>
+                                </div>
+                                <div class="flex items-center text-zinc-700">→</div>
+                                <div class="glass-card p-4 text-center min-w-[140px] layer-l4">
+                                    <div class="mono text-[10px] text-zinc-500 mb-1">L4</div>
+                                    <div class="font-bold text-sm">Market Gateway</div>
                                 </div>
                             </div>
                         </div>
-                        <div class="flow-arrow-down">↓</div>
-                        <div class="flow-row">
-                            <div class="flow-node">
-                                <div class="node-label">L1</div>
-                                <div class="node-title">Physics Engine</div>
-                            </div>
+
+                        <div class="text-zinc-800">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 14l-7 7m0 0l-7-7m7 7V3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         </div>
-                        <div class="flow-arrow-down">↓</div>
-                        <div class="flow-row">
-                            <div class="flow-group">
-                                <div class="flow-group-label">Grid Integration</div>
-                                <div class="flow-row">
-                                    <div class="flow-node">
-                                        <div class="node-label">L2</div>
-                                        <div class="node-title">Grid Signal</div>
-                                    </div>
-                                    <span class="flow-arrow">→</span>
-                                    <div class="flow-node">
-                                        <div class="node-label">L3</div>
-                                        <div class="node-title">VPP Aggregator</div>
-                                    </div>
-                                    <span class="flow-arrow">→</span>
-                                    <div class="flow-node">
-                                        <div class="node-label">L4</div>
-                                        <div class="node-title">Market Gateway</div>
-                                    </div>
+
+                        <!-- User Layer -->
+                        <div class="flex flex-col items-center gap-6 w-full max-w-4xl">
+                            <span class="text-xs font-bold uppercase tracking-widest text-zinc-600">Commerce & Driver Experience</span>
+                            <div class="flex flex-wrap justify-center gap-4">
+                                <div class="glass-card p-4 text-center min-w-[140px] layer-l9">
+                                    <div class="mono text-[10px] text-zinc-500 mb-1">L9</div>
+                                    <div class="font-bold text-sm">Commerce</div>
                                 </div>
-                            </div>
-                        </div>
-                        <div class="flow-arrow-down">↓</div>
-                        <div class="flow-row">
-                            <div class="flow-group">
-                                <div class="flow-group-label">Settlement Layer</div>
-                                <div class="flow-row">
-                                    <div class="flow-node">
-                                        <div class="node-label">L9</div>
-                                        <div class="node-title">Commerce</div>
-                                    </div>
-                                    <span class="flow-arrow">→</span>
-                                    <div class="flow-node">
-                                        <div class="node-label">L10</div>
-                                        <div class="node-title">Token Bridge</div>
-                                    </div>
+                                <div class="glass-card p-4 text-center min-w-[140px] layer-l10">
+                                    <div class="mono text-[10px] text-zinc-500 mb-1">L10</div>
+                                    <div class="font-bold text-sm">Token Bridge</div>
                                 </div>
-                            </div>
-                        </div>
-                        <div class="flow-arrow-down">↓</div>
-                        <div class="flow-row">
-                            <div class="flow-group">
-                                <div class="flow-group-label">User Layer</div>
-                                <div class="flow-row">
-                                    <div class="flow-node">
-                                        <div class="node-label">L5</div>
-                                        <div class="node-title">Driver DX</div>
-                                    </div>
-                                    <span class="flow-arrow">←→</span>
-                                    <div class="flow-node">
-                                        <div class="node-label">L6</div>
-                                        <div class="node-title">Engagement</div>
-                                    </div>
+                                <div class="glass-card p-4 text-center min-w-[140px] layer-l5">
+                                    <div class="mono text-[10px] text-zinc-500 mb-1">L5</div>
+                                    <div class="font-bold text-sm">Driver DX</div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </section>
-
-    <!-- Architecture Cards -->
-    <section id="architecture" class="architecture">
-        <div class="section-header">
-            <h2>10-Layer Microservices Architecture</h2>
-            <p>From electron flow to token minting — each layer handles a distinct operational concern</p>
-        </div>
-        <div class="layers-grid">
-            <!-- L1 -->
-            <div class="layer-card" data-layer="L1">
-                <div class="layer-header">
-                    <span class="layer-badge">L1</span>
-                    <span class="layer-name">Physics Engine</span>
-                </div>
-                <p class="layer-description">The "Green Audit" — verifies kWh dispensed vs. kWh received via telematics. Variance threshold &lt;15%.</p>
-                <div class="layer-links">
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/01-physics-engine" class="layer-link" target="_blank">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
-                        /services/01-physics-engine
-                    </a>
-                </div>
-            </div>
-
-            <!-- L2 -->
-            <div class="layer-card" data-layer="L2">
-                <div class="layer-header">
-                    <span class="layer-badge">L2</span>
-                    <span class="layer-name">Grid Signal</span>
-                </div>
-                <p class="layer-description">OpenADR 3.0 Virtual End Node (VEN) for utility demand response communication and price signals.</p>
-                <div class="layer-links">
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/02-grid-signal" class="layer-link" target="_blank">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
-                        /services/02-grid-signal
-                    </a>
-                </div>
-            </div>
-
-            <!-- L3 -->
-            <div class="layer-card" data-layer="L3">
-                <div class="layer-header">
-                    <span class="layer-badge">L3</span>
-                    <span class="layer-name">VPP Aggregator</span>
-                </div>
-                <p class="layer-description">Aggregates EVs and BESS to bid capacity into wholesale markets as a Virtual Power Plant.</p>
-                <div class="layer-links">
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/03-vpp-aggregator" class="layer-link" target="_blank">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
-                        /services/03-vpp-aggregator
-                    </a>
-                </div>
-            </div>
-
-            <!-- L4 -->
-            <div class="layer-card" data-layer="L4">
-                <div class="layer-header">
-                    <span class="layer-badge">L4</span>
-                    <span class="layer-name">Market Gateway</span>
-                </div>
-                <p class="layer-description">Arbitrage engine connecting to CAISO, PJM, and Nord Pool wholesale energy markets.</p>
-                <div class="layer-links">
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/04-market-gateway" class="layer-link" target="_blank">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
-                        /services/04-market-gateway
-                    </a>
-                </div>
-            </div>
-
-            <!-- L5 -->
-            <div class="layer-card" data-layer="L5">
-                <div class="layer-header">
-                    <span class="layer-badge">L5</span>
-                    <span class="layer-name">Driver DX</span>
-                </div>
-                <p class="layer-description">Smart routing, voice commands, and real-time charger availability for drivers.</p>
-                <div class="layer-links">
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/05-driver-bff" class="layer-link" target="_blank">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
-                        /services/05-driver-bff
-                    </a>
-                </div>
-            </div>
-
-            <!-- L6 -->
-            <div class="layer-card" data-layer="L6">
-                <div class="layer-header">
-                    <span class="layer-badge">L6</span>
-                    <span class="layer-name">Engagement</span>
-                </div>
-                <p class="layer-description">CRM, targeted banners, contextual support ticketing, and driver communication.</p>
-                <div class="layer-links">
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/06-engagement" class="layer-link" target="_blank">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
-                        /services/06-engagement
-                    </a>
-                </div>
-            </div>
-
-            <!-- L7 -->
-            <div class="layer-card" data-layer="L7">
-                <div class="layer-header">
-                    <span class="layer-badge">L7</span>
-                    <span class="layer-name">Device Gateway</span>
-                </div>
-                <p class="layer-description">Hardware abstraction layer for OCPP 1.6/2.0.1, OCPI roaming, and ISO 15118 Plug&Charge.</p>
-                <div class="layer-links">
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/07-device-gateway" class="layer-link" target="_blank">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
-                        /services/07-device-gateway
-                    </a>
-                </div>
-            </div>
-
-            <!-- L8 -->
-            <div class="layer-card" data-layer="L8">
-                <div class="layer-header">
-                    <span class="layer-badge">L8</span>
-                    <span class="layer-name">Energy Manager</span>
-                </div>
-                <p class="layer-description">Dynamic Load Management (DLM) and site safety. Edge-ready for offline operation.</p>
-                <div class="layer-links">
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/08-energy-manager" class="layer-link" target="_blank">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
-                        /services/08-energy-manager
-                    </a>
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/apps/admin-portal-web" class="layer-link" target="_blank">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                        /apps/admin-portal-web
-                    </a>
-                </div>
-            </div>
-
-            <!-- L9 -->
-            <div class="layer-card" data-layer="L9">
-                <div class="layer-header">
-                    <span class="layer-badge">L9</span>
-                    <span class="layer-name">Commerce Engine</span>
-                </div>
-                <p class="layer-description">Flexible billing, tariffs, subscriptions, and split-billing for fleet operators.</p>
-                <div class="layer-links">
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/09-commerce-engine" class="layer-link" target="_blank">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
-                        /services/09-commerce-engine
-                    </a>
-                </div>
-            </div>
-
-            <!-- L10 -->
-            <div class="layer-card" data-layer="L10">
-                <div class="layer-header">
-                    <span class="layer-badge">L10</span>
-                    <span class="layer-name">Token Bridge</span>
-                </div>
-                <p class="layer-description">Rewards and staking via the Open-Wallet Framework. Hybrid SQL + blockchain ledger.</p>
-                <div class="layer-links">
-                    <a href="https://github.com/dcplatforms/Migrid/tree/main/services/10-token-engine" class="layer-link" target="_blank">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
-                        /services/10-token-engine
-                    </a>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Quick Start -->
-    <section id="quickstart" class="quickstart">
-        <div class="quickstart-inner">
-            <div class="section-header">
-                <h2>Quick Start</h2>
-                <p>Get MiGrid running locally in under 5 minutes</p>
-            </div>
-            <div class="code-block">
-                <div class="code-header">
-                    <span class="code-dot red"></span>
-                    <span class="code-dot yellow"></span>
-                    <span class="code-dot green"></span>
-                </div>
-                <div class="code-content">
-<pre><span class="code-comment"># Clone the repository</span>
-<span class="code-command">git clone</span> https://github.com/dcplatforms/Migrid.git
-<span class="code-command">cd</span> Migrid
-
-<span class="code-comment"># Start infrastructure (TimescaleDB, Redis, Gateway services)</span>
-<span class="code-command">docker-compose up -d</span>
-
-<span class="code-comment"># Seed vehicle physics models (F-150 Lightning, Rivian R1T, etc.)</span>
-<span class="code-command">npm run seed:physics</span>
-
-<span class="code-comment"># Verify services are running</span>
-<span class="code-command">curl</span> http://localhost:3000/health
-<span class="code-comment"># {"status": "ok", "services": ["physics", "device", "commerce"]}</span></pre>
-                </div>
-            </div>
-            <div style="margin-top: 2rem; padding: 2rem; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); border-radius: 1rem; border-left: 4px solid #00e6b8;">
-                <h3 style="color: #00e6b8; font-size: 1.125rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                    </svg>
-                    Demo Credentials
-                </h3>
-                <p style="color: #94a3b8; margin-bottom: 1rem;">Login to the admin portal (http://localhost:5173) or mobile app with these test accounts:</p>
-                <div style="font-family: 'JetBrains Mono', monospace; background: #0a0f14; padding: 1rem; border-radius: 0.5rem; color: #64748b; font-size: 0.875rem;">
-                    <div style="margin-bottom: 0.5rem;"><span style="color: #00a8ff;">Email:</span>    alice@demo.com</div>
-                    <div><span style="color: #00a8ff;">Password:</span> demo123</div>
-                </div>
-                <p style="color: #64748b; font-size: 0.875rem; margin-top: 1rem;">Additional accounts: bob@demo.com, carol@demo.com (all use password: demo123)</p>
-            </div>
-        </div>
-    </section>
-
-    <!-- Platform Status -->
-    <section class="platform-status" style="background: linear-gradient(180deg, #111820 0%, #0a0f14 100%); padding: 4rem 1.5rem;">
-        <div style="max-width: 1200px; margin: 0 auto;">
-            <div class="section-header">
-                <h2>Platform Status</h2>
-                <p>Version 10.0.0 • January 2026 • 42% Complete</p>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-top: 3rem; margin-bottom: 3rem;">
-                <div style="background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); border-radius: 1rem; padding: 1.5rem; text-align: center; border-left: 4px solid #22c55e;">
-                    <div style="font-size: 2.5rem; font-weight: bold; color: #22c55e; margin-bottom: 0.5rem;">31</div>
-                    <div style="color: #94a3b8; font-size: 0.875rem;">Features Complete</div>
-                </div>
-                <div style="background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); border-radius: 1rem; padding: 1.5rem; text-align: center; border-left: 4px solid #f59e0b;">
-                    <div style="font-size: 2.5rem; font-weight: bold; color: #f59e0b; margin-bottom: 0.5rem;">2</div>
-                    <div style="color: #94a3b8; font-size: 0.875rem;">In Progress</div>
-                </div>
-                <div style="background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); border-radius: 1rem; padding: 1.5rem; text-align: center; border-left: 4px solid #8b5cf6;">
-                    <div style="font-size: 2.5rem; font-weight: bold; color: #8b5cf6; margin-bottom: 0.5rem;">41</div>
-                    <div style="color: #94a3b8; font-size: 0.875rem;">Planned</div>
-                </div>
-                <div style="background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); border-radius: 1rem; padding: 1.5rem; text-align: center; border-left: 4px solid #00e6b8;">
-                    <div style="font-size: 2.5rem; font-weight: bold; color: #00e6b8; margin-bottom: 0.5rem;">10/10</div>
-                    <div style="color: #94a3b8; font-size: 0.875rem;">Services Complete</div>
-                </div>
-            </div>
-            <div style="background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); border-radius: 1rem; padding: 2rem;">
-                <h3 style="color: #ffffff; font-size: 1.125rem; margin-bottom: 2rem;">Roadmap Progress</h3>
-                <div style="display: grid; gap: 1rem;">
-                    <div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                            <span style="color: #94a3b8; font-size: 0.875rem;">Phase 1: Foundation</span>
-                            <span style="color: #22c55e; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace;">[✓] 100% • Q1 2025</span>
-                        </div>
-                        <div style="background: #1a232d; height: 8px; border-radius: 4px; overflow: hidden;">
-                            <div style="background: linear-gradient(90deg, #22c55e, #16a34a); height: 100%; width: 100%;"></div>
-                        </div>
-                    </div>
-                    <div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                            <span style="color: #94a3b8; font-size: 0.875rem;">Phase 2: Grid Integration</span>
-                            <span style="color: #22c55e; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace;">[✓] 100% • Q2 2025</span>
-                        </div>
-                        <div style="background: #1a232d; height: 8px; border-radius: 4px; overflow: hidden;">
-                            <div style="background: linear-gradient(90deg, #22c55e, #16a34a); height: 100%; width: 100%;"></div>
-                        </div>
-                    </div>
-                    <div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                            <span style="color: #94a3b8; font-size: 0.875rem;">Phase 3: Market Access</span>
-                            <span style="color: #22c55e; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace;">[✓] 100% • Q3 2025</span>
-                        </div>
-                        <div style="background: #1a232d; height: 8px; border-radius: 4px; overflow: hidden;">
-                            <div style="background: linear-gradient(90deg, #22c55e, #16a34a); height: 100%; width: 100%;"></div>
-                        </div>
-                    </div>
-                    <div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                            <span style="color: #94a3b8; font-size: 0.875rem;">Phase 4: Driver Experience</span>
-                            <span style="color: #22c55e; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace;">[✓] 100% • Q4 2025</span>
-                        </div>
-                        <div style="background: #1a232d; height: 8px; border-radius: 4px; overflow: hidden;">
-                            <div style="background: linear-gradient(90deg, #22c55e, #16a34a); height: 100%; width: 100%;"></div>
-                        </div>
-                    </div>
-                    <div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                            <span style="color: #94a3b8; font-size: 0.875rem;">Phase 5: Enterprise Scale</span>
-                            <span style="color: #f59e0b; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace;">[~] 50% • Q1 2026</span>
-                        </div>
-                        <div style="background: #1a232d; height: 8px; border-radius: 4px; overflow: hidden;">
-                            <div style="background: linear-gradient(90deg, #f59e0b, #d97706); height: 100%; width: 50%;"></div>
-                        </div>
-                    </div>
-                    <div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                            <span style="color: #94a3b8; font-size: 0.875rem;">Phase 6: AI & Optimization</span>
-                            <span style="color: #8b5cf6; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace;">[ ] 0% • Q2 2026</span>
-                        </div>
-                        <div style="background: #1a232d; height: 8px; border-radius: 4px; overflow: hidden;">
-                            <div style="background: linear-gradient(90deg, #8b5cf6, #7c3aed); height: 100%; width: 0%;"></div>
-                        </div>
-                    </div>
-                    <div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                            <span style="color: #94a3b8; font-size: 0.875rem;">Phase 7: Global Expansion</span>
-                            <span style="color: #3b82f6; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace;">[ ] 0% • Q3 2026</span>
-                        </div>
-                        <div style="background: #1a232d; height: 8px; border-radius: 4px; overflow: hidden;">
-                            <div style="background: linear-gradient(90deg, #3b82f6, #2563eb); height: 100%; width: 0%;"></div>
-                        </div>
-                    </div>
-                    <div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                            <span style="color: #94a3b8; font-size: 0.875rem;">Phase 8: Advanced Grid</span>
-                            <span style="color: #06b6d4; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace;">[ ] 0% • Q4 2026</span>
-                        </div>
-                        <div style="background: #1a232d; height: 8px; border-radius: 4px; overflow: hidden;">
-                            <div style="background: linear-gradient(90deg, #06b6d4, #0891b2); height: 100%; width: 0%;"></div>
-                        </div>
-                    </div>
-                </div>
-                <div style="margin-top: 2rem; text-align: center;">
-                    <a href="roadmap.html" style="display: inline-block; padding: 0.75rem 2rem; background: linear-gradient(90deg, #00e6b8, #00a8ff); color: #ffffff; font-weight: 600; border-radius: 0.5rem; text-decoration: none; transition: transform 0.2s;">
-                        View Full Roadmap →
-                    </a>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- API Reference -->
-    <section id="api" class="docs-section" style="background: var(--bg-secondary);">
-        <div class="section-header">
-            <h2>API Reference</h2>
-            <p>OpenAPI 3.1.0 specifications for the 10-layer microservices stack</p>
-        </div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; max-width: 1200px; margin: 0 auto;">
-            <a href="api/l1-physics-engine.yaml" class="doc-card" style="padding: 1rem;">
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <span style="font-family: 'JetBrains Mono', monospace; color: #22d3d3;">L1</span>
-                    <h3 style="font-size: 0.9rem; margin: 0;">Physics Engine</h3>
-                </div>
-            </a>
-            <a href="api/l2-grid-signal.yaml" class="doc-card" style="padding: 1rem;">
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <span style="font-family: 'JetBrains Mono', monospace; color: #22c55e;">L2</span>
-                    <h3 style="font-size: 0.9rem; margin: 0;">Grid Signal</h3>
-                </div>
-            </a>
-            <a href="api/l3-vpp-aggregator.yaml" class="doc-card" style="padding: 1rem;">
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <span style="font-family: 'JetBrains Mono', monospace; color: #3b82f6;">L3</span>
-                    <h3 style="font-size: 0.9rem; margin: 0;">VPP Aggregator</h3>
-                </div>
-            </a>
-            <a href="api/l4-market-gateway.yaml" class="doc-card" style="padding: 1rem;">
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <span style="font-family: 'JetBrains Mono', monospace; color: #8b5cf6;">L4</span>
-                    <h3 style="font-size: 0.9rem; margin: 0;">Market Gateway</h3>
-                </div>
-            </a>
-            <a href="api/l5-driver-experience.yaml" class="doc-card" style="padding: 1rem;">
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <span style="font-family: 'JetBrains Mono', monospace; color: #ec4899;">L5</span>
-                    <h3 style="font-size: 0.9rem; margin: 0;">Driver Experience</h3>
-                </div>
-            </a>
-            <a href="api/l6-engagement-engine.yaml" class="doc-card" style="padding: 1rem;">
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <span style="font-family: 'JetBrains Mono', monospace; color: #f43f5e;">L6</span>
-                    <h3 style="font-size: 0.9rem; margin: 0;">Engagement Engine</h3>
-                </div>
-            </a>
-            <a href="api/l7-device-gateway.yaml" class="doc-card" style="padding: 1rem;">
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <span style="font-family: 'JetBrains Mono', monospace; color: #f97316;">L7</span>
-                    <h3 style="font-size: 0.9rem; margin: 0;">Device Gateway</h3>
-                </div>
-            </a>
-            <a href="api/l8-energy-manager.yaml" class="doc-card" style="padding: 1rem;">
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <span style="font-family: 'JetBrains Mono', monospace; color: #eab308;">L8</span>
-                    <h3 style="font-size: 0.9rem; margin: 0;">Energy Manager</h3>
-                </div>
-            </a>
-            <a href="api/l9-commerce-engine.yaml" class="doc-card" style="padding: 1rem;">
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <span style="font-family: 'JetBrains Mono', monospace; color: #14b8a6;">L9</span>
-                    <h3 style="font-size: 0.9rem; margin: 0;">Commerce Engine</h3>
-                </div>
-            </a>
-            <a href="api/l10-token-engine.yaml" class="doc-card" style="padding: 1rem;">
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <span style="font-family: 'JetBrains Mono', monospace; color: #6366f1;">L10</span>
-                    <h3 style="font-size: 0.9rem; margin: 0;">Token Bridge</h3>
-                </div>
-            </a>
-        </div>
-    </section>
-
-    <!-- Documentation -->
-    <section id="docs" class="docs-section">
-        <div class="section-header">
-            <h2>Documentation</h2>
-            <p>Everything you need to deploy, integrate, and contribute</p>
-        </div>
-        <div class="docs-grid">
-            <a href="https://github.com/dcplatforms/Migrid/tree/main/docs/architecture" class="doc-card" target="_blank">
-                <div class="doc-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                        <line x1="3" y1="9" x2="21" y2="9"/>
-                        <line x1="9" y1="21" x2="9" y2="9"/>
-                    </svg>
-                </div>
-                <h3>Architecture Decision Records</h3>
-                <p>ADRs documenting key architectural decisions and their rationale</p>
-            </a>
-            <a href="#api" class="doc-card">
-                <div class="doc-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                        <line x1="16" y1="13" x2="8" y2="13"/>
-                        <line x1="16" y1="17" x2="8" y2="17"/>
-                    </svg>
-                </div>
-                <h3>API Specifications</h3>
-                <p>OpenAPI/Swagger definitions for all service endpoints</p>
-            </a>
-            <a href="roadmap.html" class="doc-card">
-                <div class="doc-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="8" y1="6" x2="21" y2="6"/>
-                        <line x1="8" y1="12" x2="21" y2="12"/>
-                        <line x1="8" y1="18" x2="21" y2="18"/>
-                        <line x1="3" y1="6" x2="3.01" y2="6"/>
-                        <line x1="3" y1="12" x2="3.01" y2="12"/>
-                        <line x1="3" y1="18" x2="3.01" y2="18"/>
-                    </svg>
-                </div>
-                <h3>Product Roadmap</h3>
-                <p>Q1 2025 → Q4 2026 release timeline and feature milestones</p>
-            </a>
-            <a href="https://github.com/dcplatforms/Migrid/tree/main/infrastructure" class="doc-card" target="_blank">
-                <div class="doc-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
-                        <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
-                        <line x1="6" y1="6" x2="6.01" y2="6"/>
-                        <line x1="6" y1="18" x2="6.01" y2="18"/>
-                    </svg>
-                </div>
-                <h3>Infrastructure as Code</h3>
-                <p>Terraform modules and Kubernetes manifests for deployment</p>
-            </a>
-            <a href="https://github.com/dcplatforms/Migrid/blob/main/CONTRIBUTING.md" class="doc-card" target="_blank">
-                <div class="doc-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                        <circle cx="9" cy="7" r="4"/>
-                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-                    </svg>
-                </div>
-                <h3>Contributing Guide</h3>
-                <p>How to contribute, RFC process, and TSC governance</p>
-            </a>
-            <a href="https://github.com/dcplatforms/Migrid/blob/main/LICENSE" class="doc-card" target="_blank">
-                <div class="doc-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                    </svg>
-                </div>
-                <h3>Apache 2.0 License</h3>
-                <p>Open source license terms and conditions</p>
-            </a>
         </div>
     </section>
 
     <!-- Standards -->
-    <section id="standards" class="standards">
-        <div class="standards-inner">
-            <div class="section-header">
-                <h2>Standards Compliance</h2>
-                <p>Built on open protocols for maximum interoperability</p>
+    <section class="py-20 px-6 bg-zinc-950/50">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl font-bold mb-4">Standards Compliance</h2>
+                <p class="text-zinc-500">Built on open protocols for maximum interoperability</p>
             </div>
-            <div class="standards-grid">
-                <div class="standard-badge">
-                    <div class="standard-icon">ADR</div>
-                    <div class="standard-info">
-                        <div class="standard-name">OpenADR 3.0</div>
-                        <div class="standard-desc">Demand response communication</div>
-                    </div>
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                <div class="glass-card p-6 flex flex-col items-center text-center">
+                    <div class="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center font-bold text-xs text-blue-400 mb-4">ADR</div>
+                    <div class="text-xs font-bold">OpenADR 3.0</div>
                 </div>
-                <div class="standard-badge">
-                    <div class="standard-icon">OCPP</div>
-                    <div class="standard-info">
-                        <div class="standard-name">OCPP 2.0.1</div>
-                        <div class="standard-desc">Charger communication</div>
-                    </div>
+                <div class="glass-card p-6 flex flex-col items-center text-center">
+                    <div class="w-10 h-10 bg-cyan-500/10 rounded-lg flex items-center justify-center font-bold text-xs text-cyan-400 mb-4">OCPP</div>
+                    <div class="text-xs font-bold">OCPP 2.0.1</div>
                 </div>
-                <div class="standard-badge">
-                    <div class="standard-icon">OCPI</div>
-                    <div class="standard-info">
-                        <div class="standard-name">OCPI 2.2</div>
-                        <div class="standard-desc">Roaming networks</div>
-                    </div>
+                <div class="glass-card p-6 flex flex-col items-center text-center">
+                    <div class="w-10 h-10 bg-teal-500/10 rounded-lg flex items-center justify-center font-bold text-xs text-teal-400 mb-4">OCPI</div>
+                    <div class="text-xs font-bold">OCPI 2.2</div>
                 </div>
-                <div class="standard-badge">
-                    <div class="standard-icon">ISO</div>
-                    <div class="standard-info">
-                        <div class="standard-name">ISO 15118</div>
-                        <div class="standard-desc">Plug & Charge</div>
-                    </div>
+                <div class="glass-card p-6 flex flex-col items-center text-center">
+                    <div class="w-10 h-10 bg-orange-500/10 rounded-lg flex items-center justify-center font-bold text-xs text-orange-400 mb-4">ISO</div>
+                    <div class="text-xs font-bold">ISO 15118</div>
                 </div>
-                <div class="standard-badge">
-                    <div class="standard-icon">MOD</div>
-                    <div class="standard-info">
-                        <div class="standard-name">Modbus TCP/RTU</div>
-                        <div class="standard-desc">Building load monitoring</div>
-                    </div>
+                <div class="glass-card p-6 flex flex-col items-center text-center">
+                    <div class="w-10 h-10 bg-yellow-500/10 rounded-lg flex items-center justify-center font-bold text-xs text-yellow-400 mb-4">MOD</div>
+                    <div class="text-xs font-bold">Modbus TCP</div>
                 </div>
-                <div class="standard-badge">
-                    <div class="standard-icon">MQTT</div>
-                    <div class="standard-info">
-                        <div class="standard-name">MQTT 5.0</div>
-                        <div class="standard-desc">Real-time messaging</div>
-                    </div>
+                <div class="glass-card p-6 flex flex-col items-center text-center">
+                    <div class="w-10 h-10 bg-indigo-500/10 rounded-lg flex items-center justify-center font-bold text-xs text-indigo-400 mb-4">MQTT</div>
+                    <div class="text-xs font-bold">MQTT 5.0</div>
                 </div>
             </div>
         </div>
     </section>
 
     <!-- Footer -->
-    <footer class="footer">
-        <div class="footer-inner">
-            <div class="footer-links">
-                <a href="https://github.com/dcplatforms/Migrid" target="_blank">GitHub</a>
-                <a href="https://github.com/dcplatforms/Migrid/issues" target="_blank">Issues</a>
-                <a href="https://github.com/dcplatforms/Migrid/discussions" target="_blank">Discussions</a>
-                <a href="https://github.com/dcplatforms/Migrid/releases" target="_blank">Releases</a>
-                <a href="https://www.linkedin.com/in/thomasctpm/" target="_blank">Author</a>
+    <footer class="py-20 px-6 border-t border-zinc-900">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
+            <div class="flex flex-col items-center md:items-start">
+                <div class="flex items-center gap-2 text-xl font-bold mb-4">
+                    <svg class="w-6 h-6 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                    </svg>
+                    <span>MiGrid</span>
+                </div>
+                <p class="text-zinc-600 text-xs italic">"Verify the physics. Unlock the grid."</p>
             </div>
-            <p class="footer-copy">
-                © 2025 MiGrid Contributors • Apache 2.0 License<br>
-                <em>"Verify the physics. Unlock the grid."</em>
+            <div class="flex gap-8 text-zinc-500 text-sm font-medium">
+                <a href="https://github.com/dcplatforms/Migrid" class="hover:text-white transition-colors">GitHub</a>
+                <a href="roadmap.html" class="hover:text-white transition-colors">Roadmap</a>
+                <a href="architecture.html" class="hover:text-white transition-colors">Architecture</a>
+            </div>
+            <p class="text-zinc-600 text-xs text-center md:text-right">
+                © 2025 MiGrid Contributors <br>
+                Apache 2.0 License
             </p>
         </div>
     </footer>
@@ -1905,53 +388,19 @@
         // Tab switching for explorer views
         document.querySelectorAll('.explorer-tab').forEach(tab => {
             tab.addEventListener('click', () => {
-                // Remove active class from all tabs
-                document.querySelectorAll('.explorer-tab').forEach(t => t.classList.remove('active'));
-                // Add active class to clicked tab
-                tab.classList.add('active');
+                document.querySelectorAll('.explorer-tab').forEach(t => {
+                    t.classList.remove('bg-white', 'text-black', 'active');
+                    t.classList.add('text-zinc-400');
+                });
+                tab.classList.add('bg-white', 'text-black', 'active');
+                tab.classList.remove('text-zinc-400');
                 
-                // Hide all views
-                document.getElementById('hub-view').classList.remove('active');
-                document.getElementById('table-view').classList.remove('active');
-                document.getElementById('flow-view').classList.remove('active');
+                document.getElementById('table-view').classList.add('hidden');
+                document.getElementById('flow-view').classList.add('hidden');
                 
-                // Show selected view
                 const view = tab.dataset.view;
-                document.getElementById(view + '-view').classList.add('active');
+                document.getElementById(view + '-view').classList.remove('hidden');
             });
-        });
-
-        // Smooth scroll for anchor links
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
-                e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
-                if (target) {
-                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-            });
-        });
-
-        // Add animation on scroll
-        const observerOptions = {
-            threshold: 0.1,
-            rootMargin: '0px 0px -50px 0px'
-        };
-
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.style.opacity = '1';
-                    entry.target.style.transform = 'translateY(0)';
-                }
-            });
-        }, observerOptions);
-
-        document.querySelectorAll('.layer-card, .doc-card').forEach(card => {
-            card.style.opacity = '0';
-            card.style.transform = 'translateY(20px)';
-            card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
-            observer.observe(card);
         });
     </script>
 </body>
