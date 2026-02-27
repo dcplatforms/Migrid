@@ -13,6 +13,7 @@ const { Pool } = require('pg');
 const dotenv = require('dotenv');
 const jwt = require('jsonwebtoken');
 const { createClient } = require('redis');
+const { Kafka } = require('kafkajs');
 
 dotenv.config();
 
@@ -24,6 +25,12 @@ const pool = new Pool({
 });
 
 const redisClient = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
+
+const kafka = new Kafka({
+  clientId: 'device-gateway',
+  brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
+});
+const producer = kafka.producer();
 
 app.use(express.json());
 
@@ -42,6 +49,13 @@ async function initResilience() {
     console.log('✅ [L7] Connected to Local Redis Sidecar.');
   } catch (err) {
     console.warn('⚠️ [L7] Local Redis unavailable.');
+  }
+
+  try {
+    await producer.connect();
+    console.log('✅ [L7] Connected to Kafka Producer.');
+  } catch (err) {
+    console.error('❌ [L7] Failed to connect to Kafka Producer:', err);
   }
 
   // Heartbeat loop
@@ -168,13 +182,71 @@ app.post('/iso15118/start-charge', async (req, res) => {
 
     if (!isOffline) {
       await pool.query('UPDATE vehicles SET is_plugged_in = true WHERE id = $1', [vehicle_id]);
-      await pool.query('INSERT INTO charging_sessions (vehicle_id, start_time, start_soc) VALUES ($1, NOW(), (SELECT current_soc FROM vehicles WHERE id = $1))', [vehicle_id]);
+      // Assuming evse_id corresponds to charger_id (mapped via serial_number or internal ID)
+      const chargerRes = await pool.query('SELECT id FROM chargers WHERE serial_number = $1', [evse_id]);
+      const charger_id = chargerRes.rows[0]?.id;
+
+      await pool.query(
+        'INSERT INTO charging_sessions (vehicle_id, charger_id, start_time, start_soc) VALUES ($1, $2, NOW(), (SELECT current_soc FROM vehicles WHERE id = $1))',
+        [vehicle_id, charger_id]
+      );
     } else {
       await redisClient.set(`session:active:${vehicle_id}`, JSON.stringify({ evse_id, startTime: Date.now() }));
     }
 
     res.status(201).json({ status: 'CHARGING', vehicle_id });
   } catch (err) {
+    res.status(401).json({ error: 'Invalid auth token' });
+  }
+});
+
+app.post('/iso15118/stop-charge', async (req, res) => {
+  const { auth_token, evse_id, energy_dispensed_kwh } = req.body;
+  try {
+    const decoded = jwt.verify(auth_token, process.env.JWT_SECRET || 'secret');
+    const { vehicle_id } = decoded;
+
+    let session;
+    if (!isOffline) {
+      // Find the active session
+      const sessionRes = await pool.query(
+        'SELECT id FROM charging_sessions WHERE vehicle_id = $1 AND end_time IS NULL ORDER BY start_time DESC LIMIT 1',
+        [vehicle_id]
+      );
+      session = sessionRes.rows[0];
+
+      if (session) {
+        await pool.query(
+          'UPDATE charging_sessions SET end_time = NOW(), energy_dispensed_kwh = $1 WHERE id = $2',
+          [energy_dispensed_kwh, session.id]
+        );
+        await pool.query('UPDATE vehicles SET is_plugged_in = false WHERE id = $1', [vehicle_id]);
+
+        // Emit SESSION_COMPLETED event
+        await producer.send({
+          topic: 'SESSION_COMPLETED',
+          messages: [
+            {
+              value: JSON.stringify({
+                sessionId: session.id,
+                vehicleId: vehicle_id,
+                energyDispensedKwh: energy_dispensed_kwh,
+                timestamp: new Date().toISOString(),
+                evseId: evse_id
+              }),
+            },
+          ],
+        });
+        console.log(`⚡ [L7] Session ${session.id} completed and event emitted.`);
+      }
+    } else {
+      // Handle offline mode if necessary (e.g., store in Redis and emit later)
+      await redisClient.del(`session:active:${vehicle_id}`);
+    }
+
+    res.json({ status: 'STOPPED', sessionId: session?.id });
+  } catch (err) {
+    console.error('[Device Gateway Stop Charge Error]', err);
     res.status(401).json({ error: 'Invalid auth token' });
   }
 });
