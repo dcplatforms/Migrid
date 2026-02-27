@@ -1,0 +1,44 @@
+openapi: 3.1.0
+info:
+  title: L3 VPP Aggregator API
+  version: 3.0.0
+  description: Aggregates EV and BESS capacity for markets.
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /capacity/available:
+    get:
+      summary: Get available capacity for a fleet
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Available capacity
+  /resources/register:
+    post:
+      summary: Register a vehicle as a VPP resource
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                vehicle_id: { type: string, format: uuid }
+                battery_capacity_kwh: { type: number }
+                v2g_enabled: { type: boolean }
+      responses:
+        '200':
+          description: Registered
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

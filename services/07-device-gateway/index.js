@@ -90,8 +90,22 @@ app.get('/health', (req, res) => {
 /**
  * L7: ISO 15118 Certificate-Based Authentication
  */
+/**
+ * L7: ISO 15118 Certificate Validation Logic
+ */
+function validateCertificateChain(chain) {
+  // Production logic would use forge or native crypto to verify X.509 chain
+  // For v5.0 alpha, we ensure the chain is present and has at least two levels (Leaf + Sub-CA)
+  if (!Array.isArray(chain) || chain.length < 2) return false;
+  return chain.every(cert => cert.startsWith('-----BEGIN CERTIFICATE-----'));
+}
+
 app.post('/iso15118/authenticate', async (req, res) => {
   const { contract_id, certificate_chain } = req.body;
+
+  if (!validateCertificateChain(certificate_chain)) {
+    return res.status(400).json({ status: 'FAILED', reason: 'Invalid certificate chain' });
+  }
 
   if (isOffline) {
     // In OFFLINE mode, verify against local Redis cache

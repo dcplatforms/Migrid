@@ -1,0 +1,54 @@
+openapi: 3.1.0
+info:
+  title: L8 Energy Manager API
+  version: 1.1.0
+  description: Dynamic Load Management (DLM) and Modbus monitoring.
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /load/current:
+    get:
+      summary: Get current site load
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Load details
+  /load/history:
+    get:
+      summary: Get load history
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: hours
+          in: query
+          schema: { type: integer, default: 24 }
+      responses:
+        '200':
+          description: Load measurements
+  /dlm/available-capacity:
+    get:
+      summary: Calculate available charging capacity
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: DLM capacity info
+  /dlm/apply:
+    post:
+      summary: Apply DLM and distribute power to chargers
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: DLM applied
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

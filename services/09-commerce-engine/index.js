@@ -18,15 +18,18 @@ app.get('/health', (req, res) => {
  * Manage Tariffs
  */
 app.post('/tariffs', authenticateToken, async (req, res) => {
-  const { fleet_id, name, tariff_type, base_rate_kwh, margin_per_kwh, currency } = req.body;
+  const { fleet_id, name, base_rate_kwh, peak_rate_kwh, peak_start_time, peak_end_time, currency, type, monthly_fee } = req.body;
 
   if (fleet_id !== req.user.fleet_id.toString()) {
     return res.status(403).json({ error: 'Unauthorized to manage tariffs for other fleets' });
   }
 
   try {
-    const tariff = await Tariff.create({ fleet_id, name, tariff_type, base_rate_kwh, margin_per_kwh, currency });
-    res.status(201).json(tariff);
+    const result = await pool.query(
+      'INSERT INTO tariffs (fleet_id, name, base_rate_kwh, peak_rate_kwh, peak_start_time, peak_end_time, currency, type, monthly_fee) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
+      [fleet_id, name, base_rate_kwh, peak_rate_kwh, peak_start_time, peak_end_time, currency, type || 'CONSUMPTION', monthly_fee || 0]
+    );
+    res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error('[Tariff Creation Error]', err);
     res.status(500).json({ error: 'An internal server error occurred' });
@@ -57,6 +60,34 @@ app.post('/invoices/generate', authenticateToken, async (req, res) => {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
+  const cost = session.energy_dispensed_kwh * rate;
+  await pool.query('UPDATE charging_sessions SET cost = $1 WHERE id = $2', [cost, sessionId]);
+  return cost;
+}
+
+/**
+ * Manage Driver Assignments & Split Billing
+ */
+app.post('/drivers/assign', authenticateToken, async (req, res) => {
+  const { fleet_id, driver_id, split_percentage } = req.body;
+
+  if (fleet_id !== req.user.fleet_id.toString()) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO fleet_driver_assignments (fleet_id, driver_id, split_percentage) VALUES ($1, $2, $3) RETURNING *',
+      [fleet_id, driver_id, split_percentage]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('[Driver Assignment Error]', err);
+    res.status(500).json({ error: 'An internal server error occurred' });
+  }
+});
+
+app.post('/billing/calculate/:sessionId', authenticateToken, async (req, res) => {
   try {
     const invoice = await InvoicingService.aggregateSessionsAndCreateInvoice({ fleet_id, start_date, end_date });
     if (!invoice) {
@@ -90,9 +121,38 @@ async function startServices() {
     await MarketRateService.start();
     await SessionEventListener.start();
 
-    app.listen(port, () => {
-      console.log(`💰 [L9] Commerce Engine (Modular) listening at http://localhost:${port}`);
-    });
+    // 2. Sum up totals
+    const totals = await pool.query(
+      'SELECT SUM(energy_dispensed_kwh) as total_energy, SUM(cost) as total_amount FROM charging_sessions cs JOIN vehicles v ON cs.vehicle_id = v.id WHERE v.fleet_id = $1 AND cs.start_time >= $2 AND cs.start_time <= $3 AND cs.invoice_id IS NULL',
+      [fleet_id, start_date, end_date]
+    );
+
+    const { total_energy, total_amount } = totals.rows[0];
+
+    if (!total_energy) {
+      return res.status(404).json({ message: 'No billable sessions found for this period' });
+    }
+
+    // 3. Check for Subscription fees
+    const activeTariff = await pool.query('SELECT * FROM tariffs WHERE fleet_id = $1 AND is_active = true LIMIT 1', [fleet_id]);
+    let finalAmount = parseFloat(total_amount);
+    if (activeTariff.rows[0] && activeTariff.rows[0].type === 'SUBSCRIPTION') {
+      finalAmount += parseFloat(activeTariff.rows[0].monthly_fee);
+    }
+
+    // 4. Create Invoice
+    const invoice = await pool.query(
+      'INSERT INTO invoices (fleet_id, billing_period_start, billing_period_end, total_energy_kwh, total_amount, status, type) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [fleet_id, start_date, end_date, total_energy, finalAmount, 'DRAFT', 'FLEET']
+    );
+
+    // 5. Link sessions to invoice
+    await pool.query(
+      'UPDATE charging_sessions SET invoice_id = $1 WHERE id IN (SELECT cs.id FROM charging_sessions cs JOIN vehicles v ON cs.vehicle_id = v.id WHERE v.fleet_id = $2 AND cs.start_time >= $3 AND cs.start_time <= $4 AND cs.invoice_id IS NULL)',
+      [invoice.rows[0].id, fleet_id, start_date, end_date]
+    );
+
+    res.status(201).json(invoice.rows[0]);
   } catch (err) {
     console.error('Failed to start Commerce Engine services:', err);
     process.exit(1);

@@ -1,0 +1,106 @@
+openapi: 3.1.0
+info:
+  title: L5 Driver Experience API
+  version: 4.0.0
+  description: Mobile app backend with authentication, smart routing, and rewards.
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /auth/register:
+    post:
+      summary: Register a new driver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+                first_name: { type: string }
+                last_name: { type: string }
+                fleet_id: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Registered
+  /auth/login:
+    post:
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: Login successful
+  /auth/me:
+    get:
+      summary: Get current driver profile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Profile data
+  /chargers/nearby:
+    get:
+      summary: Find nearby chargers
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lat
+          in: query
+          schema: { type: number }
+        - name: lng
+          in: query
+          schema: { type: number }
+      responses:
+        '200':
+          description: List of chargers
+  /sessions:
+    get:
+      summary: Get driver's charging sessions
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of sessions
+  /rewards/balance:
+    get:
+      summary: Get reward balance
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Balance data
+  /voice/command:
+    post:
+      summary: Process voice command
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                command_text: { type: string }
+      responses:
+        '200':
+          description: Command processed
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

@@ -1,0 +1,28 @@
+openapi: 3.1.0
+info:
+  title: L2 Grid Signal API
+  version: 2.0.0
+  description: OpenADR 3.0 VEN implementation for grid signals.
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /openadr/v3/events:
+    post:
+      summary: Receive OpenADR 3.0 event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { type: string }
+                type: { type: string }
+                # OpenADR 3.0 spec fields would go here
+      responses:
+        '202':
+          description: Received

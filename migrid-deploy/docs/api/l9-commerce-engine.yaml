@@ -1,0 +1,91 @@
+openapi: 3.1.0
+info:
+  title: L9 Commerce Engine API
+  version: 5.0.0
+  description: Flexible billing, tariffs, and split-billing for MiGrid fleets.
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /tariffs:
+    post:
+      summary: Create a new tariff
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fleet_id: { type: string, format: uuid }
+                name: { type: string }
+                base_rate_kwh: { type: number }
+                peak_rate_kwh: { type: number }
+                peak_start_time: { type: string, format: time }
+                peak_end_time: { type: string, format: time }
+                currency: { type: string, default: USD }
+                type: { type: string, enum: [CONSUMPTION, SUBSCRIPTION] }
+                monthly_fee: { type: number }
+      responses:
+        '201':
+          description: Created
+  /tariffs/{fleet_id}:
+    get:
+      summary: Get active tariffs for a fleet
+      parameters:
+        - name: fleet_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of tariffs
+  /drivers/assign:
+    post:
+      summary: Assign a driver to a fleet with split-billing
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fleet_id: { type: string, format: uuid }
+                driver_id: { type: string, format: uuid }
+                split_percentage: { type: number }
+      responses:
+        '201':
+          description: Created
+  /invoices/generate:
+    post:
+      summary: Generate an invoice for a fleet
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fleet_id: { type: string, format: uuid }
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date }
+      responses:
+        '201':
+          description: Invoice generated
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

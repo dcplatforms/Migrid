@@ -1,0 +1,22 @@
+openapi: 3.1.0
+info:
+  title: L10 Token Engine API
+  version: 1.0.0
+  description: Rewards via Open-Wallet Framework.
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+# L10 primarily consumes Kafka messages from 'driver_actions' topic
+components:
+  schemas:
+    DriverAction:
+      type: object
+      properties:
+        driver_id: { type: string, format: uuid }
+        action_type: { type: string }
+        source_value: { type: number }
+        event_id: { type: string, format: uuid }
