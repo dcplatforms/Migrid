@@ -41,9 +41,10 @@ class InvoicingService {
     return invoice.rows[0];
   }
 
-  async generateInvoicePDF(invoiceId) {
+  async generateInvoicePDF(invoiceId, fleetId) {
     try {
-      const invoiceResult = await pool.query('SELECT * FROM invoices WHERE id = $1', [invoiceId]);
+      // Security Enhancement: Added fleetId filter to prevent IDOR
+      const invoiceResult = await pool.query('SELECT * FROM invoices WHERE id = $1 AND fleet_id = $2', [invoiceId, fleetId]);
       const invoice = invoiceResult.rows[0];
       if (!invoice) throw new Error('Invoice not found');
 

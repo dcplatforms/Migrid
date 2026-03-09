@@ -60,10 +60,17 @@ app.post('/invoices/generate', authenticateToken, async (req, res) => {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
-  const cost = session.energy_dispensed_kwh * rate;
-  await pool.query('UPDATE charging_sessions SET cost = $1 WHERE id = $2', [cost, sessionId]);
-  return cost;
-}
+  try {
+    // Note: The following logic depends on 'session', 'rate', and 'sessionId' being defined.
+    // Preserving the original intent while fixing syntax and adding error handling.
+    const cost = session.energy_dispensed_kwh * rate;
+    await pool.query('UPDATE charging_sessions SET cost = $1 WHERE id = $2', [cost, sessionId]);
+    res.json({ success: true, cost });
+  } catch (err) {
+    console.error('[Invoice Generation Error]', err);
+    res.status(500).json({ error: 'An internal server error occurred' });
+  }
+});
 
 /**
  * Manage Driver Assignments & Split Billing
@@ -102,7 +109,8 @@ app.post('/billing/calculate/:sessionId', authenticateToken, async (req, res) =>
 
 app.get('/invoices/:id/pdf', authenticateToken, async (req, res) => {
   try {
-    const pdfBuffer = await InvoicingService.generateInvoicePDF(req.params.id);
+    // Security Enhancement: Passing fleet_id from JWT to prevent IDOR
+    const pdfBuffer = await InvoicingService.generateInvoicePDF(req.params.id, req.user.fleet_id);
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename=invoice-${req.params.id}.pdf`,
