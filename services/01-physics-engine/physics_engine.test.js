@@ -90,4 +90,43 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.severity).toBe('CRITICAL');
     expect(alertValue.current_soc).toBe(19.5);
   });
+
+  test('should dispatch CAPACITY_VIOLATION with VPP status', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'CAPACITY_VIOLATION',
+        vehicle_id: 'vehicle-789',
+        vin: 'VPPTESTVIN',
+        current_soc: 18.0,
+        threshold: 20.0,
+        vpp_active: true,
+        timestamp: '2023-10-27T10:10:00Z'
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.event_type).toBe('CAPACITY_VIOLATION');
+    expect(alertValue.vpp_active).toBe(true);
+    expect(alertValue.severity).toBe('CRITICAL');
+  });
+
+  test('should include billing_mode in PHYSICS_FRAUD alert', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'PHYSICS_FRAUD',
+        session_id: 'session-999',
+        variance_pct: 25.0,
+        billing_mode: 'PERSONAL',
+        timestamp: '2023-10-27T11:00:00Z'
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.event_type).toBe('PHYSICS_FRAUD');
+    expect(alertValue.billing_mode).toBe('PERSONAL');
+  });
 });
