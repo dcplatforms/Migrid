@@ -70,6 +70,16 @@ BEGIN
         INSERT INTO audit_log (session_id, violation_type, expected_value, actual_value, variance_pct, severity)
         VALUES (NEW.id, 'PHYSICS_FRAUD', v_expected_delta, NEW.energy_battery_delta_kwh, v_variance_pct * 100, 'FRAUD');
         NEW.is_valid := FALSE;
+
+        -- Notify Node.js L1 Physics Engine for Kafka alert
+        PERFORM pg_notify('physics_alerts', json_build_object(
+            'event_type', 'PHYSICS_FRAUD',
+            'session_id', NEW.id,
+            'variance_pct', v_variance_pct * 100,
+            'expected', v_expected_delta,
+            'actual', NEW.energy_battery_delta_kwh,
+            'timestamp', NOW()
+        )::text);
     ELSE
         NEW.is_valid := TRUE;
     END IF;
@@ -116,7 +126,19 @@ BEGIN
         VALUES ('CAPACITY_VIOLATION', 20.0, NEW.current_soc, 'CRITICAL',
                 jsonb_build_object('vehicle_id', NEW.id, 'vin', NEW.vin, 'msg', 'BESS Discharge Rejection: SoC < 20%'));
 
-        RAISE EXCEPTION 'BESS Capacity Violation: SoC cannot drop below 20%%. Command rejected by L1 Physics Engine (The Fuse Rule).';
+        -- Notify Node.js L1 Physics Engine for Kafka alert
+        PERFORM pg_notify('physics_alerts', json_build_object(
+            'event_type', 'CAPACITY_VIOLATION',
+            'vehicle_id', NEW.id,
+            'vin', NEW.vin,
+            'current_soc', NEW.current_soc,
+            'threshold', 20.0,
+            'timestamp', NOW()
+        )::text);
+
+        -- Hard Stop: Prevent the update by reverting to OLD.current_soc instead of raising exception,
+        -- so the notification can be sent (Postgres rolls back notifications on RAISE EXCEPTION).
+        NEW.current_soc := OLD.current_soc;
     END IF;
     RETURN NEW;
 END;
