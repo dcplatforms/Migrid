@@ -76,11 +76,18 @@ async function handlePhysicsAlert(msg) {
     const alert = {
       event_type: payload.event_type || 'EFFICIENCY_ALERT',
       session_id: payload.session_id,
+      vehicle_id: payload.vehicle_id,
+      vin: payload.vin,
       site_id: payload.site_id || 'LOCAL-DEPOT-001', // Should be dynamic
       efficiency_pct: payload.efficiency_pct,
-      threshold: payload.threshold || 0.85,
-      timestamp: new Date().toISOString(),
-      source_layer: 'L1'
+      variance_pct: payload.variance_pct,
+      current_soc: payload.current_soc,
+      threshold: payload.threshold || (payload.event_type === 'EFFICIENCY_ALERT' ? 0.85 : (payload.event_type === 'CAPACITY_VIOLATION' ? 20.0 : null)),
+      expected: payload.expected,
+      actual: payload.actual,
+      timestamp: payload.timestamp || new Date().toISOString(),
+      source_layer: 'L1',
+      severity: (payload.event_type === 'PHYSICS_FRAUD') ? 'FRAUD' : (payload.event_type === 'CAPACITY_VIOLATION' ? 'CRITICAL' : 'WARNING')
     };
 
     await producer.send({
@@ -185,7 +192,11 @@ async function start() {
   startHeartbeat();
 }
 
-start();
+if (require.main === module) {
+  start();
+}
+
+module.exports = { handlePhysicsAlert, producer, connectServices };
 
 process.on('SIGTERM', async () => {
   await pgClient.end();
