@@ -36,11 +36,27 @@ class BiddingOptimizer {
   }
 
   /**
+   * Checks if the L1 Physics safety lock is active in Redis.
+   * @returns {Promise<boolean>} True if safety lock is active
+   */
+  async isSafetyLockActive() {
+    await this.connect();
+    const lock = await this.redisClient.get('l1:safety:lock');
+    return lock === 'true' || lock === '1';
+  }
+
+  /**
    * Run optimization and generate FIX messages for Day-Ahead market.
    * @param {string} iso - The ISO name (e.g., 'CAISO')
    * @returns {Promise<Array<string>>} List of FIX messages
    */
   async generateDayAheadBids(iso) {
+    // Verify the Physics: Check for L1 safety lock before bidding
+    if (await this.isSafetyLockActive()) {
+      console.warn(`🚨 [L4 Market Gateway] Bidding halted: L1 safety lock is active for ${iso}`);
+      return [];
+    }
+
     const forecasts = await this.pricingService.getDayAheadForecast(iso);
     const pVppKw = await this.getAggregatedCapacity();
     const pVppMw = new Decimal(pVppKw).dividedBy(1000);
