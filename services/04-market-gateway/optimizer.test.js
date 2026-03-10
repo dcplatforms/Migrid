@@ -88,4 +88,22 @@ describe('BiddingOptimizer', () => {
     expect(bids[0]).toContain('38=0.00');
     expect(bids[1]).toContain('38=1.00');
   });
+
+  test('should return no bids when L1 safety lock is active', async () => {
+    mockRedisClient.get.mockImplementation((key) => {
+      if (key === 'l1:safety:lock') return Promise.resolve('true');
+      if (key === 'vpp:capacity:available') return Promise.resolve('500');
+      return Promise.resolve(null);
+    });
+
+    const forecasts = [
+      { location: 'LOC1', price_per_mwh: 50.00, timestamp: new Date() }
+    ];
+    mockPricingService.getDayAheadForecast.mockResolvedValue(forecasts);
+
+    const bids = await optimizer.generateDayAheadBids('CAISO');
+
+    expect(bids).toHaveLength(0);
+    expect(mockRedisClient.get).toHaveBeenCalledWith('l1:safety:lock');
+  });
 });

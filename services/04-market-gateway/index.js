@@ -5,6 +5,7 @@
 
 const express = require('express');
 const { Pool } = require('pg');
+const { Kafka } = require('kafkajs');
 const Decimal = require('decimal.js');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
@@ -17,6 +18,13 @@ const port = process.env.PORT || 3004;
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://localhost/migrid'
 });
+
+// Kafka initialization
+const kafka = new Kafka({
+  clientId: 'market-gateway',
+  brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(',')
+});
+const producer = kafka.producer();
 
 app.use(express.json());
 
@@ -44,6 +52,28 @@ const authenticateToken = (req, res, next) => {
 const LMP_THRESHOLD_BUY = new Decimal(process.env.LMP_THRESHOLD_BUY || '30.00');
 const LMP_THRESHOLD_SELL = new Decimal(process.env.LMP_THRESHOLD_SELL || '100.00');
 
+/**
+ * Broadcast market price update to Kafka for other services (L9 Commerce)
+ */
+async function broadcastMarketPrice(iso, price_per_mwh) {
+  try {
+    const payload = {
+      iso: iso.toUpperCase(),
+      price_per_mwh: parseFloat(price_per_mwh),
+      timestamp: new Date().toISOString()
+    };
+
+    await producer.send({
+      topic: 'MARKET_PRICE_UPDATED',
+      messages: [{ value: JSON.stringify(payload) }]
+    });
+
+    console.log(`[Market Gateway] Broadcasted price update for ${iso}: $${price_per_mwh}/MWh`);
+  } catch (error) {
+    console.error('[Market Gateway] Failed to broadcast price update:', error.message);
+  }
+}
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({
@@ -70,6 +100,11 @@ app.get('/markets/:iso/prices', authenticateToken, async (req, res) => {
       ORDER BY timestamp DESC
       LIMIT 10
     `, [iso.toUpperCase()]);
+
+    if (result.rows.length > 0) {
+      // Broadcast the latest price for dynamic billing/L9
+      await broadcastMarketPrice(iso, result.rows[0].price_per_mwh);
+    }
 
     res.json({
       iso: iso.toUpperCase(),
@@ -185,15 +220,28 @@ app.get('/markets', (req, res) => {
 });
 
 // Start server
-app.listen(port, () => {
-  console.log(`[Market Gateway] Running on port ${port}`);
-  console.log(`[Market Gateway] LMP Strategy: Buy < $${LMP_THRESHOLD_BUY}, Sell > $${LMP_THRESHOLD_SELL}`);
-  console.log('[Market Gateway] Using Decimal.js for financial precision');
-});
+async function start() {
+  try {
+    await producer.connect();
+    console.log('✅ [Market Gateway] Connected to Kafka');
+
+    app.listen(port, () => {
+      console.log(`[Market Gateway] Running on port ${port}`);
+      console.log(`[Market Gateway] LMP Strategy: Buy < $${LMP_THRESHOLD_BUY}, Sell > $${LMP_THRESHOLD_SELL}`);
+      console.log('[Market Gateway] Using Decimal.js for financial precision');
+    });
+  } catch (error) {
+    console.error('❌ [Market Gateway] Failed to start:', error);
+    process.exit(1);
+  }
+}
+
+start();
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('[Market Gateway] Shutting down gracefully...');
+  await producer.disconnect();
   pool.end();
   process.exit(0);
 });
