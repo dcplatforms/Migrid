@@ -85,6 +85,8 @@ async function handlePhysicsAlert(msg) {
       threshold: payload.threshold || (payload.event_type === 'EFFICIENCY_ALERT' ? 0.85 : (payload.event_type === 'CAPACITY_VIOLATION' ? 20.0 : null)),
       expected: payload.expected,
       actual: payload.actual,
+      billing_mode: payload.billing_mode,
+      vpp_active: payload.vpp_active,
       timestamp: payload.timestamp || new Date().toISOString(),
       source_layer: 'L1',
       severity: (payload.event_type === 'PHYSICS_FRAUD') ? 'FRAUD' : (payload.event_type === 'CAPACITY_VIOLATION' ? 'CRITICAL' : 'WARNING')
@@ -156,6 +158,8 @@ async function reconcileLogs() {
         site_id: payload.site_id || 'LOCAL-DEPOT-001',
         efficiency_pct: payload.efficiency_pct,
         threshold: payload.threshold || 0.85,
+        billing_mode: payload.billing_mode,
+        vpp_active: payload.vpp_active,
         timestamp: payload.timestamp || new Date().toISOString(),
         source_layer: 'L1',
         reconciled: true
@@ -168,8 +172,8 @@ async function reconcileLogs() {
 
       // Ensure it exists in the primary audit_log table
       await pgClient.query(`
-        INSERT INTO audit_log (session_id, violation_type, expected_value, actual_value, severity, metadata)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO audit_log (session_id, violation_type, expected_value, actual_value, severity, metadata, billing_mode, vpp_active)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ON CONFLICT DO NOTHING
       `, [
         payload.session_id,
@@ -177,7 +181,9 @@ async function reconcileLogs() {
         payload.threshold || 0.85,
         payload.efficiency_pct,
         'WARNING',
-        JSON.stringify({ reconciled: true, original_ts: payload.timestamp })
+        JSON.stringify({ reconciled: true, original_ts: payload.timestamp }),
+        payload.billing_mode,
+        payload.vpp_active
       ]);
 
       console.log(`✅ [L1 Physics] Reconciled log for session: ${payload.session_id}`);
