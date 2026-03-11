@@ -13,8 +13,9 @@ The VPP (Virtual Power Plant) Aggregator service coordinates fleet vehicles and 
 ### ✅ v3.0.0 — VPP Aggregator (July 2025)
 
 - **Fleet Capacity Aggregation**: Real-time available kW/kWh calculation
-  - Formula: `Σ(vehicle_soc × battery_capacity × availability_factor)`
+  - Formula: `Σ(MAX(0, (current_soc - MAX(min_soc, 20.0)) / 100) × battery_capacity × availability_factor)`
   - Minimum threshold: 100kW for market participation
+  - Redis Caching: `<50ms` latency for Market Gateway (L4)
 
 - **BESS Integration**: Stationary storage coordination
   - Safety constraint: Never discharge below 20% SoC
@@ -76,10 +77,17 @@ REDIS_URL=redis://localhost:6379
 
 ## Safety Constraints
 
-1. **Never discharge BESS below 20% SoC**
-2. **Respect driver-set minimum vehicle SoC**
+1. **Never discharge BESS below 20% SoC** (The Fuse Rule - L1 Enforced)
+2. **Respect driver-set minimum vehicle SoC** (if > 20%)
 3. **Honor vehicle departure schedules**
 4. **Maximum ramp rate: 10 kW/minute**
+
+## Phase 5 Backlog (Q1 2026)
+
+- [ ] **ISO 15118 PnC Ready Aggregation**: Prioritize resources with Plug & Charge capability.
+- [ ] **Redis-Based Capacity Cache**: Maintain `vpp:capacity:available` key for L4.
+- [ ] **OpenADR 3.0 Automated Dispatch**: Integrate Kafka `grid_signals` for touchless DR.
+- [ ] **Physics-Aware Forecasting**: Factor L1 variance data into capacity predictions.
 
 ## Deployment
 
