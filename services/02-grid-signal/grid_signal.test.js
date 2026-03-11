@@ -1,7 +1,7 @@
 const request = require('supertest');
 const { app, redisClient, producer } = require('./index');
 
-// Mock Redis
+// Mock Redis (Virtual to bypass environment issues)
 jest.mock('redis', () => ({
   createClient: jest.fn().mockReturnValue({
     connect: jest.fn().mockResolvedValue(),
@@ -10,9 +10,9 @@ jest.mock('redis', () => ({
     quit: jest.fn().mockResolvedValue(),
     on: jest.fn()
   })
-}));
+}), { virtual: true });
 
-// Mock Kafka
+// Mock Kafka (Virtual)
 jest.mock('kafkajs', () => {
   return {
     Kafka: jest.fn().mockImplementation(() => ({
@@ -29,16 +29,21 @@ jest.mock('kafkajs', () => {
       })
     }))
   };
-});
+}, { virtual: true });
 
-// Mock PG
+// Mock PG (Virtual)
 jest.mock('pg', () => {
   const mPool = {
     query: jest.fn().mockResolvedValue({ rows: [] }),
     end: jest.fn().mockResolvedValue()
   };
   return { Pool: jest.fn(() => mPool) };
-});
+}, { virtual: true });
+
+// Mock dotenv (Virtual)
+jest.mock('dotenv', () => ({
+  config: jest.fn()
+}), { virtual: true });
 
 describe('L2 Grid Signal Service', () => {
   beforeEach(() => {
@@ -62,11 +67,17 @@ describe('L2 Grid Signal Service', () => {
     expect(producer.send).toHaveBeenCalled();
   });
 
-  test('POST /openadr/v3/events should reject when L1 safety lock is active', async () => {
-    redisClient.get.mockResolvedValue(JSON.stringify({
-      alert_type: 'CAPACITY_VIOLATION',
-      severity: 'CRITICAL'
-    }));
+  test('POST /openadr/v3/events should reject when L1 safety lock is active (Phase 5 Alignment)', async () => {
+    // Phase 5 uses '1' or 'true' for the lock key
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l1:safety:lock') return Promise.resolve('1');
+      if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({
+        event_type: 'CAPACITY_VIOLATION',
+        severity: 'CRITICAL',
+        site_id: 'SITE-001'
+      }));
+      return Promise.resolve(null);
+    });
 
     const response = await request(app)
       .post('/openadr/v3/events')
@@ -78,6 +89,8 @@ describe('L2 Grid Signal Service', () => {
     expect(response.status).toBe(503);
     expect(response.body.status).toBe('REJECTED');
     expect(response.body.reason).toBe('SAFETY_VIOLATION_L1');
+    expect(response.body.details.alert_type).toBe('CAPACITY_VIOLATION');
+    expect(redisClient.get).toHaveBeenCalledWith('l1:safety:lock');
   });
 
   test('POST /openadr/v3/events should return 400 for invalid payload', async () => {
