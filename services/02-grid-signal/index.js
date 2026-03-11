@@ -35,7 +35,7 @@ const redisClient = redis.createClient({
 app.use(express.json());
 
 // Redis safety key constants
-const SAFETY_LOCK_KEY = 'migrid:l2:safety_lock';
+const SAFETY_LOCK_KEY = 'l1:safety:lock';
 
 /**
  * Health check
@@ -64,13 +64,18 @@ app.post('/openadr/v3/events', async (req, res) => {
   try {
     // 1. Check Safety Lock from L1 Physics Engine
     const safetyLock = await redisClient.get(SAFETY_LOCK_KEY);
-    if (safetyLock) {
-      const lockData = JSON.parse(safetyLock);
-      console.warn('🚨 [L2] DISPATCH REJECTED: L1 Safety Lock active', lockData);
+    if (safetyLock === '1' || safetyLock === 'true') {
+      console.warn('🚨 [L2] DISPATCH REJECTED: L1 Safety Lock active');
+
+      // Fetch context if available for richer error response
+      const lockContext = await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
+      const details = lockContext ? JSON.parse(lockContext) : null;
+
       return res.status(503).json({
         status: 'REJECTED',
         reason: 'SAFETY_VIOLATION_L1',
         message: 'Grid dispatch suspended due to physics engine safety lock',
+        details: details ? { alert_type: details.event_type, severity: details.severity } : 'No details available',
         timestamp: new Date().toISOString()
       });
     }
@@ -112,6 +117,7 @@ app.post('/openadr/v3/events', async (req, res) => {
 
 /**
  * Listen for L1 Physics Alerts to manage Safety Lock
+ * Aligned with Phase 5: Handling granular metadata and unified safety lock
  */
 async function startSafetyConsumer() {
   await consumer.connect();
@@ -122,14 +128,18 @@ async function startSafetyConsumer() {
       const alert = JSON.parse(message.value.toString());
 
       if (alert.severity === 'CRITICAL' || alert.severity === 'FRAUD') {
-        console.error(`🚨 [L2] L1 ALERT RECEIVED: ${alert.event_type}. Locking grid dispatch.`);
+        console.error(`🚨 [L2] L1 ${alert.severity} ALERT: ${alert.event_type} on Site ${alert.site_id}. Locking grid dispatch.`);
 
-        // Lock grid dispatch for 15 minutes or until manually cleared
-        await redisClient.setEx(SAFETY_LOCK_KEY, 900, JSON.stringify({
-          alert_type: alert.event_type,
-          severity: alert.severity,
-          locked_at: new Date().toISOString(),
-          details: alert.msg || 'Capacity violation or physics fraud detected'
+        // Detailed logging for engineering audit
+        console.log(`[L2 Audit] Metadata: Vehicle=${alert.vehicle_id}, VIN=${alert.vin}, SoC=${alert.current_soc}%, Variance=${alert.variance_pct}%`);
+
+        // Unified Safety Lock: Set to '1' for L4 compatibility, with 15m TTL
+        await redisClient.setEx(SAFETY_LOCK_KEY, 900, '1');
+
+        // Optional: Store detailed alert context in a separate key for UI/Diagnostics
+        await redisClient.setEx(`${SAFETY_LOCK_KEY}:context`, 900, JSON.stringify({
+          ...alert,
+          locked_at: new Date().toISOString()
         }));
       }
     }
