@@ -18,6 +18,8 @@ const DATABASE_URL = process.env.DATABASE_URL;
 const REDIS_URL = process.env.REDIS_URL;
 const KAFKA_BROKERS = (process.env.KAFKA_BROKERS || 'localhost:9092').split(',');
 
+const SAFETY_LOCK_KEY = 'l1:safety:lock';
+const SAFETY_LOCK_TTL = 900; // 15 minutes
 const HEARTBEAT_INTERVAL = 5000;
 const MAX_MISSED_HEARTBEATS = 3;
 
@@ -62,6 +64,19 @@ async function connectServices() {
  * Handle EFFICIENCY_ALERT notifications from PostgreSQL
  */
 async function handlePhysicsAlert(msg) {
+  const payload = JSON.parse(msg.payload);
+  console.log('⚡ [L1 Physics] Received Physics Alert:', payload);
+
+  // 1. Verify the Physics: Set Safety Lock in Redis for critical violations
+  if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
+    try {
+      await redisClient.setEx(SAFETY_LOCK_KEY, SAFETY_LOCK_TTL, 'true');
+      console.log(`🔒 [L1 Physics] Safety Lock activated in Redis: ${SAFETY_LOCK_KEY}`);
+    } catch (redisErr) {
+      console.error('❌ [L1 Physics] Failed to set safety lock in Redis:', redisErr.message);
+    }
+  }
+
   if (isOffline) {
     // Log to local Redis for later reconciliation
     await redisClient.lPush('local_audit_log', msg.payload);
@@ -69,16 +84,13 @@ async function handlePhysicsAlert(msg) {
   }
 
   try {
-    const payload = JSON.parse(msg.payload);
-    console.log('⚡ [L1 Physics] Received Physics Alert:', payload);
-
     // Kafka alert format
     const alert = {
       event_type: payload.event_type || 'EFFICIENCY_ALERT',
       session_id: payload.session_id,
       vehicle_id: payload.vehicle_id,
       vin: payload.vin,
-      site_id: payload.site_id || 'LOCAL-DEPOT-001', // Should be dynamic
+      site_id: payload.site_id || payload.metadata?.site_id || 'LOCAL-DEPOT-001',
       efficiency_pct: payload.efficiency_pct,
       variance_pct: payload.variance_pct,
       current_soc: payload.current_soc,
