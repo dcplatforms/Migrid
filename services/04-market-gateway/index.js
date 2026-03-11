@@ -10,6 +10,7 @@ const Decimal = require('decimal.js');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const BiddingOptimizer = require('./BiddingOptimizer');
+const MarketPricingService = require('./MarketPricingService');
 
 const app = express();
 const port = process.env.PORT || 3004;
@@ -18,6 +19,8 @@ const port = process.env.PORT || 3004;
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://localhost/migrid'
 });
+
+const pricingService = new MarketPricingService(pool);
 
 // Kafka initialization
 const kafka = new Kafka({
@@ -57,9 +60,12 @@ const LMP_THRESHOLD_SELL = new Decimal(process.env.LMP_THRESHOLD_SELL || '100.00
  */
 async function broadcastMarketPrice(iso, price_per_mwh) {
   try {
+    // Ensure we use Decimal for precision before broadcasting
+    const price = new Decimal(price_per_mwh);
+
     const payload = {
       iso: iso.toUpperCase(),
-      price_per_mwh: parseFloat(price_per_mwh),
+      price_per_mwh: price.toNumber(),
       timestamp: new Date().toISOString()
     };
 
@@ -68,10 +74,44 @@ async function broadcastMarketPrice(iso, price_per_mwh) {
       messages: [{ value: JSON.stringify(payload) }]
     });
 
-    console.log(`[Market Gateway] Broadcasted price update for ${iso}: $${price_per_mwh}/MWh`);
+    console.log(`[Market Gateway] Broadcasted price update for ${iso}: $${price.toFixed(2)}/MWh`);
   } catch (error) {
     console.error('[Market Gateway] Failed to broadcast price update:', error.message);
   }
+}
+
+/**
+ * Proactive background loop to poll market prices and notify other layers (L9)
+ */
+async function startPriceBroadcaster() {
+  const isos = ['CAISO', 'PJM', 'ERCOT'];
+  console.log(`[Market Gateway] Initializing proactive price broadcaster for: ${isos.join(', ')}`);
+
+  // Initial poll
+  for (const iso of isos) {
+    try {
+      const prices = await pricingService.getLatestPrices(iso, 1);
+      if (prices && prices.length > 0) {
+        await broadcastMarketPrice(iso, prices[0].price_per_mwh);
+      }
+    } catch (error) {
+      console.error(`[Market Gateway] Initial poll failed for ${iso}:`, error.message);
+    }
+  }
+
+  // Set interval for every 5 minutes
+  setInterval(async () => {
+    for (const iso of isos) {
+      try {
+        const prices = await pricingService.getLatestPrices(iso, 1);
+        if (prices && prices.length > 0) {
+          await broadcastMarketPrice(iso, prices[0].price_per_mwh);
+        }
+      } catch (error) {
+        console.error(`[Market Gateway] Error polling prices for ${iso}:`, error.message);
+      }
+    }
+  }, 5 * 60 * 1000);
 }
 
 // Health check
@@ -106,12 +146,14 @@ app.get('/markets/:iso/prices', authenticateToken, async (req, res) => {
       await broadcastMarketPrice(iso, result.rows[0].price_per_mwh);
     }
 
+    const latestPrice = result.rows[0] ? new Decimal(result.rows[0].price_per_mwh) : null;
+
     res.json({
       iso: iso.toUpperCase(),
       prices: result.rows,
       strategy: {
-        should_charge: result.rows[0]?.price_per_mwh < LMP_THRESHOLD_BUY.toNumber(),
-        should_discharge: result.rows[0]?.price_per_mwh > LMP_THRESHOLD_SELL.toNumber()
+        should_charge: latestPrice ? latestPrice.lt(LMP_THRESHOLD_BUY) : false,
+        should_discharge: latestPrice ? latestPrice.gt(LMP_THRESHOLD_SELL) : false
       }
     });
   } catch (error) {
@@ -224,6 +266,9 @@ async function start() {
   try {
     await producer.connect();
     console.log('✅ [Market Gateway] Connected to Kafka');
+
+    // Start background tasks
+    await startPriceBroadcaster();
 
     app.listen(port, () => {
       console.log(`[Market Gateway] Running on port ${port}`);

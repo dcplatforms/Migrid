@@ -1,3 +1,5 @@
+const Decimal = require('decimal.js');
+
 /**
  * MarketPricingService
  * Handles retrieval of Locational Marginal Pricing (LMP) from the database.

@@ -106,4 +106,26 @@ describe('BiddingOptimizer', () => {
     expect(bids).toHaveLength(0);
     expect(mockRedisClient.get).toHaveBeenCalledWith('l1:safety:lock');
   });
+
+  test('should log safety lock context when bidding is halted', async () => {
+    const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+    const context = JSON.stringify({
+      event_type: 'PHYSICS_FRAUD',
+      severity: 'FRAUD',
+      site_id: 'SITE-123'
+    });
+
+    mockRedisClient.get.mockImplementation((key) => {
+      if (key === 'l1:safety:lock') return Promise.resolve('true');
+      if (key === 'l1:safety:lock:context') return Promise.resolve(context);
+      return Promise.resolve(null);
+    });
+
+    await optimizer.generateDayAheadBids('CAISO');
+
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('L1 safety lock is active'));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Reason: PHYSICS_FRAUD, Severity: FRAUD, Site: SITE-123'));
+
+    consoleSpy.mockRestore();
+  });
 });
