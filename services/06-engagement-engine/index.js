@@ -4,11 +4,20 @@
  */
 
 const express = require('express');
+const http = require('http');
 const { Pool } = require('pg');
-const kafka = require('kafka-node');
+const { Kafka } = require('kafkajs');
 const jwt = require('jsonwebtoken');
+const { Server } = require('socket.io');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+  }
+});
+
 const port = process.env.PORT || 3006;
 
 const pool = new Pool({
@@ -37,31 +46,48 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Kafka consumer for charging events
-let kafkaClient, consumer;
-if (process.env.KAFKA_BROKERS) {
-  kafkaClient = new kafka.KafkaClient({ kafkaHost: process.env.KAFKA_BROKERS });
-  consumer = new kafka.Consumer(
-    kafkaClient,
-    [{ topic: 'charging_events', partition: 0 }],
-    { autoCommit: true }
-  );
+// Kafka Setup
+const kafka = new Kafka({
+  clientId: 'engagement-engine',
+  brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(',')
+});
 
-  consumer.on('message', async (message) => {
-    try {
-      const event = JSON.parse(message.value);
-      await processChargingEvent(event);
-    } catch (error) {
-      console.error('[Engagement] Error processing event:', error);
+const consumer = kafka.consumer({ groupId: 'engagement-engine-group' });
+const producer = kafka.producer();
+
+async function initKafka() {
+  await consumer.connect();
+  await producer.connect();
+
+  // Listen for both direct events and session completions
+  await consumer.subscribe({ topics: ['charging_events', 'SESSION_COMPLETED', 'vpp_participation_updates'], fromBeginning: false });
+
+  await consumer.run({
+    eachMessage: async ({ topic, message }) => {
+      try {
+        const payload = JSON.parse(message.value.toString());
+        console.log(`[Engagement] Received message from ${topic}:`, payload);
+
+        if (topic === 'SESSION_COMPLETED' || topic === 'charging_events') {
+          await processChargingEvent(payload);
+        } else if (topic === 'vpp_participation_updates') {
+          // Handle specific driver updates like Plug & Charge Ready if surfaced here
+          // Or we can poll/check driver status periodically
+        }
+      } catch (error) {
+        console.error('[Engagement] Error processing Kafka message:', error);
+      }
     }
   });
 }
+
+initKafka().catch(console.error);
 
 // Health check
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '4.1.0',
+    version: '5.0.0',
     status: 'healthy',
     layer: 'L6'
   });
@@ -77,7 +103,7 @@ app.get('/leaderboard', authenticateToken, async (req, res) => {
   const fleet_id = req.user.fleet_id; // Multi-tenancy isolation
 
   try {
-    const query = `
+    let query = `
       SELECT
         l.rank,
         l.total_points,
@@ -89,18 +115,16 @@ app.get('/leaderboard', authenticateToken, async (req, res) => {
       FROM leaderboard l
       JOIN drivers d ON l.driver_id = d.id
       JOIN fleets f ON l.fleet_id = f.id
-      WHERE l.fleet_id = $1
-      ORDER BY l.rank ASC LIMIT ${parseInt(limit)}
     `;
-
-    const result = await pool.query(query, [fleet_id]);
     const params = [];
+
     if (fleet_id) {
       query += ' WHERE l.fleet_id = $1';
       params.push(fleet_id);
     }
 
-    query += ` ORDER BY l.rank ASC LIMIT ${parseInt(limit)}`;
+    query += ` ORDER BY l.rank ASC LIMIT $${params.length + 1}`;
+    params.push(parseInt(limit));
 
     const result = await pool.query(query, params);
 
@@ -204,56 +228,17 @@ app.get('/achievements/driver/:driver_id', authenticateToken, async (req, res) =
 app.post('/achievements/award', authenticateToken, async (req, res) => {
   const { driver_id, achievement_id } = req.body;
 
-  // IDOR check: Drivers can only award achievements to themselves (or this should be an internal service call)
+  // IDOR check
   if (driver_id !== req.user.driver_id.toString()) {
-    return res.status(403).json({ error: 'Unauthorized to award achievements to other drivers' });
+    return res.status(403).json({ error: 'Unauthorized' });
   }
 
   try {
-    // Check if already earned
-    const existing = await pool.query(`
-      SELECT id FROM driver_achievements
-      WHERE driver_id = $1 AND achievement_id = $2
-    `, [driver_id, achievement_id]);
-
-    if (existing.rows.length > 0) {
-      return res.status(400).json({ error: 'Achievement already earned' });
-    }
-
-    // Award achievement
-    await pool.query(`
-      INSERT INTO driver_achievements (driver_id, achievement_id)
-      VALUES ($1, $2)
-    `, [driver_id, achievement_id]);
-
-    // Get achievement details for points
-    const achievement = await pool.query(`
-      SELECT points FROM achievements WHERE id = $1
-    `, [achievement_id]);
-
-    const points = achievement.rows[0]?.points || 0;
-
-    // Update leaderboard
-    await pool.query(`
-      INSERT INTO leaderboard (driver_id, fleet_id, total_points)
-      SELECT $1, d.fleet_id, $2
-      FROM drivers d WHERE d.id = $1
-      ON CONFLICT (driver_id)
-      DO UPDATE SET total_points = leaderboard.total_points + $2,
-                    updated_at = NOW()
-    `, [driver_id, points]);
-
-    // Recalculate ranks
-    await recalculateRanks();
-
-    res.json({
-      success: true,
-      message: 'Achievement awarded',
-      points_earned: points
-    });
+    const points = await awardAchievement(driver_id, achievement_id);
+    res.json({ success: true, points_earned: points });
   } catch (error) {
     console.error('[Engagement Error]', error);
-    res.status(500).json({ error: 'An internal server error occurred' });
+    res.status(500).json({ error: error.message || 'An internal server error occurred' });
   }
 });
 
@@ -263,7 +248,6 @@ app.post('/achievements/award', authenticateToken, async (req, res) => {
 
 // Get active challenges
 app.get('/challenges/active', authenticateToken, async (req, res) => {
-  // Hardcoded challenges for demo
   const challenges = [
     {
       id: 'week-warrior',
@@ -293,17 +277,34 @@ app.get('/challenges/active', authenticateToken, async (req, res) => {
 // ============================================================================
 
 async function processChargingEvent(event) {
-  console.log('[Engagement] Processing event:', event.type);
+  const driverId = event.driverId || event.driver_id;
+  const sessionId = event.sessionId || event.session_id;
 
-  // Check for achievement triggers
-  if (event.type === 'session_completed') {
-    await checkFirstSessionAchievement(event.driver_id);
-    await checkOffPeakStreakAchievement(event.driver_id);
+  // Verify Physics Integrity before awarding points
+  if (sessionId) {
+    const session = await pool.query('SELECT is_valid FROM charging_sessions WHERE id = $1', [sessionId]);
+    if (session.rows.length > 0 && session.rows[0].is_valid === false) {
+      console.warn(`[Engagement] Session ${sessionId} rejected for scoring due to Physics Violation.`);
+      return;
+    }
+  }
+
+  if (event.type === 'session_completed' || event.energyDispensedKwh) {
+    await checkFirstSessionAchievement(driverId);
+
+    // Award Green Driver Score points (Example: 10 points per kWh if valid)
+    if (event.energyDispensedKwh) {
+      const points = Math.floor(parseFloat(event.energyDispensedKwh) * 10);
+      await updateLeaderboardPoints(driverId, points);
+    }
   }
 
   if (event.type === 'v2g_discharge') {
-    await checkV2GAchievements(event.driver_id);
+    await checkV2GAchievements(driverId);
   }
+
+  // Periodic check for Plug & Charge Ready status
+  await checkPlugAndChargeAchievement(driverId);
 }
 
 async function checkFirstSessionAchievement(driver_id) {
@@ -312,37 +313,95 @@ async function checkFirstSessionAchievement(driver_id) {
   `, [driver_id]);
 
   if (parseInt(count.rows[0].count) === 1) {
-    // Award "Early Adopter" achievement
-    const achievement = await pool.query(`
-      SELECT id FROM achievements WHERE name = 'Early Adopter'
-    `);
-
+    const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Early Adopter'");
     if (achievement.rows.length > 0) {
       await awardAchievement(driver_id, achievement.rows[0].id);
     }
   }
 }
 
-async function checkOffPeakStreakAchievement(driver_id) {
-  // Simplified: Check for 30-day streak
-  // In production, implement proper streak tracking
+async function checkV2GAchievements(driver_id) {
+    const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Grid Guardian'");
+    if (achievement.rows.length > 0) {
+      await awardAchievement(driver_id, achievement.rows[0].id);
+    }
 }
 
-async function checkV2GAchievements(driver_id) {
-  // Check for V2G participation milestones
+async function checkPlugAndChargeAchievement(driver_id) {
+  const driver = await pool.query('SELECT is_plug_and_charge_ready FROM drivers WHERE id = $1', [driver_id]);
+  if (driver.rows.length > 0 && driver.rows[0].is_plug_and_charge_ready === true) {
+    const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Plug & Charge Ready'");
+    if (achievement.rows.length > 0) {
+      await awardAchievement(driver_id, achievement.rows[0].id);
+    }
+  }
 }
 
 async function awardAchievement(driver_id, achievement_id) {
   try {
-    await pool.query(`
-      INSERT INTO driver_achievements (driver_id, achievement_id)
-      VALUES ($1, $2)
-      ON CONFLICT DO NOTHING
-    `, [driver_id, achievement_id]);
-    console.log(`[Engagement] Achievement awarded to driver ${driver_id}`);
+    // 1. Check if already earned
+    const existing = await pool.query(
+      'SELECT id FROM driver_achievements WHERE driver_id = $1 AND achievement_id = $2',
+      [driver_id, achievement_id]
+    );
+
+    if (existing.rows.length > 0) return 0;
+
+    // 2. Award achievement
+    await pool.query(
+      'INSERT INTO driver_achievements (driver_id, achievement_id) VALUES ($1, $2)',
+      [driver_id, achievement_id]
+    );
+
+    // 3. Get points
+    const achievement = await pool.query('SELECT name, points FROM achievements WHERE id = $1', [achievement_id]);
+    const points = achievement.rows[0]?.points || 0;
+    const name = achievement.rows[0]?.name;
+
+    // 4. Update leaderboard
+    await updateLeaderboardPoints(driver_id, points);
+
+    // 5. Emit Kafka message for L10 Token Engine
+    await producer.send({
+      topic: 'driver_actions',
+      messages: [{
+        value: JSON.stringify({
+          driver_id,
+          action_type: 'achievement_unlocked',
+          achievement_name: name,
+          source_value: points,
+          event_id: achievement_id
+        })
+      }]
+    });
+
+    console.log(`[Engagement] Achievement '${name}' awarded to driver ${driver_id}. L10 notified.`);
+    return points;
   } catch (error) {
     console.error('[Engagement] Error awarding achievement:', error);
+    throw error;
   }
+}
+
+async function updateLeaderboardPoints(driver_id, points) {
+  await pool.query(`
+    INSERT INTO leaderboard (driver_id, fleet_id, total_points)
+    SELECT $1, d.fleet_id, $2
+    FROM drivers d WHERE d.id = $1
+    ON CONFLICT (driver_id)
+    DO UPDATE SET total_points = leaderboard.total_points + $2,
+                  updated_at = NOW()
+  `, [driver_id, points]);
+
+  await recalculateRanks();
+
+  // Broadcast updated leaderboard via WebSockets
+  const topPlayers = await pool.query(`
+    SELECT l.rank, l.total_points, d.first_name, d.last_name
+    FROM leaderboard l JOIN drivers d ON l.driver_id = d.id
+    ORDER BY l.rank ASC LIMIT 10
+  `);
+  io.emit('leaderboard_update', topPlayers.rows);
 }
 
 async function recalculateRanks() {
@@ -360,16 +419,18 @@ async function recalculateRanks() {
 }
 
 // Start server
-app.listen(port, () => {
+server.listen(port, () => {
   console.log(`[Engagement Engine] Running on port ${port}`);
-  console.log('[Engagement Engine] Features: Leaderboards, Achievements, Challenges');
+  console.log('[Engagement Engine] Features: Leaderboards, Achievements, WebSockets');
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('[Engagement Engine] Shutting down gracefully...');
-  if (consumer) consumer.close();
-  if (kafkaClient) kafkaClient.close();
+  await consumer.disconnect();
+  await producer.disconnect();
   pool.end();
   process.exit(0);
 });
+
+module.exports = { app, server, pool };
