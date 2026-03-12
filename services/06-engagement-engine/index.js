@@ -350,7 +350,7 @@ async function checkFirstSessionAchievement(driver_id) {
   `, [driver_id]);
 
   if (parseInt(count.rows[0].count) === 1) {
-    const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Early Adopter'");
+    const achievement = await pool.query('SELECT id FROM achievements WHERE name = \'Early Adopter\'');
     if (achievement.rows.length > 0) {
       await awardAchievement(driver_id, achievement.rows[0].id);
     }
@@ -447,7 +447,7 @@ async function updateStreaks(driver_id) {
 
     // Plug & Charge Pro Achievement (7-day streak)
     if (new_streak >= 7) {
-      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Plug & Charge Pro'");
+      const achievement = await pool.query('SELECT id FROM achievements WHERE name = \'Plug & Charge Pro\'');
       if (achievement.rows.length > 0) {
         await awardAchievement(driver_id, achievement.rows[0].id);
       }
@@ -460,7 +460,7 @@ async function updateStreaks(driver_id) {
 async function checkV2GAchievements(driver_id) {
   try {
     // 1. Grid Guardian (1 participation)
-    const ggAchievement = await pool.query("SELECT id FROM achievements WHERE name = 'Grid Guardian'");
+    const ggAchievement = await pool.query('SELECT id FROM achievements WHERE name = \'Grid Guardian\'');
     if (ggAchievement.rows.length > 0) {
       await awardAchievement(driver_id, ggAchievement.rows[0].id);
     }
@@ -474,7 +474,7 @@ async function checkV2GAchievements(driver_id) {
     // Fallback: If no driver_actions table yet, we could use a counter in leaderboard or similar
     // For this implementation, let's assume we want to track it
     if (parseInt(v2gCount.rows[0]?.count) >= 10) {
-      const heroAchievement = await pool.query("SELECT id FROM achievements WHERE name = 'VPP Hero'");
+      const heroAchievement = await pool.query('SELECT id FROM achievements WHERE name = \'VPP Hero\'');
       if (heroAchievement.rows.length > 0) {
         await awardAchievement(driver_id, heroAchievement.rows[0].id);
       }
@@ -487,7 +487,7 @@ async function checkV2GAchievements(driver_id) {
 async function checkPlugAndChargeAchievement(driver_id) {
   const driver = await pool.query('SELECT is_plug_and_charge_ready FROM drivers WHERE id = $1', [driver_id]);
   if (driver.rows.length > 0 && driver.rows[0].is_plug_and_charge_ready === true) {
-    const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Plug & Charge Ready'");
+    const achievement = await pool.query('SELECT id FROM achievements WHERE name = \'Plug & Charge Ready\'');
     if (achievement.rows.length > 0) {
       await awardAchievement(driver_id, achievement.rows[0].id);
     }
