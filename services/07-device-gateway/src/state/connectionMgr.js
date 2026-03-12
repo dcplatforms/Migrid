@@ -18,4 +18,4 @@ async function removeConnection(chargePointId) {
     await redis.del(`charger_route:${chargePointId}`);
 }
 
-module.exports = { registerConnection, removeConnection };
+module.exports = { redis, registerConnection, removeConnection };

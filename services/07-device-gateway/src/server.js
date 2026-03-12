@@ -3,7 +3,7 @@ const http = require('http');
 const express = require('express');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
-const { registerConnection, removeConnection } = require('./state/connectionMgr');
+const { redis, registerConnection, removeConnection } = require('./state/connectionMgr');
 const { handleOcppMessage } = require('./ocpp/handler');
 const { connectProducer, publishSessionEvent } = require('./events/producer');
 const { connectConsumer } = require('./events/consumer');
@@ -132,25 +132,58 @@ app.post('/iso15118/stop-charge', authenticateInternal, async (req, res) => {
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ noServer: true });
 
+// Protocols supported by MiGrid, prioritized (highest first)
+const SUPPORTED_PROTOCOLS = ['ocpp2.1', 'ocpp2.0.1'];
+
 const handleControlSignal = async (topic, payload) => {
     const { chargePointId, limitKw, schedule } = payload;
-    const ws = localConnections.get(chargePointId);
+    const connection = localConnections.get(chargePointId);
 
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        console.log(`[L7] Sending SetChargingProfile to ${chargePointId} (${limitKw}kW)`);
-        // OCPP 2.0.1 SetChargingProfile Call
-        const call = [2, Date.now().toString(), 'SetChargingProfile', {
-            evseId: 1, // Simplified
-            chargingProfile: {
+    if (connection && connection.ws.readyState === WebSocket.OPEN) {
+        const { ws, protocol } = connection;
+        // 1. Verify the Physics: Check for L1 Safety Lock before dispatching control
+        const safetyLock = await redis.get('l1:safety:lock');
+        if (safetyLock === '1' || safetyLock === 'true') {
+            console.warn(`🛑 [L7] Control Signal HALTED for ${chargePointId}. L1 Safety Lock is ACTIVE.`);
+            return;
+        }
+
+        console.log(`[L7] Sending SetChargingProfile to ${chargePointId} (${limitKw}kW) via ${protocol}`);
+
+        let profile;
+        if (protocol === 'ocpp2.1' && topic === 'migrid.l3.v2g') {
+            // OCPP 2.1: Native V2X Profile
+            profile = {
+                id: 101,
+                stackLevel: 1,
+                chargingProfilePurpose: 'V2XProfile',
+                chargingProfileKind: 'Absolute',
+                energyTransferMode: 'Discharge',
+                chargingSchedule: [{
+                    chargingRateUnit: 'W',
+                    chargingSchedulePeriod: [{ startPeriod: 0, limit: Math.abs(limitKw) * 1000 }]
+                }]
+            };
+        } else {
+            // OCPP 2.0.1: Standard/Legacy Profile
+            profile = {
                 id: 101,
                 stackLevel: 0,
                 chargingProfilePurpose: 'TxProfile',
                 chargingProfileKind: 'Absolute',
                 chargingSchedule: [{
                     chargingRateUnit: 'W',
-                    chargingSchedulePeriod: [{ startPeriod: 0, limit: limitKw * 1000 }]
+                    chargingSchedulePeriod: [{
+                        startPeriod: 0,
+                        limit: (topic === 'migrid.l3.v2g' ? -Math.abs(limitKw) : limitKw) * 1000
+                    }]
                 }]
-            }
+            };
+        }
+
+        const call = [2, Date.now().toString(), 'SetChargingProfile', {
+            evseId: 1,
+            chargingProfile: profile
         }];
         ws.send(JSON.stringify(call));
     }
@@ -164,30 +197,29 @@ server.on('upgrade', (request, socket, head) => {
         return;
     }
 
-    // Negotiate subprotocol (OCPP 2.1 vs 2.0.1)
-    const protocols = request.headers['sec-websocket-protocol'];
-    let subprotocol = 'ocpp2.0.1'; // Fallback
-    if (protocols && protocols.includes('ocpp2.1')) {
-        subprotocol = 'ocpp2.1';
-    }
+    // 2. Parse the requested protocols from the hardware
+    const requestedProtocols = request.headers['sec-websocket-protocol']
+        ? request.headers['sec-websocket-protocol'].split(',').map(p => p.trim())
+        : [];
+
+    // 3. Negotiate the protocol (find the highest overlap)
+    const negotiatedProtocol = SUPPORTED_PROTOCOLS.find(p => requestedProtocols.includes(p)) || 'ocpp2.0.1';
 
     wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit('connection', ws, request, chargePointId, subprotocol);
+        wss.emit('connection', ws, request, chargePointId, negotiatedProtocol);
     });
 });
 
-wss.on('connection', async (ws, request, chargePointId, subprotocol) => {
-    console.log(`[L7] Charger Connected: ${chargePointId} (Protocol: ${subprotocol})`);
+wss.on('connection', async (ws, request, chargePointId, protocol) => {
+    console.log(`[L7] Charger Connected: ${chargePointId} | Protocol: ${protocol}`);
     const podId = process.env.POD_ID || 'gateway-instance-1';
 
-    // Store subprotocol in the local connection context
-    ws.ocppProtocol = subprotocol;
-    localConnections.set(chargePointId, ws);
-
-    await registerConnection(chargePointId, podId, subprotocol);
+    localConnections.set(chargePointId, { ws, protocol });
+    await registerConnection(chargePointId, podId, protocol);
 
     ws.on('message', async (data) => {
-        await handleOcppMessage(chargePointId, data, ws, subprotocol);
+        // Pass negotiated protocol to the handler
+        await handleOcppMessage(chargePointId, data, ws, protocol);
     });
 
     ws.on('close', async () => {
