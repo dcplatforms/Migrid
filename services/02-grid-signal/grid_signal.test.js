@@ -64,7 +64,21 @@ describe('L2 Grid Signal Service', () => {
     expect(response.status).toBe(202);
     expect(response.body.status).toBe('RECEIVED');
     expect(response.body.event_id).toBe('evt-123');
-    expect(producer.send).toHaveBeenCalled();
+    expect(producer.send).toHaveBeenCalledWith(expect.objectContaining({
+      topic: 'grid_signals',
+      messages: expect.arrayContaining([
+        expect.objectContaining({
+          value: expect.stringContaining('"site_id":"ALL"')
+        })
+      ])
+    }));
+  });
+
+  test('GET /openadr/v3/reports should return recent events', async () => {
+    const response = await request(app).get('/openadr/v3/reports');
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveProperty('reports');
+    expect(response.body).toHaveProperty('timestamp');
   });
 
   test('POST /openadr/v3/events should reject when L1 safety lock is active (Phase 5 Alignment)', async () => {
@@ -99,6 +113,40 @@ describe('L2 Grid Signal Service', () => {
       .send({});
 
     expect(response.status).toBe(400);
+    expect(response.status).toBe(400);
     expect(response.body.error).toBe('INVALID_PAYLOAD');
+  });
+
+  test('startSafetyConsumer should activate lock for high variance (>15%)', async () => {
+    const { consumer } = require('./index');
+    const { startSafetyConsumer } = require('./index');
+
+    // We need to trigger the consumer.run call
+    await startSafetyConsumer();
+
+    const runMock = consumer.run;
+    const eachMessage = runMock.mock.calls[0][0].eachMessage;
+
+    const highVarianceAlert = {
+      severity: 'WARNING',
+      event_type: 'EFFICIENCY_ALERT',
+      site_id: 'SITE-999',
+      variance_pct: 18.5,
+      vehicle_id: 'V-123',
+      billing_mode: 'PREPAID',
+      vpp_active: true
+    };
+
+    await eachMessage({
+      topic: 'migrid.physics.alerts',
+      message: { value: Buffer.from(JSON.stringify(highVarianceAlert)) }
+    });
+
+    expect(redisClient.setEx).toHaveBeenCalledWith('l1:safety:lock', 900, '1');
+    expect(redisClient.setEx).toHaveBeenCalledWith(
+      'l1:safety:lock:context',
+      900,
+      expect.stringContaining('"reason":"HIGH_VARIANCE_THRESHOLD"')
+    );
   });
 });

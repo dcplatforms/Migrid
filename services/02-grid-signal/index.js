@@ -51,6 +51,25 @@ app.get('/health', (req, res) => {
 });
 
 /**
+ * Get OpenADR 3.0 Reports (VEN)
+ * Returns recent grid events for compliance and auditing
+ */
+app.get('/openadr/v3/reports', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT event_id, event_type, status, received_at FROM grid_events ORDER BY received_at DESC LIMIT 50'
+    );
+    res.json({
+      reports: result.rows,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[L2 Grid Signal] Report Error:', error);
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+  }
+});
+
+/**
  * Receive OpenADR 3.0 Event (VEN)
  */
 app.post('/openadr/v3/events', async (req, res) => {
@@ -99,6 +118,8 @@ app.post('/openadr/v3/events', async (req, res) => {
           event_id: event.id,
           type: event.type,
           priority: event.priority || 'NORMAL',
+          site_id: event.site_id || 'ALL',
+          payload: event,
           timestamp: new Date().toISOString()
         })
       }]
@@ -127,18 +148,26 @@ async function startSafetyConsumer() {
     eachMessage: async ({ topic, partition, message }) => {
       const alert = JSON.parse(message.value.toString());
 
-      if (alert.severity === 'CRITICAL' || alert.severity === 'FRAUD') {
-        console.error(`🚨 [L2] L1 ${alert.severity} ALERT: ${alert.event_type} on Site ${alert.site_id}. Locking grid dispatch.`);
+      // PHYSICS RULE: Trigger lock if CRITICAL/FRAUD OR if variance exceeds 15%
+      const isCritical = alert.severity === 'CRITICAL' || alert.severity === 'FRAUD';
+      const isHighVariance = alert.variance_pct > 15;
+
+      if (isCritical || isHighVariance) {
+        const reason = isHighVariance ? 'HIGH_VARIANCE_THRESHOLD' : alert.event_type;
+        console.error(`🚨 [L2] L1 SAFETY ALERT: ${reason} on Site ${alert.site_id}. Locking grid dispatch.`);
 
         // Detailed logging for engineering audit
-        console.log(`[L2 Audit] Metadata: Vehicle=${alert.vehicle_id}, VIN=${alert.vin}, SoC=${alert.current_soc}%, Variance=${alert.variance_pct}%`);
+        console.log(`[L2 Audit] Metadata: Vehicle=${alert.vehicle_id}, VIN=${alert.vin}, SoC=${alert.current_soc}%, Variance=${alert.variance_pct}%, Billing=${alert.billing_mode}, VPP_Active=${alert.vpp_active}`);
 
         // Unified Safety Lock: Set to '1' for L4 compatibility, with 15m TTL
         await redisClient.setEx(SAFETY_LOCK_KEY, 900, '1');
 
-        // Optional: Store detailed alert context in a separate key for UI/Diagnostics
+        // Store detailed alert context for UI/Diagnostics and downstream layer alignment
         await redisClient.setEx(`${SAFETY_LOCK_KEY}:context`, 900, JSON.stringify({
           ...alert,
+          reason,
+          billing_mode: alert.billing_mode,
+          vpp_active: alert.vpp_active,
           locked_at: new Date().toISOString()
         }));
       }
@@ -170,7 +199,7 @@ if (require.main === module) {
   start();
 }
 
-module.exports = { app, producer, consumer, redisClient };
+module.exports = { app, producer, consumer, redisClient, startSafetyConsumer };
 
 process.on('SIGTERM', async () => {
   console.log('[L2 Grid Signal] Shutting down...');
