@@ -28,6 +28,26 @@ app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 
+io.on('connection', (socket) => {
+  const token = socket.handshake.auth.token || socket.handshake.query.token;
+
+  if (!token) {
+    console.warn('[L6 WebSockets] Connection attempt without token.');
+    return socket.disconnect();
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) {
+      console.warn('[L6 WebSockets] Invalid token on connection.');
+      return socket.disconnect();
+    }
+
+    const driverId = decoded.driver_id;
+    socket.join(`driver:${driverId}`);
+    console.log(`[L6 WebSockets] Driver ${driverId} authenticated and joined private room.`);
+  });
+});
+
 // Middleware: Verify JWT token
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -246,30 +266,26 @@ app.post('/achievements/award', authenticateToken, async (req, res) => {
 // CHALLENGES ENDPOINTS
 // ============================================================================
 
-// Get active challenges
+// Get active challenges from database with driver progress
 app.get('/challenges/active', authenticateToken, async (req, res) => {
-  const challenges = [
-    {
-      id: 'week-warrior',
-      name: 'Week Warrior',
-      description: 'Charge off-peak 7 consecutive days',
-      reward_tokens: 250,
-      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      progress_current: 0,
-      progress_required: 7
-    },
-    {
-      id: 'grid-guardian',
-      name: 'Grid Guardian',
-      description: 'Participate in 5 V2G events this month',
-      reward_tokens: 500,
-      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      progress_current: 0,
-      progress_required: 5
-    }
-  ];
+  const driver_id = req.user.driver_id;
+  try {
+    const result = await pool.query(`
+      SELECT
+        c.id, c.name, c.description, c.points_reward, c.token_reward,
+        c.required_count, c.challenge_type, c.end_date,
+        COALESCE(dcp.current_count, 0) as progress_current,
+        COALESCE(dcp.is_completed, false) as is_completed
+      FROM challenges c
+      LEFT JOIN driver_challenge_progress dcp ON c.id = dcp.challenge_id AND dcp.driver_id = $1
+      WHERE c.is_active = true AND (c.end_date IS NULL OR c.end_date > NOW())
+    `, [driver_id]);
 
-  res.json({ challenges });
+    res.json({ challenges: result.rows });
+  } catch (error) {
+    console.error('[Engagement Error]', error);
+    res.status(500).json({ error: 'An internal server error occurred' });
+  }
 });
 
 // ============================================================================
@@ -290,17 +306,38 @@ async function processChargingEvent(event) {
   }
 
   if (event.type === 'session_completed' || event.energyDispensedKwh) {
+    await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'session_completed', JSON.stringify({ sessionId, energyDispensedKwh: event.energyDispensedKwh })]);
     await checkFirstSessionAchievement(driverId);
+    await updateStreaks(driverId);
 
     // Award Green Driver Score points (Example: 10 points per kWh if valid)
     if (event.energyDispensedKwh) {
       const points = Math.floor(parseFloat(event.energyDispensedKwh) * 10);
       await updateLeaderboardPoints(driverId, points);
+
+      // Notify of points earned
+      const notification = {
+        driver_id: driverId,
+        type: 'points_earned',
+        title: 'Points Earned! ⚡',
+        body: `You just earned ${points} points for your charging session.`,
+        data: { session_id: sessionId, points }
+      };
+
+      await producer.send({
+        topic: 'engagement_notifications',
+        messages: [{ key: driverId, value: JSON.stringify(notification) }]
+      });
+
+      // WebSocket Real-time Push
+      io.to(`driver:${driverId}`).emit('notification', notification);
     }
   }
 
   if (event.type === 'v2g_discharge') {
+    await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'v2g_discharge', JSON.stringify({ event })]);
     await checkV2GAchievements(driverId);
+    await updateChallengeProgress(driverId, 'v2g_participation');
   }
 
   // Periodic check for Plug & Charge Ready status
@@ -320,11 +357,131 @@ async function checkFirstSessionAchievement(driver_id) {
   }
 }
 
-async function checkV2GAchievements(driver_id) {
-    const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Grid Guardian'");
-    if (achievement.rows.length > 0) {
-      await awardAchievement(driver_id, achievement.rows[0].id);
+async function updateChallengeProgress(driver_id, challenge_type) {
+  try {
+    const activeChallenges = await pool.query(
+      'SELECT id, required_count FROM challenges WHERE challenge_type = $1 AND is_active = true',
+      [challenge_type]
+    );
+
+    for (const challenge of activeChallenges.rows) {
+      // Avoid redundant processing for already completed challenges
+      const existing = await pool.query(
+        'SELECT is_completed FROM driver_challenge_progress WHERE driver_id = $1 AND challenge_id = $2',
+        [driver_id, challenge.id]
+      );
+      if (existing.rows.length > 0 && existing.rows[0].is_completed) continue;
+
+      const progress = await pool.query(`
+        INSERT INTO driver_challenge_progress (driver_id, challenge_id, current_count)
+        VALUES ($1, $2, 1)
+        ON CONFLICT (driver_id, challenge_id)
+        DO UPDATE SET current_count = driver_challenge_progress.current_count + 1,
+                      updated_at = NOW()
+        RETURNING current_count
+      `, [driver_id, challenge.id]);
+
+      if (progress.rows[0].current_count >= challenge.required_count) {
+        await pool.query('UPDATE driver_challenge_progress SET is_completed = true WHERE driver_id = $1 AND challenge_id = $2', [driver_id, challenge.id]);
+
+        const chal = await pool.query('SELECT name, points_reward FROM challenges WHERE id = $1', [challenge.id]);
+        await updateLeaderboardPoints(driver_id, chal.rows[0].points_reward);
+
+        const notification = {
+          driver_id,
+          type: 'challenge_completed',
+          title: 'Challenge Completed! 🎖️',
+          body: `Congratulations! You've completed the '${chal.rows[0].name}' challenge.`,
+          data: { challenge_id: challenge.id }
+        };
+
+        await producer.send({
+          topic: 'engagement_notifications',
+          messages: [{ key: driver_id, value: JSON.stringify(notification) }]
+        });
+
+        io.to(`driver:${driver_id}`).emit('notification', notification);
+      }
     }
+  } catch (error) {
+    console.error('[Engagement] Error updating challenge progress:', error);
+  }
+}
+
+async function updateStreaks(driver_id) {
+  try {
+    const result = await pool.query(
+      'SELECT streak_days, last_charging_at FROM leaderboard WHERE driver_id = $1',
+      [driver_id]
+    );
+
+    if (result.rows.length === 0) return;
+
+    const { streak_days, last_charging_at } = result.rows[0];
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let new_streak = streak_days || 0;
+
+    if (!last_charging_at) {
+      new_streak = 1;
+    } else {
+      const lastDate = new Date(last_charging_at);
+      const lastDay = new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate());
+      const diffTime = today - lastDay;
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDays === 1) {
+        new_streak += 1;
+      } else if (diffDays > 1) {
+        new_streak = 1;
+      }
+    }
+
+    await pool.query(
+      'UPDATE leaderboard SET streak_days = $1, last_charging_at = $2 WHERE driver_id = $3',
+      [new_streak, now, driver_id]
+    );
+
+    // Update challenge progress for streaks
+    await updateChallengeProgress(driver_id, 'charging_streak');
+
+    // Plug & Charge Pro Achievement (7-day streak)
+    if (new_streak >= 7) {
+      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Plug & Charge Pro'");
+      if (achievement.rows.length > 0) {
+        await awardAchievement(driver_id, achievement.rows[0].id);
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error updating streaks:', error);
+  }
+}
+
+async function checkV2GAchievements(driver_id) {
+  try {
+    // 1. Grid Guardian (1 participation)
+    const ggAchievement = await pool.query("SELECT id FROM achievements WHERE name = 'Grid Guardian'");
+    if (ggAchievement.rows.length > 0) {
+      await awardAchievement(driver_id, ggAchievement.rows[0].id);
+    }
+
+    // 2. VPP Hero (10 participations)
+    const v2gCount = await pool.query(`
+      SELECT COUNT(*) FROM driver_actions
+      WHERE driver_id = $1 AND action_type = 'v2g_discharge'
+    `, [driver_id]); // This assumes a driver_actions table tracks these, or we track it in leaderboard
+
+    // Fallback: If no driver_actions table yet, we could use a counter in leaderboard or similar
+    // For this implementation, let's assume we want to track it
+    if (parseInt(v2gCount.rows[0]?.count) >= 10) {
+      const heroAchievement = await pool.query("SELECT id FROM achievements WHERE name = 'VPP Hero'");
+      if (heroAchievement.rows.length > 0) {
+        await awardAchievement(driver_id, heroAchievement.rows[0].id);
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking V2G achievements:', error);
+  }
 }
 
 async function checkPlugAndChargeAchievement(driver_id) {
@@ -376,6 +533,24 @@ async function awardAchievement(driver_id, achievement_id) {
     });
 
     console.log(`[Engagement] Achievement '${name}' awarded to driver ${driver_id}. L10 notified.`);
+
+    // 6. Emit Engagement Notification for L5 Driver Experience
+    const notification = {
+      driver_id,
+      type: 'achievement_unlocked',
+      title: 'Achievement Unlocked! 🏆',
+      body: `You've earned the '${name}' badge and ${points} points!`,
+      data: { achievement_id, points }
+    };
+
+    await producer.send({
+      topic: 'engagement_notifications',
+      messages: [{ key: driver_id, value: JSON.stringify(notification) }]
+    });
+
+    // WebSocket Real-time Push
+    io.to(`driver:${driver_id}`).emit('notification', notification);
+
     return points;
   } catch (error) {
     console.error('[Engagement] Error awarding achievement:', error);

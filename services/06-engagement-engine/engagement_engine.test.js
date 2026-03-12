@@ -59,4 +59,11 @@ describe('Engagement Engine API', () => {
       expect(res.statusCode).toEqual(401);
     });
   });
+
+  describe('GET /challenges/active', () => {
+    it('should return 401 if no token provided', async () => {
+      const res = await request(app).get('/challenges/active');
+      expect(res.statusCode).toEqual(401);
+    });
+  });
 });
