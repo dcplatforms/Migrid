@@ -5,9 +5,9 @@
 **Version 10.1.0** • **January 23, 2026**
 
 [![Phase](https://img.shields.io/badge/Phase_5-Enterprise_Scale-blue.svg)](../docs/roadmap.md)
-[![Progress](https://img.shields.io/badge/Progress-51%25_Complete-blue.svg)](PLATFORM_STATUS.md)
+[![Progress](https://img.shields.io/badge/Progress-53%25_Complete-blue.svg)](PLATFORM_STATUS.md)
 [![Services](https://img.shields.io/badge/Services-10%2F10_Complete-green.svg)](PLATFORM_STATUS.md)
-[![Features](https://img.shields.io/badge/Features-38%2F74-brightgreen.svg)](PLATFORM_STATUS.md)
+[![Features](https://img.shields.io/badge/Features-39%2F74-brightgreen.svg)](PLATFORM_STATUS.md)
 
 [Architecture](#service-architecture-status) • [Progress](#roadmap-progress) • [Features](#key-accomplishments) • [Risks](#risk-management)
 
@@ -36,13 +36,13 @@ The MiGrid platform has been successfully updated to align with current roadmap 
 **Platform Metrics**
 
 ```
-Overall Progress:       ██████████░░░░░░░░░░ 51%
+Overall Progress:       ███████████░░░░░░░░░ 53%
 Services Complete:      ████████████████████ 100%
-Features Delivered:     ██████████░░░░░░░░░░ 51%
-Standards Compliance:   ██████████░░░░░░░░░░ 50%
+Features Delivered:     ███████████░░░░░░░░░ 53%
+Standards Compliance:   ████████████░░░░░░░░ 62%
 ```
 
-**38 of 74 features** delivered
+**39 of 74 features** delivered
 
 </td>
 </tr>
@@ -280,7 +280,7 @@ Sell: LMP > $100/MWh (grid services revenue)
 
 ### Standards & Protocols
 
-- **OCPP 1.6 / 2.0.1** — Charger communication
+- **OCPP 1.6 / 2.0.1 / 2.1** — Charger communication
 - **ISO 15118** — Plug & Charge
 - **OpenADR 3.0** — Demand response
 - **OCPI 2.2** — Roaming networks
@@ -655,7 +655,7 @@ Standards Progress:    ████████░░░░░░░░░░░
 <td align="center">Q2 2025</td>
 </tr>
 <tr>
-<td><b>OCPP 1.6 / 2.0.1</b></td>
+<td><b>OCPP 1.6 / 2.0.1 / 2.1</b></td>
 <td>Charger communication standard</td>
 <td align="center">Complete</td>
 <td align="center">Q1 2025</td>
@@ -795,7 +795,7 @@ MiGrid follows an **RFC (Request for Comments)** process for major architectural
 
 *The Operating System for Sustainable Fleet Electrification*
 
-**Last Updated:** January 23, 2026 • **Platform Version:** 10.1.0 • **Roadmap Status:** 51% Complete (38/74 features)
+**Last Updated:** January 23, 2026 • **Platform Version:** 10.1.1 • **Roadmap Status:** 53% Complete (39/74 features)
 
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-blue.svg)](https://github.com/dcplatforms/Migrid)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)

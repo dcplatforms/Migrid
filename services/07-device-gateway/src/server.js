@@ -164,20 +164,30 @@ server.on('upgrade', (request, socket, head) => {
         return;
     }
 
+    // Negotiate subprotocol (OCPP 2.1 vs 2.0.1)
+    const protocols = request.headers['sec-websocket-protocol'];
+    let subprotocol = 'ocpp2.0.1'; // Fallback
+    if (protocols && protocols.includes('ocpp2.1')) {
+        subprotocol = 'ocpp2.1';
+    }
+
     wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit('connection', ws, request, chargePointId);
+        wss.emit('connection', ws, request, chargePointId, subprotocol);
     });
 });
 
-wss.on('connection', async (ws, request, chargePointId) => {
-    console.log(`[L7] Charger Connected: ${chargePointId}`);
+wss.on('connection', async (ws, request, chargePointId, subprotocol) => {
+    console.log(`[L7] Charger Connected: ${chargePointId} (Protocol: ${subprotocol})`);
     const podId = process.env.POD_ID || 'gateway-instance-1';
 
+    // Store subprotocol in the local connection context
+    ws.ocppProtocol = subprotocol;
     localConnections.set(chargePointId, ws);
-    await registerConnection(chargePointId, podId);
+
+    await registerConnection(chargePointId, podId, subprotocol);
 
     ws.on('message', async (data) => {
-        await handleOcppMessage(chargePointId, data, ws);
+        await handleOcppMessage(chargePointId, data, ws, subprotocol);
     });
 
     ws.on('close', async () => {

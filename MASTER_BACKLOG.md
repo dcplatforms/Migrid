@@ -46,7 +46,7 @@
 - [✓] **Real-time Leaderboards**: Socket.io updates for driver rankings.
 
 ### L7: Device Gateway
-- [ ] **Bidirectional OCPP 2.1**: Implement `V2XProfile` support.
+- [✓] **Bidirectional OCPP 2.1**: Implement `V2XProfile` support and subprotocol negotiation.
 - [✓] **Modular Refactor**: Decoupled transport and protocol layers.
 
 ### L8: Energy Manager

@@ -6,7 +6,7 @@ const config = require('../config');
  * Routes and processes incoming OCPP messages.
  * Enforces MiGrid safety invariants like "The Fuse Rule".
  */
-async function handleOcppMessage(chargePointId, data, ws) {
+async function handleOcppMessage(chargePointId, data, ws, protocol) {
     try {
         const [messageTypeId, messageId, action, payload] = JSON.parse(data);
 
@@ -54,8 +54,17 @@ async function handleOcppMessage(chargePointId, data, ws) {
                 ws.send(JSON.stringify([3, messageId, {}]));
                 break;
 
+            case 'V2XProfile': // OCPP 2.1 Specific
+                if (protocol === 'ocpp2.1') {
+                    console.log(`[L7] Processing OCPP 2.1 V2XProfile from ${chargePointId}`);
+                    ws.send(JSON.stringify([3, messageId, { status: 'Accepted' }]));
+                } else {
+                    ws.send(JSON.stringify([4, messageId, 'NotSupported', 'V2XProfile requires OCPP 2.1']));
+                }
+                break;
+
             default:
-                console.warn(`[L7] Unsupported OCPP action: ${action}`);
+                console.warn(`[L7] Unsupported OCPP action: ${action} for protocol ${protocol}`);
                 ws.send(JSON.stringify([4, messageId, 'NotSupported', '']));
         }
     } catch (error) {
