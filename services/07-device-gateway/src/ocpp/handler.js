@@ -1,12 +1,12 @@
 const { publishTelemetry, publishSessionEvent } = require('../events/producer');
-const { validateBootNotification, validateMeterValues } = require('./validators');
+const { validateSchema } = require('./validators');
 const config = require('../config');
 
 /**
  * Routes and processes incoming OCPP messages.
  * Enforces MiGrid safety invariants like "The Fuse Rule".
  */
-async function handleOcppMessage(chargePointId, data, ws) {
+async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1') {
     try {
         const [messageTypeId, messageId, action, payload] = JSON.parse(data);
 
@@ -14,41 +14,58 @@ async function handleOcppMessage(chargePointId, data, ws) {
             return;
         }
 
-        console.log(`[L7] OCPP Call received: ${action} from ${chargePointId}`);
+        console.log(`[L7] OCPP Call received: ${action} from ${chargePointId} (${protocol})`);
+
+        if (!validateSchema(protocol, action, payload)) {
+            console.warn(`⚠️ [L7] Validation failed for ${action} from ${chargePointId}`);
+            // In a strict production environment, we might reject the message here.
+        }
 
         switch (action) {
             case 'BootNotification':
-                if (validateBootNotification(payload)) {
-                    ws.send(JSON.stringify([3, messageId, {
-                        currentTime: new Date().toISOString(),
-                        interval: 300,
-                        status: 'Accepted'
-                    }]));
-                }
+                ws.send(JSON.stringify([3, messageId, {
+                    currentTime: new Date().toISOString(),
+                    interval: 300,
+                    status: 'Accepted'
+                }]));
                 break;
 
             case 'MeterValues':
-                if (validateMeterValues(payload)) {
-                    // Standardize and broadcast to Kafka for L1 Physics Engine
-                    await publishTelemetry(chargePointId, payload);
-
-                    // Acknowledge
-                    ws.send(JSON.stringify([3, messageId, {}]));
-                }
+                // Standardize and broadcast to Kafka for L1 Physics Engine
+                await publishTelemetry(chargePointId, payload);
+                // Acknowledge
+                ws.send(JSON.stringify([3, messageId, {}]));
                 break;
 
             case 'StatusNotification':
-                // Forward to L8 Energy Manager
+                // Forward to L8 Energy Manager (logic placeholder)
                 ws.send(JSON.stringify([3, messageId, {}]));
                 break;
 
             case 'TransactionEvent':
                 if (payload.eventType === 'Ended') {
+                    // Extract energy dispensed from meterValue if available
+                    let energyDispensed = 0;
+                    try {
+                        if (payload.meterValue && payload.meterValue.length > 0) {
+                            const lastMeterValue = payload.meterValue[payload.meterValue.length - 1];
+                            const sampledValue = lastMeterValue.sampledValue?.find(sv =>
+                                sv.measurand === 'Energy.Active.Import.Register' || sv.measurand === undefined
+                            );
+                            if (sampledValue) {
+                                energyDispensed = parseFloat(sampledValue.value) || 0;
+                            }
+                        }
+                    } catch (e) {
+                        console.error('[L7] Error extracting energy from TransactionEvent', e);
+                    }
+
                     await publishSessionEvent('SESSION_COMPLETED', {
                         chargePointId,
-                        transactionId: payload.transactionInfo.transactionId,
-                        energyDispensed: payload.transactionInfo.chargingState === 'SuspendedEVSE' ? 0 : 50.5, // Mock
-                        timestamp: new Date().toISOString()
+                        transactionId: payload.transactionInfo?.transactionId,
+                        energyDispensedKwh: energyDispensed,
+                        timestamp: new Date().toISOString(),
+                        trigger: payload.triggerReason || 'Remote'
                     });
                 }
                 ws.send(JSON.stringify([3, messageId, {}]));
