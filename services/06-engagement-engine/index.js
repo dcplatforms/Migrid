@@ -297,6 +297,10 @@ async function processChargingEvent(event) {
   const driverId = event.driverId || event.driver_id;
   const sessionId = event.sessionId || event.session_id;
 
+  // Get regional context (ISO) for the driver
+  const driverData = await pool.query('SELECT f.iso FROM drivers d JOIN fleets f ON d.fleet_id = f.id WHERE d.id = $1', [driverId]);
+  const iso = driverData.rows[0]?.iso || 'CAISO';
+
   // Verify Physics Integrity before awarding points
   let isValid = true;
   if (sessionId) {
@@ -347,6 +351,20 @@ async function processChargingEvent(event) {
 
       // WebSocket Real-time Push
       io.to(`driver:${driverId}`).emit('notification', notification);
+
+      // Emit to driver_actions for L10 Token Engine (Proof of Physics)
+      await producer.send({
+        topic: 'driver_actions',
+        messages: [{
+          value: JSON.stringify({
+            driver_id: driverId,
+            action_type: 'session_completed',
+            source_value: parseFloat(event.energyDispensedKwh),
+            event_id: sessionId,
+            iso: iso
+          })
+        }]
+      });
     }
   }
 
@@ -507,8 +525,23 @@ async function updateChallengeProgress(driver_id, challenge_type) {
       if (progress.rows[0].current_count >= challenge.required_count) {
         await pool.query('UPDATE driver_challenge_progress SET is_completed = true WHERE driver_id = $1 AND challenge_id = $2', [driver_id, challenge.id]);
 
-        const chal = await pool.query('SELECT name, points_reward FROM challenges WHERE id = $1', [challenge.id]);
+        const chal = await pool.query('SELECT name, points_reward, token_reward FROM challenges WHERE id = $1', [challenge.id]);
         await updateLeaderboardPoints(driver_id, chal.rows[0].points_reward);
+
+        // Notify L10 Token Engine of challenge completion
+        await producer.send({
+          topic: 'driver_actions',
+          messages: [{
+            value: JSON.stringify({
+              driver_id,
+              action_type: 'challenge_completed',
+              challenge_id: challenge.id,
+              challenge_name: chal.rows[0].name,
+              token_reward: chal.rows[0].token_reward,
+              event_id: challenge.id
+            })
+          }]
+        });
 
         const notification = {
           driver_id,
@@ -524,6 +557,24 @@ async function updateChallengeProgress(driver_id, challenge_type) {
         });
 
         io.to(`driver:${driver_id}`).emit('notification', notification);
+
+        // Emit to driver_actions for L10 Token Engine
+        const driverDataForChallenge = await pool.query('SELECT f.iso FROM drivers d JOIN fleets f ON d.fleet_id = f.id WHERE d.id = $1', [driver_id]);
+        const isoForChallenge = driverDataForChallenge.rows[0]?.iso || 'CAISO';
+
+        await producer.send({
+          topic: 'driver_actions',
+          messages: [{
+            value: JSON.stringify({
+              driver_id,
+              action_type: 'challenge_completed',
+              challenge_name: chal.rows[0].name,
+              source_value: chal.rows[0].token_reward || chal.rows[0].points_reward,
+              event_id: challenge.id,
+              iso: isoForChallenge
+            })
+          }]
+        });
       }
     }
   } catch (error) {
@@ -674,6 +725,9 @@ async function awardAchievement(driver_id, achievement_id) {
     await updateLeaderboardPoints(driver_id, points);
 
     // 5. Emit Kafka message for L10 Token Engine
+    const driverData = await pool.query('SELECT f.iso FROM drivers d JOIN fleets f ON d.fleet_id = f.id WHERE d.id = $1', [driver_id]);
+    const iso = driverData.rows[0]?.iso || 'CAISO';
+
     await producer.send({
       topic: 'driver_actions',
       messages: [{
@@ -682,7 +736,8 @@ async function awardAchievement(driver_id, achievement_id) {
           action_type: 'achievement_unlocked',
           achievement_name: name,
           source_value: points,
-          event_id: achievement_id
+          event_id: achievement_id,
+          iso: iso
         })
       }]
     });
