@@ -331,9 +331,20 @@ app.get('/tariffs/available', authenticateToken, async (req, res) => {
 app.post('/profile/tariff-selection', authenticateToken, async (req, res) => {
     const { tariff_id } = req.body;
     try {
+        // IDOR Check: Ensure the tariff belongs to the driver's fleet
+        const tariffCheck = await pool.query(
+            'SELECT id FROM tariffs WHERE id = $1 AND fleet_id = $2',
+            [tariff_id, req.user.fleet_id]
+        );
+
+        if (tariffCheck.rows.length === 0) {
+            return res.status(403).json({ error: 'Unauthorized: Tariff does not belong to your fleet' });
+        }
+
         await pool.query('UPDATE driver_preferences SET selected_tariff_id = $1 WHERE driver_id = $2', [tariff_id, req.user.driver_id]);
         res.json({ success: true, message: 'Tariff plan updated' });
     } catch (error) {
+        console.error('[Tariff Selection Error]', error);
         res.status(500).json({ error: 'An internal server error occurred' });
     }
 });

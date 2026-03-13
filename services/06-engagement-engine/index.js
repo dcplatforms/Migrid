@@ -421,6 +421,21 @@ async function updateChallengeProgress(driver_id, challenge_type) {
         const chal = await pool.query('SELECT name, points_reward, token_reward FROM challenges WHERE id = $1', [challenge.id]);
         await updateLeaderboardPoints(driver_id, chal.rows[0].points_reward);
 
+        // Notify L10 Token Engine of challenge completion
+        await producer.send({
+          topic: 'driver_actions',
+          messages: [{
+            value: JSON.stringify({
+              driver_id,
+              action_type: 'challenge_completed',
+              challenge_id: challenge.id,
+              challenge_name: chal.rows[0].name,
+              token_reward: chal.rows[0].token_reward,
+              event_id: challenge.id
+            })
+          }]
+        });
+
         const notification = {
           driver_id,
           type: 'challenge_completed',
