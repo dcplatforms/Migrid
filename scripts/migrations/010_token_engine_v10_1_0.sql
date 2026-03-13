@@ -1,11 +1,15 @@
--- MiGrid L10 Token Engine v10.1.0 update
+-- MiGrid Token Engine Update v10.1.0
 -- 010_token_engine_v10_1_0.sql
 
--- Add ISO regional context to fleets (impacts L4 and L10)
-ALTER TABLE fleets ADD COLUMN IF NOT EXISTS iso VARCHAR(10) DEFAULT 'CAISO';
+-- 1. Add token_reward to challenges for L6 -> L10 bridging
+ALTER TABLE challenges ADD COLUMN IF NOT EXISTS token_reward INTEGER DEFAULT 0;
 
--- Add ISO regional context to token_reward_log for high-precision auditing
-ALTER TABLE token_reward_log ADD COLUMN IF NOT EXISTS iso VARCHAR(10) DEFAULT 'CAISO';
+-- 2. Add ISO column to fleets for regional market context in rewards
+ALTER TABLE fleets ADD COLUMN IF NOT EXISTS iso VARCHAR(20) DEFAULT 'CAISO';
 
--- Update existing fleets to localized context if needed (example)
+-- 3. Update existing challenges with token rewards
+UPDATE challenges SET token_reward = 250 WHERE name = 'Weekly Warrior';
+UPDATE challenges SET token_reward = 500 WHERE name = 'Grid Guardian Challenge';
+
+-- 4. Set default ISO for existing fleets
 UPDATE fleets SET iso = 'CAISO' WHERE iso IS NULL;
