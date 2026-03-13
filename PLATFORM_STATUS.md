@@ -39,7 +39,7 @@ The MiGrid platform has been successfully updated to align with current roadmap 
 Overall Progress:       ██████████░░░░░░░░░░ 51%
 Services Complete:      ████████████████████ 100%
 Features Delivered:     ██████████░░░░░░░░░░ 51%
-Standards Compliance:   ██████████░░░░░░░░░░ 55%
+Standards Compliance:   ████████████░░░░░░░░ 60%
 ```
 
 **38 of 74 features** delivered
@@ -107,7 +107,7 @@ Standards Compliance:   ██████████░░░░░░░░�
 <tr>
 <td align="center"><b>L6</b></td>
 <td>Engagement Engine</td>
-<td align="center"><code>5.0.0</code></td>
+<td align="center"><code>5.1.0</code></td>
 <td align="center"><code>:3006</code></td>
 <td>Driver Experience (Q4 2025)</td>
 </tr>
@@ -435,7 +435,7 @@ Phase 8: Advanced Grid       ░░░░░░░░░░░░░░░░░
 
 - [~] **Commerce engine** — Flexible billing and tariffs (60%)
 - [~] **ISO 15118** — Plug & Charge certification (70%)
-- [~] **OCPI 2.2** — Roaming network integration (50%)
+- [~] **OCPI 2.2** — Roaming network integration (20%)
 
 **Planned for Q1 2026:**
 

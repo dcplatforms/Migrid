@@ -1,30 +1,41 @@
-# L4 Market Gateway: Weekly Product Update (Jan 22, 2026)
+# L4 Market Gateway: Weekly Product Update
+**Date:** January 23, 2026
+**Agent:** L4-Agent (Product Owner & Forward Engineer)
 
 ## L4 Health & Dependency Report
 
-The L4 Market Gateway remains operational and is currently being aligned with the Phase 5 "Enterprise Scale" milestones. Recent cross-layer changes have necessitated several updates to ensure synchronization with the L1, L2, L3, and L9 services.
+The L4 Market Gateway remains in a "Healthy" state, maintaining a sub-50ms responsiveness for capacity queries and robust safety integration with L1. Recent updates across the 10-layer stack have been analyzed for impact:
 
-### Shifted Dependencies
-- **L1 Physics Engine & L2 Grid Signal**: L1 now propagates enriched metadata (`billing_mode`, `vpp_active`) through Kafka alerts. L2 consumes these and now populates a granular safety lock context in Redis at `l1:safety:lock:context`. L4 must be updated to retrieve and log this context when bidding is halted to provide better observability into physical safeguard violations.
-- **L3 VPP Aggregator**: L3 has stabilized its capacity aggregation formula and caching logic. L4 successfully consumes the `vpp:capacity:available` key.
-- **L9 Commerce Engine**: L9's `MarketRateService` relies on the `MARKET_PRICE_UPDATED` Kafka topic emitted by L4. To support dynamic billing, L4 must transition from reactive price broadcasting (on-demand) to a proactive background polling loop.
+*   **L1 (Physics Engine) Integration**: L1 now broadcasts enriched alerts with `billing_mode` and `vpp_active` metadata. L4's `BiddingOptimizer` successfully utilizes the unified `l1:safety:lock` and parses the `l1:safety:lock:context` to provide detailed reasoning (including Billing Mode and VPP status) when bidding is halted.
+*   **L2 (Grid Signal) Alignment**: L2's OpenADR 3.0 implementation now broadcasts `grid_signals` events. L4 is prepared to handle the resulting dispatch instructions from L3 as the "Market Execution" layer.
+*   **L3 (VPP Aggregator) Synchronization**: L3's capacity formula has been hardened, and it now recalibrates immediately upon receiving physics alerts or participation changes. L4's Redis-backed caching ensures we never violate "The Fuse Rule" while maintaining low-latency bidding.
+*   **L9/L10 (Commerce & Token) Support**: L9's new dynamic tariff service and L10's reward logic require more granular market metadata. L4 is being updated to broadcast a `profitability_index` ($/MWh) to enable smarter settlement and incentive triggers.
 
 ## Backlog Updates
 
-### New User Stories & Technical Tasks
-1. **[L4-001] Proactive Price Broadcasting**: Implement a background loop in `index.js` to poll and broadcast market prices for all supported ISOs (CAISO, PJM, ERCOT) every 5 minutes.
-2. **[L4-002] Enhanced Safety Observability**: Update `BiddingOptimizer` to fetch and log the `l1:safety:lock:context` when the safety lock is active.
-3. **[L4-003] Decimal.js Audit (Phase 5)**: Conduct a full audit of `BiddingOptimizer` and `MarketPricingService` to ensure all financial and energy capacity calculations use `Decimal.js` methods, eliminating any remaining `parseFloat` or standard arithmetic operators on sensitive values.
-4. **[L4-004] ERCOT Foundation**: Explicitly include ERCOT in the supported ISO list and background polling logic.
-
-### Risk Assessment
-- **Market Bidding Latency**: Current sub-50ms Redis retrieval for L3 capacity remains within SLA.
-- **Physics Violations**: The "Verify the Physics" guard is robust, but the addition of context logging will reduce MTTR (Mean Time To Resolution) for dispatch rejections.
+*   **[STORY] ERCOT Market Activation**: Promoted ERCOT from 'planned' to 'active' status to support Phase 5 expansion into the Texas Interconnection.
+*   **[STORY] Global Market Readiness (Nord Pool)**: Added Nord Pool to the roadmap and proactive price broadcasting loop for Phase 5.1 alignment.
+*   **[TECH] Configurable Battery Economics**: Migrated hardcoded battery degradation costs to environment variables to support fleet-specific profitability optimization.
+*   **[TECH] Enriched Market Broadcasting**: Added `profitability_index` to `MARKET_PRICE_UPDATED` Kafka topic for L9/L10 consumption.
+*   **[TECH] Safety Lock Observability**: Enhanced L1 safety lock logging to include `billing_mode` and `vpp_active` metadata for improved operational diagnostics.
 
 ## Engineering Execution
 
-This week's updates focus on:
-- Background price polling for L9 synchronization.
-- Safety lock context integration for L1/L2 alignment.
-- Full `Decimal.js` precision across the bidding logic.
-- Preparation for ERCOT market integration.
+### Code Modifications (services/04-market-gateway)
+
+1.  **`BiddingOptimizer.js`**:
+    *   Replaced hardcoded `$0.02/kWh` degradation cost with `process.env.DEGRADATION_COST_KWH` (defaulting to 0.02).
+    *   Enhanced safety lock warning logs to include `billing_mode` and `vpp_active` from Redis context.
+    *   Validated `Decimal.js` usage for all energy/financial arithmetic.
+
+2.  **`index.js`**:
+    *   Updated `/markets` endpoint to reflect ERCOT 'active' status and NORDPOOL 'planned' status.
+    *   Enhanced `broadcastMarketPrice` to calculate and transmit `profitability_index` ($/MWh).
+    *   Expanded `startPriceBroadcaster` to include ERCOT and NORDPOOL.
+
+3.  **Tests**:
+    *   Updated `optimizer.test.js` to verify configurable degradation cost logic.
+    *   Confirmed all tests pass with zero regressions.
+
+---
+**Status:** 🟢 Healthy | **Phase 5 Progress:** 55% | **Safety Record:** 100% (No Fuse Rule Violations)

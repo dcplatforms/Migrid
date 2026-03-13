@@ -24,6 +24,7 @@ describe('BiddingOptimizer', () => {
     optimizer = new BiddingOptimizer(mockPool, 'redis://localhost:6379');
     // BiddingOptimizer creates its own MarketPricingService, so we need to access it or mock the constructor
     mockPricingService = MarketPricingService.prototype;
+    delete process.env.DEGRADATION_COST_KWH;
   });
 
   test('should bid 0 MW when LMP is below 0.02 USD/kWh ($20/MWh)', async () => {
@@ -127,5 +128,34 @@ describe('BiddingOptimizer', () => {
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Reason: PHYSICS_FRAUD, Severity: FRAUD, Site: SITE-123'));
 
     consoleSpy.mockRestore();
+  });
+
+  test('should respect configurable degradation cost via environment variable', async () => {
+    // Set degradation cost to $0.05/kWh ($50/MWh)
+    process.env.DEGRADATION_COST_KWH = '0.05';
+
+    // LMP is $40/MWh (which is < $50/MWh)
+    const lmp = 40.00;
+    const capacityKw = 500;
+
+    mockRedisClient.get.mockResolvedValue(capacityKw.toString());
+    mockPricingService.getDayAheadForecast.mockResolvedValue([
+      { location: 'LOC1', price_per_mwh: lmp, timestamp: new Date() }
+    ]);
+
+    const bids = await optimizer.generateDayAheadBids('CAISO');
+
+    expect(bids).toHaveLength(1);
+    expect(bids[0]).toContain('38=0.00'); // Should not bid as it is below $50/MWh
+    expect(bids[0]).toContain('44=50.00'); // Limit price should be $50.00
+
+    // Now set LMP to $60/MWh (which is > $50/MWh)
+    mockPricingService.getDayAheadForecast.mockResolvedValue([
+      { location: 'LOC1', price_per_mwh: 60.00, timestamp: new Date() }
+    ]);
+
+    const activeBids = await optimizer.generateDayAheadBids('CAISO');
+    expect(activeBids[0]).toContain('38=0.50'); // Should bid
+    expect(activeBids[0]).toContain('44=50.00');
   });
 });
