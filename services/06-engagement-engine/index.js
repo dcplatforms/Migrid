@@ -80,7 +80,7 @@ async function initKafka() {
   await producer.connect();
 
   // Listen for both direct events and session completions
-  await consumer.subscribe({ topics: ['charging_events', 'SESSION_COMPLETED', 'vpp_participation_updates'], fromBeginning: false });
+  await consumer.subscribe({ topics: ['charging_events', 'SESSION_COMPLETED', 'vpp_participation_updates', 'grid_signals'], fromBeginning: false });
 
   await consumer.run({
     eachMessage: async ({ topic, message }) => {
@@ -91,8 +91,9 @@ async function initKafka() {
         if (topic === 'SESSION_COMPLETED' || topic === 'charging_events') {
           await processChargingEvent(payload);
         } else if (topic === 'vpp_participation_updates') {
-          // Handle specific driver updates like Plug & Charge Ready if surfaced here
-          // Or we can poll/check driver status periodically
+          await handleVPPParticipationUpdate(payload);
+        } else if (topic === 'grid_signals') {
+          await handleGridSignal(payload);
         }
       } catch (error) {
         console.error('[Engagement] Error processing Kafka message:', error);
@@ -107,7 +108,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.0.0',
+    version: '5.1.0', // Incremented for Phase 5 Enterprise Alignment
     status: 'healthy',
     layer: 'L6'
   });
@@ -297,18 +298,20 @@ async function processChargingEvent(event) {
   const sessionId = event.sessionId || event.session_id;
 
   // Verify Physics Integrity before awarding points
+  let isValid = true;
   if (sessionId) {
     const session = await pool.query('SELECT is_valid FROM charging_sessions WHERE id = $1', [sessionId]);
     if (session.rows.length > 0 && session.rows[0].is_valid === false) {
       console.warn(`[Engagement] Session ${sessionId} rejected for scoring due to Physics Violation.`);
-      return;
+      isValid = false;
     }
   }
 
-  if (event.type === 'session_completed' || event.energyDispensedKwh) {
+  if ((event.type === 'session_completed' || event.energyDispensedKwh) && isValid) {
     await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'session_completed', JSON.stringify({ sessionId, energyDispensedKwh: event.energyDispensedKwh })]);
     await checkFirstSessionAchievement(driverId);
     await updateStreaks(driverId);
+    await checkSustainabilityChampion(driverId);
 
     // Award Green Driver Score points (Example: 10 points per kWh if valid)
     if (event.energyDispensedKwh) {
@@ -324,6 +327,19 @@ async function processChargingEvent(event) {
         data: { session_id: sessionId, points }
       };
 
+      // Notify L10 Token Engine for points fulfillment
+      await producer.send({
+        topic: 'driver_actions',
+        messages: [{
+          value: JSON.stringify({
+            driver_id: driverId,
+            action_type: 'green_charging',
+            source_value: parseFloat(event.energyDispensedKwh),
+            event_id: sessionId
+          })
+        }]
+      });
+
       await producer.send({
         topic: 'engagement_notifications',
         messages: [{ key: driverId, value: JSON.stringify(notification) }]
@@ -334,14 +350,121 @@ async function processChargingEvent(event) {
     }
   }
 
-  if (event.type === 'v2g_discharge') {
+  if (event.type === 'v2g_discharge' && isValid) {
     await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'v2g_discharge', JSON.stringify({ event })]);
+
+    // Notify L10 Token Engine for V2G fulfillment
+    await producer.send({
+      topic: 'driver_actions',
+      messages: [{
+        value: JSON.stringify({
+          driver_id: driverId,
+          action_type: 'v2g_discharge',
+          source_value: parseFloat(event.energyDischargedKwh || 1.0),
+          event_id: sessionId
+        })
+      }]
+    });
+
     await checkV2GAchievements(driverId);
     await updateChallengeProgress(driverId, 'v2g_participation');
+    await updateChallengeProgress(driverId, 'vpp_participation');
   }
 
   // Periodic check for Plug & Charge Ready status
   await checkPlugAndChargeAchievement(driverId);
+}
+
+async function handleVPPParticipationUpdate(payload) {
+  const { driver_id, vpp_participation_active } = payload;
+  if (vpp_participation_active) {
+    const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'VPP Ready'");
+    if (achievement.rows.length > 0) {
+      await awardAchievement(driver_id, achievement.rows[0].id);
+    }
+    // Update challenge progress for opting in
+    await updateChallengeProgress(driver_id, 'vpp_participation');
+  }
+}
+
+async function handleGridSignal(payload) {
+  console.log(`[L6] Handling Grid Signal for Team Challenge: ${payload.event_id} (${payload.priority})`);
+
+  try {
+    // 1. Bulk record grid response actions for all active charging sessions
+    await pool.query(`
+      INSERT INTO driver_actions (driver_id, action_type, metadata)
+      SELECT driver_id, 'grid_response', $1
+      FROM charging_sessions
+      WHERE end_time IS NULL
+    `, [JSON.stringify({ event_id: payload.event_id })]);
+
+    // 2. Optimized Bulk Update for Grid Response Challenges
+    // This single query updates progress, marks completion, and updates leaderboard points
+    const results = await pool.query(`
+      WITH updated_progress AS (
+          INSERT INTO driver_challenge_progress (driver_id, challenge_id, current_count)
+          SELECT cs.driver_id, c.id, 1
+          FROM charging_sessions cs
+          CROSS JOIN challenges c
+          WHERE cs.end_time IS NULL
+            AND c.challenge_type = 'grid_response'
+            AND c.is_active = true
+          ON CONFLICT (driver_id, challenge_id)
+          DO UPDATE SET current_count = driver_challenge_progress.current_count + 1,
+                        updated_at = NOW()
+          WHERE driver_challenge_progress.is_completed = false
+          RETURNING driver_id, challenge_id, current_count
+      ),
+      completed_challenges AS (
+          UPDATE driver_challenge_progress dcp
+          SET is_completed = true
+          FROM updated_progress up
+          JOIN challenges c ON up.challenge_id = c.id
+          WHERE dcp.driver_id = up.driver_id
+            AND dcp.challenge_id = up.challenge_id
+            AND up.current_count >= c.required_count
+          RETURNING dcp.driver_id, c.points_reward, c.name, dcp.challenge_id
+      )
+      UPDATE leaderboard l
+      SET total_points = l.total_points + cc.points_reward,
+          updated_at = NOW()
+      FROM completed_challenges cc
+      WHERE l.driver_id = cc.driver_id
+      RETURNING cc.driver_id, cc.name, cc.points_reward, cc.challenge_id
+    `);
+
+    // 3. Handle notifications for drivers who completed a challenge
+    for (const row of results.rows) {
+      const notification = {
+        driver_id: row.driver_id,
+        type: 'challenge_completed',
+        title: 'Grid Challenge Completed! 🎖️',
+        body: `You've earned ${row.points_reward} points for your grid response.`,
+        data: { challenge_id: row.challenge_id }
+      };
+
+      await producer.send({
+        topic: 'engagement_notifications',
+        messages: [{ key: row.driver_id, value: JSON.stringify(notification) }]
+      });
+
+      io.to(`driver:${row.driver_id}`).emit('notification', notification);
+    }
+
+    // 4. Trigger Achievement check (Grid Warrior)
+    // For large scale, we should ideally also do this in bulk, but let's at least process
+    // active drivers. For now, we'll iterate through the activeSessions to check achievements.
+    const activeSessions = await pool.query("SELECT driver_id FROM charging_sessions WHERE end_time IS NULL");
+    for (const session of activeSessions.rows) {
+      await checkGridWarriorAchievement(session.driver_id);
+    }
+
+    await recalculateRanks();
+
+  } catch (error) {
+    console.error('[Engagement] Error handling grid signal:', error);
+  }
 }
 
 async function checkFirstSessionAchievement(driver_id) {
@@ -469,10 +592,8 @@ async function checkV2GAchievements(driver_id) {
     const v2gCount = await pool.query(`
       SELECT COUNT(*) FROM driver_actions
       WHERE driver_id = $1 AND action_type = 'v2g_discharge'
-    `, [driver_id]); // This assumes a driver_actions table tracks these, or we track it in leaderboard
+    `, [driver_id]);
 
-    // Fallback: If no driver_actions table yet, we could use a counter in leaderboard or similar
-    // For this implementation, let's assume we want to track it
     if (parseInt(v2gCount.rows[0]?.count) >= 10) {
       const heroAchievement = await pool.query("SELECT id FROM achievements WHERE name = 'VPP Hero'");
       if (heroAchievement.rows.length > 0) {
@@ -481,6 +602,40 @@ async function checkV2GAchievements(driver_id) {
     }
   } catch (error) {
     console.error('[Engagement] Error checking V2G achievements:', error);
+  }
+}
+
+async function checkGridWarriorAchievement(driver_id) {
+  const count = await pool.query(`
+    SELECT COUNT(*) FROM driver_actions
+    WHERE driver_id = $1 AND action_type = 'grid_response'
+  `, [driver_id]);
+
+  if (parseInt(count.rows[0].count) >= 5) {
+    const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Grid Warrior'");
+    if (achievement.rows.length > 0) {
+      await awardAchievement(driver_id, achievement.rows[0].id);
+    }
+  }
+}
+
+async function checkSustainabilityChampion(driver_id) {
+  // Optimized single query to check both valid and invalid counts
+  const result = await pool.query(`
+    SELECT
+      COUNT(*) FILTER (WHERE is_valid = false) as invalid_count,
+      COUNT(*) FILTER (WHERE is_valid = true) as valid_count
+    FROM charging_sessions
+    WHERE driver_id = $1 AND start_time > NOW() - INTERVAL '30 days'
+  `, [driver_id]);
+
+  const { invalid_count, valid_count } = result.rows[0];
+
+  if (parseInt(invalid_count) === 0 && parseInt(valid_count) >= 30) {
+    const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Sustainability Champion'");
+    if (achievement.rows.length > 0) {
+      await awardAchievement(driver_id, achievement.rows[0].id);
+    }
   }
 }
 
@@ -580,7 +735,8 @@ async function updateLeaderboardPoints(driver_id, points) {
 }
 
 async function recalculateRanks() {
-  await pool.query(`
+  // Optimized: Only update and return drivers whose rank has actually changed
+  const result = await pool.query(`
     WITH ranked AS (
       SELECT driver_id,
              ROW_NUMBER() OVER (ORDER BY total_points DESC) as new_rank
@@ -589,8 +745,30 @@ async function recalculateRanks() {
     UPDATE leaderboard l
     SET rank = r.new_rank, updated_at = NOW()
     FROM ranked r
-    WHERE l.driver_id = r.driver_id
+    WHERE l.driver_id = r.driver_id AND (l.rank IS DISTINCT FROM r.new_rank)
+    RETURNING l.driver_id, l.rank
   `);
+
+  // Notify only the drivers whose rank has shifted
+  for (const row of result.rows) {
+    io.to(`driver:${row.driver_id}`).emit('notification', {
+      type: 'rank_change',
+      title: 'Rank Updated! 📈',
+      body: `Your new rank on the leaderboard is #${row.rank}.`,
+      data: { rank: row.rank }
+    });
+  }
+
+  // Broadcast top 10 change to everyone if any of the top 10 changed
+  const topTenChanged = result.rows.some(row => row.rank <= 10);
+  if (topTenChanged) {
+    const topPlayers = await pool.query(`
+      SELECT l.rank, l.total_points, d.first_name, d.last_name
+      FROM leaderboard l JOIN drivers d ON l.driver_id = d.id
+      ORDER BY l.rank ASC LIMIT 10
+    `);
+    io.emit('leaderboard_update', topPlayers.rows);
+  }
 }
 
 // Start server
