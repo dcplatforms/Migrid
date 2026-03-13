@@ -28,6 +28,7 @@ const kafka = new Kafka({
   brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(',')
 });
 const producer = kafka.producer();
+const consumer = kafka.consumer({ groupId: 'market-gateway-group' });
 
 app.use(express.json());
 
@@ -64,6 +65,7 @@ async function broadcastMarketPrice(iso, price_per_mwh) {
     const price = new Decimal(price_per_mwh);
 
     // Calculate profitability index (Price - Degradation Cost)
+    // "Verify the Physics": Consistent with BiddingOptimizer.js
     const degradationCostKwh = new Decimal(process.env.DEGRADATION_COST_KWH || '0.02');
     const degradationCostMwh = degradationCostKwh.times(1000);
     const profitabilityIndex = price.minus(degradationCostMwh);
@@ -71,7 +73,7 @@ async function broadcastMarketPrice(iso, price_per_mwh) {
     const payload = {
       iso: iso.toUpperCase(),
       price_per_mwh: price.toNumber(),
-      profitability_index: profitabilityIndex.toNumber(),
+      profitability_index: profitabilityIndex.toDecimalPlaces(2).toNumber(),
       timestamp: new Date().toISOString()
     };
 
@@ -84,6 +86,26 @@ async function broadcastMarketPrice(iso, price_per_mwh) {
   } catch (error) {
     console.error('[Market Gateway] Failed to broadcast price update:', error.message);
   }
+}
+
+/**
+ * Listen for grid signals to adjust bidding strategy or halt bidding
+ */
+async function startGridSignalConsumer() {
+  await consumer.connect();
+  await consumer.subscribe({ topic: 'grid_signals', fromBeginning: false });
+
+  await consumer.run({
+    eachMessage: async ({ topic, partition, message }) => {
+      const signal = JSON.parse(message.value.toString());
+      console.log(`[Market Gateway] Received grid signal: ${signal.event_id} (Type: ${signal.type}, Priority: ${signal.priority})`);
+
+      if (signal.priority === 'HIGH' || signal.priority === 'CRITICAL') {
+        console.warn(`⚠️ [Market Gateway] High priority grid signal received. Market bidding should be reviewed for site ${signal.site_id}.`);
+        // In the future, this could set a local flag in the BiddingOptimizer to automatically skip certain bid types.
+      }
+    }
+  });
 }
 
 /**
@@ -136,27 +158,18 @@ app.get('/markets/:iso/prices', authenticateToken, async (req, res) => {
   const { iso } = req.params;
 
   try {
-    // Fetch LMP data from ISO/RTO API
-    // This is a simplified example
-    const result = await pool.query(`
-      SELECT location, price_per_mwh, timestamp
-      FROM lmp_prices
-      WHERE iso = $1
-        AND timestamp > NOW() - INTERVAL '5 minutes'
-      ORDER BY timestamp DESC
-      LIMIT 10
-    `, [iso.toUpperCase()]);
+    const prices = await pricingService.getLatestPrices(iso);
 
-    if (result.rows.length > 0) {
+    if (prices.length > 0) {
       // Broadcast the latest price for dynamic billing/L9
-      await broadcastMarketPrice(iso, result.rows[0].price_per_mwh);
+      await broadcastMarketPrice(iso, prices[0].price_per_mwh);
     }
 
-    const latestPrice = result.rows[0] ? new Decimal(result.rows[0].price_per_mwh) : null;
+    const latestPrice = prices[0] ? prices[0].price_per_mwh : null;
 
     res.json({
       iso: iso.toUpperCase(),
-      prices: result.rows,
+      prices: prices.map(p => ({ ...p, price_per_mwh: p.price_per_mwh.toNumber() })),
       strategy: {
         should_charge: latestPrice ? latestPrice.lt(LMP_THRESHOLD_BUY) : false,
         should_discharge: latestPrice ? latestPrice.gt(LMP_THRESHOLD_SELL) : false
@@ -261,7 +274,7 @@ app.get('/markets', (req, res) => {
         iso: 'ERCOT',
         name: 'Electric Reliability Council of Texas',
         status: 'active',
-        markets: ['day-ahead', 'real-time']
+        markets: ['day-ahead', 'real-time', 'ancillary-services']
       },
       {
         iso: 'NORDPOOL',
@@ -277,7 +290,10 @@ app.get('/markets', (req, res) => {
 async function start() {
   try {
     await producer.connect();
-    console.log('✅ [Market Gateway] Connected to Kafka');
+    console.log('✅ [Market Gateway] Connected to Kafka Producer');
+
+    await startGridSignalConsumer();
+    console.log('✅ [Market Gateway] Grid Signal Consumer running (Listening to L2)');
 
     // Start background tasks
     await startPriceBroadcaster();
@@ -299,6 +315,7 @@ start();
 process.on('SIGTERM', async () => {
   console.log('[Market Gateway] Shutting down gracefully...');
   await producer.disconnect();
+  await consumer.disconnect();
   pool.end();
   process.exit(0);
 });

@@ -44,8 +44,8 @@
 - [ ] Physics-Aware Forecasting: Incorporate L1 variance data into bid reliability models.
 
 ### Layer 4: Market Gateway
-- [ ] **ERCOT Integration**: Complete adapter for Texas market support.
-- [ ] Full `Decimal.js` audit across `MarketPricingService`.
+- [x] **ERCOT Integration**: Complete adapter for Texas market support.
+- [x] Full `Decimal.js` audit across `MarketPricingService`.
 - [ ] Enhanced Safety Observability: Map `l1:safety:lock:context` to market bid rejection logs.
 
 ### Layer 6: Engagement Engine
