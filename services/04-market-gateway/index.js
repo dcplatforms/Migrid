@@ -63,9 +63,15 @@ async function broadcastMarketPrice(iso, price_per_mwh) {
     // Ensure we use Decimal for precision before broadcasting
     const price = new Decimal(price_per_mwh);
 
+    // Calculate profitability index (Price - Degradation Cost)
+    const degradationCostKwh = new Decimal(process.env.DEGRADATION_COST_KWH || '0.02');
+    const degradationCostMwh = degradationCostKwh.times(1000);
+    const profitabilityIndex = price.minus(degradationCostMwh);
+
     const payload = {
       iso: iso.toUpperCase(),
       price_per_mwh: price.toNumber(),
+      profitability_index: profitabilityIndex.toNumber(),
       timestamp: new Date().toISOString()
     };
 
@@ -74,7 +80,7 @@ async function broadcastMarketPrice(iso, price_per_mwh) {
       messages: [{ value: JSON.stringify(payload) }]
     });
 
-    console.log(`[Market Gateway] Broadcasted price update for ${iso}: $${price.toFixed(2)}/MWh`);
+    console.log(`[Market Gateway] Broadcasted price update for ${iso}: $${price.toFixed(2)}/MWh (Profitability: $${profitabilityIndex.toFixed(2)}/MWh)`);
   } catch (error) {
     console.error('[Market Gateway] Failed to broadcast price update:', error.message);
   }
@@ -84,7 +90,7 @@ async function broadcastMarketPrice(iso, price_per_mwh) {
  * Proactive background loop to poll market prices and notify other layers (L9)
  */
 async function startPriceBroadcaster() {
-  const isos = ['CAISO', 'PJM', 'ERCOT'];
+  const isos = ['CAISO', 'PJM', 'ERCOT', 'NORDPOOL'];
   console.log(`[Market Gateway] Initializing proactive price broadcaster for: ${isos.join(', ')}`);
 
   // Initial poll
@@ -254,8 +260,14 @@ app.get('/markets', (req, res) => {
       {
         iso: 'ERCOT',
         name: 'Electric Reliability Council of Texas',
-        status: 'planned',
+        status: 'active',
         markets: ['day-ahead', 'real-time']
+      },
+      {
+        iso: 'NORDPOOL',
+        name: 'Nord Pool European Power Exchange',
+        status: 'planned',
+        markets: ['day-ahead', 'intraday']
       }
     ]
   });
