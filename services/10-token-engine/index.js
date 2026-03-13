@@ -61,11 +61,18 @@ async function updateRewardTransactionStatus(logId, newStatus, openWalletTransac
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '1.0.0',
+    version: '4.1.0',
     status: 'healthy',
     layer: 'L10'
   });
 });
+
+// --- Dynamic Reward Multiplier State ---
+const currentMarketPrices = {}; // ISO -> latest price_per_mwh
+
+// Thresholds for Dynamic Multipliers (surplus/scarcity) - Configurable via ENV
+const LMP_THRESHOLD_SURPLUS = parseFloat(process.env.LMP_THRESHOLD_SURPLUS || '30.0');
+const LMP_THRESHOLD_SCARCITY = parseFloat(process.env.LMP_THRESHOLD_SCARCITY || '100.0');
 
 // --- Main Application Logic ---
 
@@ -75,7 +82,8 @@ async function start() {
     console.log('✅ [L10 Token Engine] Connected to Ledger.');
 
     await consumer.connect();
-    await consumer.subscribe({ topic: 'driver_actions', fromBeginning: true });
+    // Subscribe to driver actions and market price updates
+    await consumer.subscribe({ topics: ['driver_actions', 'MARKET_PRICE_UPDATED'], fromBeginning: true });
 
     app.listen(port, () => {
       console.log(`✅ [L10 Token Engine] Health check server running on port ${port}`);
@@ -84,6 +92,13 @@ async function start() {
     await consumer.run({
       eachMessage: async ({ topic, partition, message }) => {
         const payload = JSON.parse(message.value.toString());
+
+        if (topic === 'MARKET_PRICE_UPDATED') {
+          console.log(`[L10 Market Watch] Received price update for ${payload.iso}: $${payload.price_per_mwh}/MWh`);
+          currentMarketPrices[payload.iso] = payload.price_per_mwh;
+          return;
+        }
+
         console.log(`⚡ Received message from ${topic}:`, payload);
 
         const { driver_id, action_type, source_value, event_id } = payload;
@@ -95,10 +110,25 @@ async function start() {
           return;
         }
 
-        // 2. Calculate Reward
-        const pointsAwarded = parseFloat((source_value * rule.reward_multiplier).toFixed(8)); // Use toFixed for precision
+        // 2. Calculate Reward with Dynamic Scarcity Multiplier
+        let dynamicMultiplier = 1.0;
+        const regionalIso = payload.iso || 'CAISO';
 
-        console.log(`Calculated reward: ${pointsAwarded} points for driver ${driver_id} (Source: ${source_value}, Multiplier: ${rule.reward_multiplier})`);
+        // Apply logic for grid-supportive behaviors
+        // Deterministic price lookup based on regional ISO
+        const latestPrice = currentMarketPrices[regionalIso] || 50.0; // Default if no market data yet
+
+        if (action_type === 'session_completed' && latestPrice < LMP_THRESHOLD_SURPLUS) {
+          dynamicMultiplier = 1.5; // Bonus for charging during surplus
+          console.log(`[L10 Strategy] Surplus detected in ${regionalIso} ($${latestPrice}). Applying 1.5x bonus for charging.`);
+        } else if (action_type === 'v2g_discharge' && latestPrice > LMP_THRESHOLD_SCARCITY) {
+          dynamicMultiplier = 2.0; // Significant bonus for discharging during scarcity
+          console.log(`[L10 Strategy] Scarcity detected in ${regionalIso} ($${latestPrice}). Applying 2.0x bonus for grid support.`);
+        }
+
+        const pointsAwarded = parseFloat((source_value * rule.reward_multiplier * dynamicMultiplier).toFixed(8));
+
+        console.log(`Calculated reward: ${pointsAwarded} points for driver ${driver_id} (Source: ${source_value}, Rule Multiplier: ${rule.reward_multiplier}, Dynamic: ${dynamicMultiplier}x)`);
 
         // 3. Ensure Driver Wallet Exists (and get address)
         const driverWallet = await getOrCreateDriverWallet(driver_id);
