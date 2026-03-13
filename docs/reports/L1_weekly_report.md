@@ -1,22 +1,23 @@
-# L1 Physics Engine: Weekly Technical Steering & PO Report
+# L1 Physics Engine: Weekly Technical Steering & PO Report (Jan 23, 2026)
 
 ## Impact Summary
-Recent updates in L2-L10 have introduced several dependencies and potential risks for Layer 1:
-- **L3 (VPP Aggregator) & L8 (Energy Manager)**: Both services now rely on `min_soc_threshold` for capacity calculations. L1 must strictly enforce the 20% SoC "Fuse Rule" to prevent over-discharge, even if upstream layers suggest lower thresholds.
-- **L4 (Market Gateway)**: Bidding strategies are now tied to aggregated capacity. Inaccurate reporting or missed safety stops in L1 could lead to market non-compliance.
-- **L9 (Commerce Engine)**: The shift to high-precision split-billing (FLEET vs. DRIVER) increases the financial importance of the "Green Audit" (<15% variance rule).
+Updates across Layers 2-10 have significantly increased the performance and transparency requirements for Layer 1:
+- **L4 Market Gateway & L3 VPP Aggregator**: The transition to a sub-50ms bidding SLA requires L1 to maintain a real-time "Digital Twin" of vehicle states in Redis to avoid the latency of SQL lookups during capacity calculation.
+- **L2 Grid Signal**: Enriched OpenADR 3.0 reporting now requires L1 to provide detailed context for safety locks. This ensures that utility partners receive transparent reasons (e.g., specific variance violations) when dispatches are rejected.
+- **Physics Resilience**: L4's aggressive bidding at $100+/MWh increases the frequency of "Fuse Rule" (20% SoC) boundary conditions, necessitating hard stops at both the DB and Redis layers.
 
 ## Code Proposed
-The following updates have been engineered for the `01-physics-engine`:
-1. **Enhanced SQL Invariants**: Updated `scripts/migrations/004_physics_engine_updates.sql` to include `pg_notify` for `PHYSICS_FRAUD` and `CAPACITY_VIOLATION` events.
-2. **Safety Enforcement**: Modified `enforce_fuse_rule` trigger to automatically revert `current_soc` updates that drop below 20%, ensuring physical safety while still alerting upstream systems.
-3. **Advanced Alerting**: Refactored `services/01-physics-engine/index.js` to parse granular metadata (SoC, variance, VIN) from DB notifications and dispatch them to Kafka topic `migrid.physics.alerts` with correct severity levels (`FRAUD`, `CRITICAL`, `WARNING`).
-4. **Resilience Tests**: Implemented `services/01-physics-engine/physics_engine.test.js` to verify invariant logic and alert dispatching.
+The following updates have been engineered and verified in `services/01-physics-engine`:
+1. **Scalable Digital Twin Sync**: Implemented `syncDigitalTwin` in `index.js` to periodically cache vehicle SoC and battery capacity in Redis. The sync is filtered by `FLEET_ID` to ensure database scalability and prevent full-table scans.
+2. **Contextual Safety Locks**: Enhanced `handlePhysicsAlert` to write detailed metadata (violation type, site_id, variance_pct, current_soc) to the `l1:safety:lock:context` Redis key, using parameterized `SITE_ID` for deployment flexibility.
+3. **Phase 5 Schema Alignment**: Aligned the Kafka alert payload with the latest cross-layer standards, including `billing_mode` and `vpp_active` status for L9/L10 downstream processing.
+4. **Enhanced Test Suite**: Updated `physics_engine.test.js` with comprehensive test cases for safety context generation and filtered vehicle state synchronization (9 tests total).
 
 ## Backlog Updates
-- **Digital Twin Sync**: Need to implement a periodic sync between the L1 local Redis cache and the primary `vehicles` table to prevent drift during offline transitions.
-- **Dynamic Thresholding**: Investigate allowing site-specific Fuse Rule thresholds (e.g., higher than 20% for older battery assets).
-- **Fraud Analytics**: Develop a dedicated service to analyze the `audit_log` for long-term patterns of physics variance that might indicate sensor degradation rather than fraud.
+- [ ] **Fraud Analytics Service**: (Carried forward) Develop long-term `audit_log` pattern recognition to distinguish between sensor drift and active energy fraud.
+- [ ] **Redis-to-DB Writeback**: Implement a "Local-First" writeback for SoC updates when in OFFLINE mode to ensure the Cloud DB is accurately updated upon reconnection.
+- [✓] **Scalable Digital Twin Sync**: Implementation complete with fleet-level filtering for enterprise scale.
 
 ## RFCs Needed
-- **RFC-L1-OFFLINE-RECON**: A formal proposal for the "Edge-to-Cloud" reconciliation protocol to handle complex state merges when multiple sites reconnect simultaneously after a prolonged grid outage.
+- **RFC-L1-OFFLINE-RECON**: (Active) Finalizing protocol for edge-to-cloud reconciliation after prolonged grid outages.
+- **RFC-L1-FUSE-RULE-DYNAMIC**: Proposal to allow site-level overrides for the 20% SoC Fuse Rule based on battery health telemetry from L7.
