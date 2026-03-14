@@ -294,7 +294,7 @@ High-velocity engineering updates across the stack:
 
 ### Standards & Protocols
 
-- **OCPP 1.6 / 2.0.1** — Charger communication
+- **OCPP 2.1 / 2.0.1** — Charger communication (Native V2X support in 2.1)
 - **ISO 15118** — Plug & Charge
 - **OpenADR 3.0** — Demand response
 - **OCPI 2.2** — Roaming networks
@@ -394,7 +394,7 @@ Phase 8: Advanced Grid       ░░░░░░░░░░░░░░░░░
 - OpenADR 3.0 VEN implementation
 - Price signal and demand response event handling
 - Telematics bridges (Samsara, Geotab, Fleetio)
-- OCPP 2.0.1 upgrade with smart charging profiles
+- OCPP 2.1 upgrade with native V2X/V2G profiles
 - Real-time grid connection monitoring
 
 </details>
@@ -670,7 +670,7 @@ Standards Progress:    ████████░░░░░░░░░░░
 <td align="center">Q2 2025</td>
 </tr>
 <tr>
-<td><b>OCPP 1.6 / 2.0.1</b></td>
+<td><b>OCPP 2.1 / 2.0.1</b></td>
 <td>Charger communication standard</td>
 <td align="center">Complete</td>
 <td align="center">Q1 2025</td>

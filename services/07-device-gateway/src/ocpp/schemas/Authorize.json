@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://openchargealliance.org/ocpp/2.1/schemas/AuthorizeRequest.json",
+  "type": "object",
+  "properties": {
+    "idToken": {
+      "type": "object",
+      "properties": {
+        "idToken": { "type": "string", "maxLength": 36 },
+        "type": { "type": "string" }
+      },
+      "required": ["idToken", "type"]
+    },
+    "certificate": { "type": "string" },
+    "iso15118CertificateHashData": {
+        "type": "array",
+        "items": { "type": "object" }
+    }
+  },
+  "required": ["idToken"]
+}

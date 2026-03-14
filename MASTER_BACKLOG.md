@@ -78,7 +78,7 @@
 
 | Priority | Task ID | Description | Primary Layers | Status | Strategic Alignment |
 |:---:|:---:|:---|:---:|:---:|:---|
-| 1 | **ISO-15118-PC** | Full ISO 15118-20 Bidirectional Certificate Exchange & Plug & Charge UI | L7, L5, L1 | 70% | Phase 5: Enterprise Scale |
+| 1 | **ISO-15118-PC** | Full ISO 15118-20 Bidirectional Certificate Exchange & Plug & Charge UI (OCPP 2.1) | L7, L5, L1 | 75% | Phase 5: Enterprise Scale |
 | 2 | **PROACTIVE-PRICE** | Proactive Market Price Polling & Dynamic Tariff Integration | L4, L9, L10 | 60% | Phase 5: Commerce Sync |
 | 3 | **REDIS-VPP-SLA** | Migration to Redis-cached VPP capacity model for sub-50ms Market Bidding | L3, L4 | 90% | Phase 5: Performance |
 | 4 | **FUSE-RULE-ENF** | "The Fuse Rule" (20% SoC) hard enforcement across all dispatch layers | L1, L8, L3 | 100% | Safety Invariant |
@@ -98,7 +98,7 @@
 
 ### Phase 5: Enterprise Scale (Q1 2026)
 - [~] **L9 Commerce Engine**: Finishing flexible billing logic and tariff engine (60%).
-- [~] **L7 Device Gateway**: Implementing ISO 15118-20 bidirectional support.
+- [~] **L7 Device Gateway**: Implementing OCPP 2.1 & ISO 15118-20 bidirectional support.
 - [✓] **L4 Market Gateway**: Proactive price broadcasting loop for CAISO/PJM.
 - [✓] **L3 VPP Aggregator**: Redis-based capacity caching implementation.
 - [✓] **L2 Grid Signal**: Unified safety lock mechanism with L1 metadata context.
