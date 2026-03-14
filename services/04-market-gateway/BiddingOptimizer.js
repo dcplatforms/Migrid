@@ -27,12 +27,12 @@ class BiddingOptimizer {
 
   /**
    * Fetches real-time aggregated capacity from Redis.
-   * @returns {Promise<number>} Capacity in kW
+   * @returns {Promise<Decimal>} Capacity in kW
    */
   async getAggregatedCapacity() {
     await this.connect();
     const capacity = await this.redisClient.get('vpp:capacity:available');
-    return capacity ? parseFloat(capacity) : 0;
+    return new Decimal(capacity || '0');
   }
 
   /**
@@ -53,15 +53,21 @@ class BiddingOptimizer {
   async generateDayAheadBids(iso) {
     // Verify the Physics: Check for L1 safety lock before bidding
     if (await this.isSafetyLockActive()) {
+      const lockContext = await this.redisClient.get('l1:safety:lock:context');
+      const details = lockContext ? JSON.parse(lockContext) : null;
+
       console.warn(`🚨 [L4 Market Gateway] Bidding halted: L1 safety lock is active for ${iso}`);
+      if (details) {
+        console.warn(`[L4 Safety Context] Reason: ${details.event_type}, Severity: ${details.severity}, Site: ${details.site_id || 'N/A'}, BillingMode: ${details.billing_mode || 'N/A'}, VPPActive: ${details.vpp_active}`);
+      }
       return [];
     }
 
     const forecasts = await this.pricingService.getDayAheadForecast(iso);
     const pVppKw = await this.getAggregatedCapacity();
-    const pVppMw = new Decimal(pVppKw).dividedBy(1000);
+    const pVppMw = pVppKw.dividedBy(1000);
 
-    const degradationCostKwh = new Decimal('0.02');
+    const degradationCostKwh = new Decimal(process.env.DEGRADATION_COST_KWH || '0.02');
     const degradationCostMwh = degradationCostKwh.times(1000); // $20/MWh
 
     const bids = [];

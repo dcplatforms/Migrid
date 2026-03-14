@@ -14,3 +14,8 @@
 **Vulnerability:** Registration endpoints lacked rate limiting, and several internal services (Commerce, VPP Aggregator) expose unauthenticated sensitive endpoints.
 **Learning:** Public registration endpoints are highly susceptible to automated abuse if not IP-rate limited. Some services were found with unauthenticated `POST /tariffs` and `POST /resources/register` endpoints, representing significant security gaps.
 **Prevention:** Always apply IP-based rate limiting to registration and ensure all sensitive endpoints across all microservices are protected by the `authenticateToken` middleware.
+
+## 2026-01-23 - [Multi-tenant Tariff Selection IDOR]
+**Vulnerability:** Insecure Direct Object Reference (IDOR) in the tariff selection endpoint.
+**Learning:** Drivers were able to select any tariff ID in the system regardless of its fleet association, bypassing multi-tenancy isolation and potentially accessing unauthorized pricing structures.
+**Prevention:** All resource-related updates in a multi-tenant system must explicitly verify that the target resource (e.g., `tariff_id`) is owned by or associated with the user's tenant (e.g., `fleet_id`).

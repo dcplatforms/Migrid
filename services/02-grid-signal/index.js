@@ -9,9 +9,29 @@ const express = require('express');
 const { Pool } = require('pg');
 const { Kafka } = require('kafkajs');
 const redis = require('redis');
+const jwt = require('jsonwebtoken');
+const Ajv = require('ajv');
 
 const app = express();
 const port = process.env.PORT || 3002;
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
+
+const ajv = new Ajv({ allowUnionTypes: true });
+const eventSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string' },
+    type: { type: 'string' },
+    priority: { type: ['string', 'number'] },
+    site_id: { type: 'string' },
+    signals: { type: 'array' },
+    targets: { type: 'array' },
+    intervals: { type: 'array' }
+  },
+  required: ['id', 'type'],
+  additionalProperties: false
+};
+const validateEvent = ajv.compile(eventSchema);
 
 // 1. Database Connection
 const pool = new Pool({
@@ -34,6 +54,26 @@ const redisClient = redis.createClient({
 
 app.use(express.json());
 
+/**
+ * Middleware: Verify JWT token (Zero-Trust Security)
+ */
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'UNAUTHORIZED', message: 'Access token required' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+  });
+};
+
 // Redis safety key constants
 const SAFETY_LOCK_KEY = 'l1:safety:lock';
 
@@ -51,14 +91,38 @@ app.get('/health', (req, res) => {
 });
 
 /**
+ * Get OpenADR 3.0 Reports (VEN)
+ * Returns recent grid events for compliance and auditing
+ */
+app.get('/openadr/v3/reports', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT event_id, event_type, status, received_at FROM grid_events ORDER BY received_at DESC LIMIT 50'
+    );
+    res.json({
+      reports: result.rows,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[L2 Grid Signal] Report Error:', error);
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+  }
+});
+
+/**
  * Receive OpenADR 3.0 Event (VEN)
  */
-app.post('/openadr/v3/events', async (req, res) => {
+app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
   const event = req.body;
 
-  // Payload validation
-  if (!event || !event.id) {
-    return res.status(400).json({ error: 'INVALID_PAYLOAD', message: 'Event ID is required' });
+  // 0. Payload validation (OpenADR 3.0 Compliance)
+  const valid = validateEvent(event);
+  if (!valid) {
+    return res.status(400).json({
+      error: 'INVALID_PAYLOAD',
+      message: 'Schema validation failed',
+      details: validateEvent.errors
+    });
   }
 
   try {
@@ -91,7 +155,8 @@ app.post('/openadr/v3/events', async (req, res) => {
     // 3. Cache event in Redis for 1 hour
     await redisClient.setEx(`event:${event.id}`, 3600, JSON.stringify(event));
 
-    // 4. Broadcast event to other services via Kafka
+    // 4. Broadcast enriched event to other services via Kafka
+    // Mapping OpenADR 3.0 fields for L3/L8 consumption
     await producer.send({
       topic: 'grid_signals',
       messages: [{
@@ -99,6 +164,11 @@ app.post('/openadr/v3/events', async (req, res) => {
           event_id: event.id,
           type: event.type,
           priority: event.priority || 'NORMAL',
+          site_id: event.site_id || 'ALL',
+          intervals: event.intervals || [],
+          targets: event.targets || [],
+          signals: event.signals || [],
+          payload: event,
           timestamp: new Date().toISOString()
         })
       }]
@@ -127,18 +197,26 @@ async function startSafetyConsumer() {
     eachMessage: async ({ topic, partition, message }) => {
       const alert = JSON.parse(message.value.toString());
 
-      if (alert.severity === 'CRITICAL' || alert.severity === 'FRAUD') {
-        console.error(`🚨 [L2] L1 ${alert.severity} ALERT: ${alert.event_type} on Site ${alert.site_id}. Locking grid dispatch.`);
+      // PHYSICS RULE: Trigger lock if CRITICAL/FRAUD OR if variance exceeds 15%
+      const isCritical = alert.severity === 'CRITICAL' || alert.severity === 'FRAUD';
+      const isHighVariance = alert.variance_pct > 15;
+
+      if (isCritical || isHighVariance) {
+        const reason = isHighVariance ? 'HIGH_VARIANCE_THRESHOLD' : alert.event_type;
+        console.error(`🚨 [L2] L1 SAFETY ALERT: ${reason} on Site ${alert.site_id}. Locking grid dispatch.`);
 
         // Detailed logging for engineering audit
-        console.log(`[L2 Audit] Metadata: Vehicle=${alert.vehicle_id}, VIN=${alert.vin}, SoC=${alert.current_soc}%, Variance=${alert.variance_pct}%`);
+        console.log(`[L2 Audit] Metadata: Vehicle=${alert.vehicle_id}, VIN=${alert.vin}, SoC=${alert.current_soc}%, Variance=${alert.variance_pct}%, Billing=${alert.billing_mode}, VPP_Active=${alert.vpp_active}`);
 
         // Unified Safety Lock: Set to '1' for L4 compatibility, with 15m TTL
         await redisClient.setEx(SAFETY_LOCK_KEY, 900, '1');
 
-        // Optional: Store detailed alert context in a separate key for UI/Diagnostics
+        // Store detailed alert context for UI/Diagnostics and downstream layer alignment
         await redisClient.setEx(`${SAFETY_LOCK_KEY}:context`, 900, JSON.stringify({
           ...alert,
+          reason,
+          billing_mode: alert.billing_mode,
+          vpp_active: alert.vpp_active,
           locked_at: new Date().toISOString()
         }));
       }
@@ -170,7 +248,7 @@ if (require.main === module) {
   start();
 }
 
-module.exports = { app, producer, consumer, redisClient };
+module.exports = { app, producer, consumer, redisClient, startSafetyConsumer };
 
 process.on('SIGTERM', async () => {
   console.log('[L2 Grid Signal] Shutting down...');

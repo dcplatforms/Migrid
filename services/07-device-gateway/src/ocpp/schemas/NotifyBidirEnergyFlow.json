@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://openchargealliance.org/ocpp/2.1/schemas/NotifyBidirEnergyFlowRequest.json",
+  "type": "object",
+  "properties": {
+    "timestamp": { "type": "string", "format": "date-time" },
+    "evseId": { "type": "integer" },
+    "bidirEnergyFlowData": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "measurand": { "type": "string" },
+          "value": { "type": "number" },
+          "unit": { "type": "string" }
+        },
+        "required": ["measurand", "value"]
+      }
+    }
+  },
+  "required": ["timestamp", "evseId", "bidirEnergyFlowData"]
+}

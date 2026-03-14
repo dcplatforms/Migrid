@@ -1,3 +1,5 @@
+const Decimal = require('decimal.js');
+
 /**
  * MarketPricingService
  * Handles retrieval of Locational Marginal Pricing (LMP) from the database.
@@ -26,7 +28,10 @@ class MarketPricingService {
       LIMIT $2
     `, [iso.toUpperCase(), limit]);
 
-    return result.rows;
+    return result.rows.map(row => ({
+      ...row,
+      price_per_mwh: new Decimal(row.price_per_mwh)
+    }));
   }
 
   /**
@@ -48,7 +53,10 @@ class MarketPricingService {
       ORDER BY timestamp ASC
     `, [iso.toUpperCase()]);
 
-    return result.rows;
+    return result.rows.map(row => ({
+      ...row,
+      price_per_mwh: new Decimal(row.price_per_mwh)
+    }));
   }
 }
 

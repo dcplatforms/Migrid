@@ -1,24 +1,25 @@
-### 🌐 L2 Grid Signal: Weekly Sync & Update
+### 🌐 L2 Grid Signal: Weekly Sync & Update (Jan 23, 2026)
 
 * **Cross-Layer Delta:**
-    - **L1 Physics Engine (Phase 5 Alignment):** Unified safety lock mechanism to use `l1:safety:lock` across L2 and L4. Enhanced L2 consumer to process granular L1 metadata (VIN, SoC, variance) for high-fidelity auditing.
-    - **L3 VPP Aggregator:** Ensured `grid_signals` Kafka events include priority and type metadata to support L3's automated dispatch logic.
-    - **L8 Energy Manager:** Maintained "Mobility First" and DLM priority by ensuring L2 dispatch is gated by the L1/L8-informed safety lock.
+    - **L1 Physics Engine v1.1.0:** Confirmed L2 correctly consumes and logs enriched metadata (VIN, SoC, Billing Mode) from `migrid.physics.alerts`.
+    - **L3 VPP Aggregator v3.2.0:** L2 now broadcasts enriched Kafka signals with OpenADR 3.0 fields (`intervals`, `targets`, `signals`) to support sub-50ms dispatch logic.
+    - **L8 Energy Manager:** Integrated normalized signal broadcasting for local site limit enforcement.
 
 * **OpenADR 3.0 Health:**
-    - **Status:** Fully Compliant.
-    - **VEN Operations:** Payload parsing remains strictly compliant. Integrated enriched error responses (503 Service Unavailable) when L1 safety locks are active, providing utility-facing transparency on grid safety interventions.
+    - **Protocol Compliance:** Implemented strict schema validation using `Ajv` for all incoming grid events.
+    - **Security:** Successfully implemented Zero-Trust JWT authentication on the `/openadr/v3/events` endpoint, mitigating unauthorized injection risks.
+    - **Auditability:** Maintained compliance via the `GET /openadr/v3/reports` endpoint for VEN status tracking.
 
 * **Engineered Updates:**
-    - **Unified Safety Lock:** Refactored `02-grid-signal` to use the global `l1:safety:lock` Redis key.
-    - **Metadata Handling:** Updated Kafka consumer to log and store enriched alert context (Vehicle, VIN, SoC, Variance) in Redis for diagnostic visibility.
-    - **Resilient Rejection:** Updated dispatch API to return 503 status with physics-violation details when safety locks are active.
-    - **Unit Testing:** Updated `grid_signal.test.js` to verify Phase 5 alignment and unified safety lock logic.
+    - **Auth Integration:** Added `jsonwebtoken` middleware to `02-grid-signal`.
+    - **Validation:** Added `ajv` schema enforcement to ensure protocol payload integrity.
+    - **Kafka Enrichment:** Refactored producer logic to include granular OpenADR 3.0 event details.
+    - **CI/CD Safety:** Verified monorepo lockfile integrity after dependency updates.
 
 * **Safety Invariants Checked:**
-    - **The Fuse Rule:** L2 dispatch is strictly gated by L1's 20% SoC hard stop via the unified safety lock.
-    - **Variance Threshold:** Verified that L1 variance alerts (>15%) successfully trigger the L2 dispatch suspension.
-    - **Audit Consistency:** Ensured cross-layer metadata (billing_mode, vpp_active) is preserved in L2 logging.
+    - **Unified Safety Lock:** Verified that 503 responses for safety violations correctly surface L1 context (`l1:safety:lock:context`).
+    - **Variance Threshold:** Confirmed automatic locking if variance > 15% is detected in L1 alerts.
 
 * **Action Items / PRs:**
-    - PR: "L2: Phase 5 Alignment - Unified Safety Lock & Metadata Handling" (L2-Agent-Weekly-Update).
+    - Generated PR for `02-grid-signal` v2.1.0 update.
+    - Updated `grid_signal.test.js` to include Zero-Trust and Schema validation test cases.

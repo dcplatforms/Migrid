@@ -18,6 +18,14 @@ async function connectProducer() {
 
 async function publishDlmProfiles(siteId, allocations) {
     try {
+        // Map to 2.1-style control structure
+        const enrichedAllocations = allocations.map(a => ({
+            ...a,
+            limitKw: a.allocatedKw,
+            unit: 'W',
+            mode: 'Charge'
+        }));
+
         await producer.send({
             topic: 'migrid.l8.control',
             messages: [{
@@ -25,7 +33,8 @@ async function publishDlmProfiles(siteId, allocations) {
                 value: JSON.stringify({
                     siteId,
                     timestamp: new Date().toISOString(),
-                    allocations
+                    allocations: enrichedAllocations,
+                    protocol: 'ocpp2.1-optimized'
                 })
             }],
         });

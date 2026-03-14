@@ -16,10 +16,13 @@ jest.mock('kafkajs', () => ({
   }))
 }), { virtual: true });
 
+global.mockPgQuery = jest.fn();
 jest.mock('pg', () => ({
   Client: jest.fn().mockImplementation(() => ({
     connect: jest.fn().mockResolvedValue({}),
-    query: jest.fn().mockResolvedValue({}),
+    query: jest.fn().mockImplementation((query, params) => {
+        return global.mockPgQuery(query, params);
+    }),
     on: jest.fn(),
     end: jest.fn()
   }))
@@ -136,30 +139,41 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.billing_mode).toBe('PERSONAL');
   });
 
-  test('should set safety lock in Redis for PHYSICS_FRAUD', async () => {
+  test('should set safety lock and context in Redis for PHYSICS_FRAUD', async () => {
     const msg = {
       payload: JSON.stringify({
         event_type: 'PHYSICS_FRAUD',
-        session_id: 'session-fraud-1'
+        session_id: 'session-fraud-1',
+        site_id: 'SITE-001',
+        variance_pct: 20.0,
+        billing_mode: 'FLEET'
       })
     };
 
     await physicsEngine.handlePhysicsAlert(msg);
 
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock', 900, 'true');
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"event_type":"PHYSICS_FRAUD"'));
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"severity":"FRAUD"'));
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"site_id":"SITE-001"'));
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"billing_mode":"FLEET"'));
   });
 
-  test('should set safety lock in Redis for CAPACITY_VIOLATION', async () => {
+  test('should set safety lock and context in Redis for CAPACITY_VIOLATION', async () => {
     const msg = {
       payload: JSON.stringify({
         event_type: 'CAPACITY_VIOLATION',
-        vehicle_id: 'vehicle-v1'
+        vehicle_id: 'vehicle-v1',
+        current_soc: 15.0
       })
     };
 
     await physicsEngine.handlePhysicsAlert(msg);
 
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock', 900, 'true');
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"event_type":"CAPACITY_VIOLATION"'));
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"severity":"CRITICAL"'));
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"current_soc":15'));
   });
 
   test('should NOT set safety lock for EFFICIENCY_ALERT', async () => {
@@ -188,5 +202,39 @@ describe('L1 Physics Engine Alert Handling', () => {
 
     const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
     expect(alertValue.site_id).toBe('DYNAMIC-SITE-999');
+  });
+});
+
+describe('L1 Physics Engine Digital Twin Sync', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    global.mockRedisSetEx = jest.fn();
+    global.mockPgQuery = jest.fn();
+    process.env.FLEET_ID = 'f1';
+  });
+
+  afterAll(() => {
+    delete process.env.FLEET_ID;
+  });
+
+  test('should sync vehicles to Redis when FLEET_ID is set', async () => {
+    global.mockPgQuery.mockResolvedValue({
+      rows: [
+        { id: 'v1', fleet_id: 'f1', battery_capacity_kwh: 100, current_soc: 80, is_plugged_in: true, v2g_enabled: true },
+        { id: 'v2', fleet_id: 'f1', battery_capacity_kwh: 100, current_soc: 75, is_plugged_in: false, v2g_enabled: true }
+      ]
+    });
+
+    // We need to re-require or manually trigger the config if we were relying on it at module load,
+    // but here we just need FLEET_ID to be available when syncDigitalTwin is called.
+    await physicsEngine.syncDigitalTwin();
+
+    expect(global.mockPgQuery).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT id, fleet_id, battery_capacity_kwh, current_soc, is_plugged_in, v2g_enabled FROM vehicles WHERE fleet_id = $1'),
+        ['f1']
+    );
+    expect(global.mockRedisSetEx).toHaveBeenCalledTimes(2);
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:digital_twin:vehicle:v1', 60, expect.stringContaining('"id":"v1"'));
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:digital_twin:vehicle:v2', 60, expect.stringContaining('"id":"v2"'));
   });
 });

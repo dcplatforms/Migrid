@@ -1,5 +1,9 @@
 const request = require('supertest');
+const jwt = require('jsonwebtoken');
 const { app, redisClient, producer } = require('./index');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
+const mockToken = jwt.sign({ fleet_id: 'fleet-123' }, JWT_SECRET);
 
 // Mock Redis (Virtual to bypass environment issues)
 jest.mock('redis', () => ({
@@ -50,21 +54,47 @@ describe('L2 Grid Signal Service', () => {
     jest.clearAllMocks();
   });
 
-  test('POST /openadr/v3/events should accept valid OpenADR event', async () => {
+  test('POST /openadr/v3/events should accept valid OpenADR event with AUTH', async () => {
     redisClient.get.mockResolvedValue(null); // No safety lock
 
     const response = await request(app)
       .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
       .send({
         id: 'evt-123',
         type: 'demand-response',
-        priority: 'HIGH'
+        priority: 'HIGH',
+        signals: [{ type: 'level', value: 1 }]
       });
 
     expect(response.status).toBe(202);
     expect(response.body.status).toBe('RECEIVED');
     expect(response.body.event_id).toBe('evt-123');
-    expect(producer.send).toHaveBeenCalled();
+    expect(producer.send).toHaveBeenCalledWith(expect.objectContaining({
+      topic: 'grid_signals',
+      messages: expect.arrayContaining([
+        expect.objectContaining({
+          value: expect.stringContaining('"site_id":"ALL"'),
+          value: expect.stringContaining('"signals":[{"type":"level","value":1}]')
+        })
+      ])
+    }));
+  });
+
+  test('POST /openadr/v3/events should reject unauthorized request', async () => {
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .send({ id: 'evt-auth', type: 'demand-response' });
+
+    expect(response.status).toBe(401);
+    expect(response.body.error).toBe('UNAUTHORIZED');
+  });
+
+  test('GET /openadr/v3/reports should return recent events', async () => {
+    const response = await request(app).get('/openadr/v3/reports');
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveProperty('reports');
+    expect(response.body).toHaveProperty('timestamp');
   });
 
   test('POST /openadr/v3/events should reject when L1 safety lock is active (Phase 5 Alignment)', async () => {
@@ -81,6 +111,7 @@ describe('L2 Grid Signal Service', () => {
 
     const response = await request(app)
       .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
       .send({
         id: 'evt-456',
         type: 'demand-response'
@@ -93,12 +124,47 @@ describe('L2 Grid Signal Service', () => {
     expect(redisClient.get).toHaveBeenCalledWith('l1:safety:lock');
   });
 
-  test('POST /openadr/v3/events should return 400 for invalid payload', async () => {
+  test('POST /openadr/v3/events should return 400 for invalid payload (Ajv Validation)', async () => {
     const response = await request(app)
       .post('/openadr/v3/events')
-      .send({});
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({ id: 'bad-payload' }); // Missing 'type'
 
     expect(response.status).toBe(400);
     expect(response.body.error).toBe('INVALID_PAYLOAD');
+    expect(response.body.message).toBe('Schema validation failed');
+  });
+
+  test('startSafetyConsumer should activate lock for high variance (>15%)', async () => {
+    const { consumer } = require('./index');
+    const { startSafetyConsumer } = require('./index');
+
+    // We need to trigger the consumer.run call
+    await startSafetyConsumer();
+
+    const runMock = consumer.run;
+    const eachMessage = runMock.mock.calls[0][0].eachMessage;
+
+    const highVarianceAlert = {
+      severity: 'WARNING',
+      event_type: 'EFFICIENCY_ALERT',
+      site_id: 'SITE-999',
+      variance_pct: 18.5,
+      vehicle_id: 'V-123',
+      billing_mode: 'PREPAID',
+      vpp_active: true
+    };
+
+    await eachMessage({
+      topic: 'migrid.physics.alerts',
+      message: { value: Buffer.from(JSON.stringify(highVarianceAlert)) }
+    });
+
+    expect(redisClient.setEx).toHaveBeenCalledWith('l1:safety:lock', 900, '1');
+    expect(redisClient.setEx).toHaveBeenCalledWith(
+      'l1:safety:lock:context',
+      900,
+      expect.stringContaining('"reason":"HIGH_VARIANCE_THRESHOLD"')
+    );
   });
 });
