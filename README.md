@@ -6,9 +6,9 @@
 
 ### *The Operating System for Sustainable Fleet Electrification*
 
-[![Version](https://img.shields.io/badge/version-10.0.0-blue.svg)](https://github.com/dcplatforms/Migrid/releases)
+[![Version](https://img.shields.io/badge/version-10.1.0-blue.svg)](https://github.com/dcplatforms/Migrid/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-38%25%20complete-orange.svg)](docs/roadmap.md)
+[![Platform](https://img.shields.io/badge/platform-50%25%20complete-orange.svg)](docs/roadmap.md)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com)
 
@@ -26,7 +26,7 @@ Our unified 11-layer platform spans from the **physics of energy transfer** to t
 
 # MiGrid: The Operating System for Sustainable Fleets
 
-![Version](https://img.shields.io/badge/version-10.0.0--alpha-blue) ![License](https://img.shields.io/badge/license-Apache_2.0-green) ![Status](https://img.shields.io/badge/status-active_development-success)
+![Version](https://img.shields.io/badge/version-10.1.0-blue) ![License](https://img.shields.io/badge/license-Apache_2.0-green) ![Status](https://img.shields.io/badge/status-active_development-success)
 
 **MiGrid** is an open-source, vertically integrated operating system designed to bridge the gap between physical EV assets and digital energy markets. We enable fleets to turn parked vehicles into revenue-generating Virtual Power Plants (VPPs) through physics-verified, standards-compliant orchestration.
 
@@ -444,10 +444,10 @@ Password: demo123
 
 <div align="center">
 
-**Version 10.0.0** • **January 2026** • **38% Complete**
+**Version 10.1.0** • **March 2026** • **50% Complete**
 
 [![Phase](https://img.shields.io/badge/Phase_5-In_Progress-orange.svg)](docs/roadmap.md)
-[![Features](https://img.shields.io/badge/Features-28%2F74-blue.svg)](PLATFORM_STATUS.md)
+[![Features](https://img.shields.io/badge/Features-40%2F80-blue.svg)](PLATFORM_STATUS.md)
 [![Services](https://img.shields.io/badge/Services-8%2F10_Complete-green.svg)](docs/roadmap.md)
 
 </div>
