@@ -90,10 +90,24 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body.error).toBe('UNAUTHORIZED');
   });
 
-  test('GET /openadr/v3/reports should return recent events', async () => {
+  test('GET /openadr/v3/reports should return recent events and market context', async () => {
+    const mockMarketContext = {
+      iso: 'CAISO',
+      price_per_mwh: 45.5,
+      profitability_index: 25.5,
+      updated_at: new Date().toISOString()
+    };
+
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'market:latest:context') return Promise.resolve(JSON.stringify(mockMarketContext));
+      return Promise.resolve(null);
+    });
+
     const response = await request(app).get('/openadr/v3/reports');
     expect(response.status).toBe(200);
     expect(response.body).toHaveProperty('reports');
+    expect(response.body.market_context.iso).toBe('CAISO');
+    expect(response.body.market_context.price_per_mwh).toBe(45.5);
     expect(response.body).toHaveProperty('timestamp');
   });
 
@@ -165,6 +179,36 @@ describe('L2 Grid Signal Service', () => {
       'l1:safety:lock:context',
       900,
       expect.stringContaining('"reason":"HIGH_VARIANCE_THRESHOLD"')
+    );
+  });
+
+  test('startSafetyConsumer should cache market price updates', async () => {
+    const { consumer, startSafetyConsumer } = require('./index');
+    await startSafetyConsumer();
+
+    const eachMessage = consumer.run.mock.calls[0][0].eachMessage;
+
+    const marketUpdate = {
+      iso: 'ERCOT',
+      price_per_mwh: 120.0,
+      profitability_index: 100.0,
+      timestamp: new Date().toISOString()
+    };
+
+    await eachMessage({
+      topic: 'MARKET_PRICE_UPDATED',
+      message: { value: Buffer.from(JSON.stringify(marketUpdate)) }
+    });
+
+    expect(redisClient.setEx).toHaveBeenCalledWith(
+      'market:latest:context',
+      600,
+      expect.stringContaining('"iso":"ERCOT"')
+    );
+    expect(redisClient.setEx).toHaveBeenCalledWith(
+      'market:latest:context',
+      600,
+      expect.stringContaining('"price_per_mwh":120')
     );
   });
 });
