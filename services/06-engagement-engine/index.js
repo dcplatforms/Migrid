@@ -339,7 +339,8 @@ async function processChargingEvent(event) {
             driver_id: driverId,
             action_type: 'green_charging',
             source_value: parseFloat(event.energyDispensedKwh),
-            event_id: sessionId
+            event_id: sessionId,
+            iso: iso
           })
         }]
       });
@@ -379,7 +380,8 @@ async function processChargingEvent(event) {
           driver_id: driverId,
           action_type: 'v2g_discharge',
           source_value: parseFloat(event.energyDischargedKwh || 1.0),
-          event_id: sessionId
+          event_id: sessionId,
+          iso: iso
         })
       }]
     });
@@ -406,28 +408,44 @@ async function handleVPPParticipationUpdate(payload) {
 }
 
 async function handleGridSignal(payload) {
-  console.log(`[L6] Handling Grid Signal for Team Challenge: ${payload.event_id} (${payload.priority})`);
+  const { event_id, priority, site_id } = payload;
+  console.log(`[L6] Handling Grid Signal for Team Challenge: ${event_id} (${priority}) - Site: ${site_id}`);
 
   try {
-    // 1. Bulk record grid response actions for all active charging sessions
-    await pool.query(`
+    // 1. Bulk record grid response actions for active charging sessions at the target site
+    let actionQuery = `
       INSERT INTO driver_actions (driver_id, action_type, metadata)
-      SELECT driver_id, 'grid_response', $1
-      FROM charging_sessions
-      WHERE end_time IS NULL
-    `, [JSON.stringify({ event_id: payload.event_id })]);
+      SELECT cs.driver_id, 'grid_response', $1
+      FROM charging_sessions cs
+      LEFT JOIN chargers chr ON cs.charger_id = chr.id
+      WHERE cs.end_time IS NULL
+    `;
+    const actionParams = [JSON.stringify({ event_id })];
+    if (site_id && site_id !== 'ALL') {
+      actionQuery += ` AND chr.location_id = $2`;
+      actionParams.push(site_id);
+    }
+    await pool.query(actionQuery, actionParams);
 
-    // 2. Optimized Bulk Update for Grid Response Challenges
-    // This single query updates progress, marks completion, and updates leaderboard points
+    // 2. Optimized Bulk Update for Grid Response Challenges with Regional/Fleet targeting
     const results = await pool.query(`
       WITH updated_progress AS (
           INSERT INTO driver_challenge_progress (driver_id, challenge_id, current_count)
           SELECT cs.driver_id, c.id, 1
           FROM charging_sessions cs
+          JOIN drivers d ON cs.driver_id = d.id
+          JOIN fleets f ON d.fleet_id = f.id
+          LEFT JOIN chargers chr ON cs.charger_id = chr.id
           CROSS JOIN challenges c
           WHERE cs.end_time IS NULL
             AND c.challenge_type = 'grid_response'
             AND c.is_active = true
+            -- Regional Targeting
+            AND (c.target_region IS NULL OR c.target_region = f.iso)
+            -- Fleet Targeting
+            AND (c.target_fleet_id IS NULL OR c.target_fleet_id = f.id)
+            -- Site/Grid Signal Targeting
+            AND ($1 = 'ALL' OR chr.location_id = $1)
           ON CONFLICT (driver_id, challenge_id)
           DO UPDATE SET current_count = driver_challenge_progress.current_count + 1,
                         updated_at = NOW()
@@ -450,7 +468,7 @@ async function handleGridSignal(payload) {
       FROM completed_challenges cc
       WHERE l.driver_id = cc.driver_id
       RETURNING cc.driver_id, cc.name, cc.points_reward, cc.challenge_id
-    `);
+    `, [site_id || 'ALL']);
 
     // 3. Handle notifications for drivers who completed a challenge
     for (const row of results.rows) {
@@ -671,21 +689,31 @@ async function checkGridWarriorAchievement(driver_id) {
 }
 
 async function checkSustainabilityChampion(driver_id) {
-  // Optimized single query to check both valid and invalid counts
+  // 100% Compliance Check: Verify at least one valid session for each of the last 30 consecutive days
   const result = await pool.query(`
+    WITH daily_status AS (
+      SELECT
+        DATE_TRUNC('day', start_time) as session_day,
+        BOOL_AND(is_valid) as all_valid
+      FROM charging_sessions
+      WHERE driver_id = $1 AND start_time > NOW() - INTERVAL '30 days'
+      GROUP BY 1
+    )
     SELECT
-      COUNT(*) FILTER (WHERE is_valid = false) as invalid_count,
-      COUNT(*) FILTER (WHERE is_valid = true) as valid_count
-    FROM charging_sessions
-    WHERE driver_id = $1 AND start_time > NOW() - INTERVAL '30 days'
+      COUNT(*) as consecutive_days,
+      BOOL_AND(all_valid) as remains_valid
+    FROM daily_status
   `, [driver_id]);
 
-  const { invalid_count, valid_count } = result.rows[0];
+  if (result.rows.length > 0) {
+    const { consecutive_days, remains_valid } = result.rows[0];
 
-  if (parseInt(invalid_count) === 0 && parseInt(valid_count) >= 30) {
-    const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Sustainability Champion'");
-    if (achievement.rows.length > 0) {
-      await awardAchievement(driver_id, achievement.rows[0].id);
+    // Achievement requires 30 distinct days of charging, all of which must be valid
+    if (parseInt(consecutive_days) >= 30 && remains_valid === true) {
+      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Sustainability Champion'");
+      if (achievement.rows.length > 0) {
+        await awardAchievement(driver_id, achievement.rows[0].id);
+      }
     }
   }
 }
