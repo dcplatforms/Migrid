@@ -9,9 +9,29 @@ const express = require('express');
 const { Pool } = require('pg');
 const { Kafka } = require('kafkajs');
 const redis = require('redis');
+const jwt = require('jsonwebtoken');
+const Ajv = require('ajv');
 
 const app = express();
 const port = process.env.PORT || 3002;
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
+
+const ajv = new Ajv({ allowUnionTypes: true });
+const eventSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string' },
+    type: { type: 'string' },
+    priority: { type: ['string', 'number'] },
+    site_id: { type: 'string' },
+    signals: { type: 'array' },
+    targets: { type: 'array' },
+    intervals: { type: 'array' }
+  },
+  required: ['id', 'type'],
+  additionalProperties: false
+};
+const validateEvent = ajv.compile(eventSchema);
 
 // 1. Database Connection
 const pool = new Pool({
@@ -33,6 +53,26 @@ const redisClient = redis.createClient({
 });
 
 app.use(express.json());
+
+/**
+ * Middleware: Verify JWT token (Zero-Trust Security)
+ */
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'UNAUTHORIZED', message: 'Access token required' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+  });
+};
 
 // Redis safety key constants
 const SAFETY_LOCK_KEY = 'l1:safety:lock';
@@ -72,12 +112,17 @@ app.get('/openadr/v3/reports', async (req, res) => {
 /**
  * Receive OpenADR 3.0 Event (VEN)
  */
-app.post('/openadr/v3/events', async (req, res) => {
+app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
   const event = req.body;
 
-  // Payload validation
-  if (!event || !event.id) {
-    return res.status(400).json({ error: 'INVALID_PAYLOAD', message: 'Event ID is required' });
+  // 0. Payload validation (OpenADR 3.0 Compliance)
+  const valid = validateEvent(event);
+  if (!valid) {
+    return res.status(400).json({
+      error: 'INVALID_PAYLOAD',
+      message: 'Schema validation failed',
+      details: validateEvent.errors
+    });
   }
 
   try {
@@ -110,7 +155,8 @@ app.post('/openadr/v3/events', async (req, res) => {
     // 3. Cache event in Redis for 1 hour
     await redisClient.setEx(`event:${event.id}`, 3600, JSON.stringify(event));
 
-    // 4. Broadcast event to other services via Kafka
+    // 4. Broadcast enriched event to other services via Kafka
+    // Mapping OpenADR 3.0 fields for L3/L8 consumption
     await producer.send({
       topic: 'grid_signals',
       messages: [{
@@ -119,6 +165,9 @@ app.post('/openadr/v3/events', async (req, res) => {
           type: event.type,
           priority: event.priority || 'NORMAL',
           site_id: event.site_id || 'ALL',
+          intervals: event.intervals || [],
+          targets: event.targets || [],
+          signals: event.signals || [],
           payload: event,
           timestamp: new Date().toISOString()
         })

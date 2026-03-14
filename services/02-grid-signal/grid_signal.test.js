@@ -1,5 +1,9 @@
 const request = require('supertest');
+const jwt = require('jsonwebtoken');
 const { app, redisClient, producer } = require('./index');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
+const mockToken = jwt.sign({ fleet_id: 'fleet-123' }, JWT_SECRET);
 
 // Mock Redis (Virtual to bypass environment issues)
 jest.mock('redis', () => ({
@@ -50,15 +54,17 @@ describe('L2 Grid Signal Service', () => {
     jest.clearAllMocks();
   });
 
-  test('POST /openadr/v3/events should accept valid OpenADR event', async () => {
+  test('POST /openadr/v3/events should accept valid OpenADR event with AUTH', async () => {
     redisClient.get.mockResolvedValue(null); // No safety lock
 
     const response = await request(app)
       .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
       .send({
         id: 'evt-123',
         type: 'demand-response',
-        priority: 'HIGH'
+        priority: 'HIGH',
+        signals: [{ type: 'level', value: 1 }]
       });
 
     expect(response.status).toBe(202);
@@ -68,10 +74,20 @@ describe('L2 Grid Signal Service', () => {
       topic: 'grid_signals',
       messages: expect.arrayContaining([
         expect.objectContaining({
-          value: expect.stringContaining('"site_id":"ALL"')
+          value: expect.stringContaining('"site_id":"ALL"'),
+          value: expect.stringContaining('"signals":[{"type":"level","value":1}]')
         })
       ])
     }));
+  });
+
+  test('POST /openadr/v3/events should reject unauthorized request', async () => {
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .send({ id: 'evt-auth', type: 'demand-response' });
+
+    expect(response.status).toBe(401);
+    expect(response.body.error).toBe('UNAUTHORIZED');
   });
 
   test('GET /openadr/v3/reports should return recent events', async () => {
@@ -95,6 +111,7 @@ describe('L2 Grid Signal Service', () => {
 
     const response = await request(app)
       .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
       .send({
         id: 'evt-456',
         type: 'demand-response'
@@ -107,14 +124,15 @@ describe('L2 Grid Signal Service', () => {
     expect(redisClient.get).toHaveBeenCalledWith('l1:safety:lock');
   });
 
-  test('POST /openadr/v3/events should return 400 for invalid payload', async () => {
+  test('POST /openadr/v3/events should return 400 for invalid payload (Ajv Validation)', async () => {
     const response = await request(app)
       .post('/openadr/v3/events')
-      .send({});
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({ id: 'bad-payload' }); // Missing 'type'
 
     expect(response.status).toBe(400);
-    expect(response.status).toBe(400);
     expect(response.body.error).toBe('INVALID_PAYLOAD');
+    expect(response.body.message).toBe('Schema validation failed');
   });
 
   test('startSafetyConsumer should activate lock for high variance (>15%)', async () => {
