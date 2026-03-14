@@ -37,6 +37,17 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
 
             case 'MeterValues':
                 // Standardize and broadcast to Kafka for L1 Physics Engine
+                await publishTelemetry(chargePointId, payload);
+                // Acknowledge
+                ws.send(JSON.stringify([3, messageId, {}]));
+                break;
+
+            case 'StatusNotification':
+                // Forward to L8 Energy Manager (logic placeholder)
+                break;
+
+            case 'MeterValues':
+                // Standardize and broadcast to Kafka for L1 Physics Engine
                 await publishTelemetry(chargePointId, payload, protocol);
                 // Acknowledge
                 ws.send(JSON.stringify([3, messageId, {}]));
