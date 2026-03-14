@@ -33,7 +33,7 @@ The Market Gateway service provides integration with wholesale energy markets (C
 |---------|---------|--------|
 | **CAISO** | Day-ahead, Real-time, Ancillary services | ✅ Live |
 | **PJM** | Day-ahead, Real-time, Regulation, Capacity | ✅ Live |
-| **ERCOT** | Day-ahead, Real-time | 🔄 Planned |
+| **ERCOT** | Day-ahead, Real-time, Ancillary Services | ✅ Live |
 
 ## Architecture
 
@@ -110,7 +110,7 @@ if (current_lmp > threshold_sell) {
 ## Integration Points
 
 - **L3 (VPP Aggregator)**: Available capacity data
-- **L2 (Grid Signal)**: Price signals and events
+- **L2 (Grid Signal)**: Price signals and events; L4 consumes `grid_signals` topic for real-time awareness.
 - **L9 (Commerce)**: Revenue settlement
 - **L10 (Token)**: Driver incentive distribution
 
