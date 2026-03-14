@@ -1,6 +1,11 @@
 const { publishTelemetry, publishSessionEvent } = require('../events/producer');
 const { validateSchema } = require('./validators');
 const config = require('../config');
+const { Pool } = require('pg');
+
+const pool = new Pool({
+    connectionString: config.databaseUrl,
+});
 
 /**
  * Routes and processes incoming OCPP messages.
@@ -32,13 +37,57 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
 
             case 'MeterValues':
                 // Standardize and broadcast to Kafka for L1 Physics Engine
-                await publishTelemetry(chargePointId, payload);
+                await publishTelemetry(chargePointId, payload, protocol);
                 // Acknowledge
+                ws.send(JSON.stringify([3, messageId, {}]));
+                break;
+
+            case 'NotifyBidirEnergyFlow':
+                // Native OCPP 2.1 Bidir Telemetry
+                await publishTelemetry(chargePointId, payload, protocol);
                 ws.send(JSON.stringify([3, messageId, {}]));
                 break;
 
             case 'StatusNotification':
                 // Forward to L8 Energy Manager (logic placeholder)
+                ws.send(JSON.stringify([3, messageId, {}]));
+                break;
+
+            case 'Authorize':
+                // Enhanced for 2.1: Certificate-based PnC or Secure QR
+                console.log(`[L7] Authorize request for ${chargePointId}. ID Token: ${payload.idToken?.idToken}`);
+
+                // Simulate DB check for authorization
+                try {
+                    const result = await pool.query('SELECT status FROM id_tokens WHERE token_value = $1', [payload.idToken?.idToken]);
+                    const status = result.rows[0]?.status || 'Accepted'; // Default to Accepted for demo if not found
+
+                    ws.send(JSON.stringify([3, messageId, {
+                        idTokenInfo: {
+                            status: status,
+                            cacheExpiryDateTime: new Date(Date.now() + 3600000).toISOString()
+                        }
+                    }]));
+                } catch (err) {
+                    console.error('[L7] DB Auth Error', err);
+                    ws.send(JSON.stringify([3, messageId, { idTokenInfo: { status: 'Accepted' } }]));
+                }
+                break;
+
+            case 'CertificateSigned':
+                // ISO 15118-20 PnC: Handle signed certificate from CA
+                console.log(`[L7] Received signed certificate for ${chargePointId}`);
+                ws.send(JSON.stringify([3, messageId, { status: 'Accepted' }]));
+                break;
+
+            case 'GetCertificateStatus':
+                // ISO 15118-20 PnC: OCSP request
+                ws.send(JSON.stringify([3, messageId, { status: 'Accepted' }]));
+                break;
+
+            case 'NotifyDERAlarm':
+                // OCPP 2.1 DER Control: Handle alarms from local solar/BESS
+                console.log(`[L7] DER Alarm received from ${chargePointId}:`, payload.alarms);
                 ws.send(JSON.stringify([3, messageId, {}]));
                 break;
 

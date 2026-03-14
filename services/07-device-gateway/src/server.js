@@ -136,58 +136,68 @@ const wss = new WebSocket.Server({ noServer: true });
 const SUPPORTED_PROTOCOLS = ['ocpp2.1', 'ocpp2.0.1'];
 
 const handleControlSignal = async (topic, payload) => {
-    const { chargePointId, limitKw, schedule } = payload;
-    const connection = localConnections.get(chargePointId);
+    // 1. Verify the Physics: Check for L1 Safety Lock before dispatching control
+    const safetyLock = await redis.get('l1:safety:lock');
+    if (safetyLock === '1' || safetyLock === 'true') {
+        console.warn(`🛑 [L7] Control Signal HALTED. L1 Safety Lock is ACTIVE.`);
+        return;
+    }
 
-    if (connection && connection.ws.readyState === WebSocket.OPEN) {
-        const { ws, protocol } = connection;
-        // 1. Verify the Physics: Check for L1 Safety Lock before dispatching control
-        const safetyLock = await redis.get('l1:safety:lock');
-        if (safetyLock === '1' || safetyLock === 'true') {
-            console.warn(`🛑 [L7] Control Signal HALTED for ${chargePointId}. L1 Safety Lock is ACTIVE.`);
-            return;
+    if (topic === 'migrid.l8.control') {
+        // DLM update for multiple chargers
+        for (const allocation of payload.allocations) {
+            await sendSetChargingProfile(allocation.chargePointId, allocation.limitKw, 'Charge');
         }
-
-        console.log(`[L7] Sending SetChargingProfile to ${chargePointId} (${limitKw}kW) via ${protocol}`);
-
-        let profile;
-        if (protocol === 'ocpp2.1' && topic === 'migrid.l3.v2g') {
-            // OCPP 2.1: Native V2X Profile
-            profile = {
-                id: 101,
-                stackLevel: 1,
-                chargingProfilePurpose: 'V2XProfile',
-                chargingProfileKind: 'Absolute',
-                energyTransferMode: 'Discharge',
-                chargingSchedule: [{
-                    chargingRateUnit: 'W',
-                    chargingSchedulePeriod: [{ startPeriod: 0, limit: Math.abs(limitKw) * 1000 }]
-                }]
-            };
-        } else {
-            // OCPP 2.0.1: Standard/Legacy Profile
-            profile = {
-                id: 101,
-                stackLevel: 0,
-                chargingProfilePurpose: 'TxProfile',
-                chargingProfileKind: 'Absolute',
-                chargingSchedule: [{
-                    chargingRateUnit: 'W',
-                    chargingSchedulePeriod: [{
-                        startPeriod: 0,
-                        limit: (topic === 'migrid.l3.v2g' ? -Math.abs(limitKw) : limitKw) * 1000
-                    }]
-                }]
-            };
-        }
-
-        const call = [2, Date.now().toString(), 'SetChargingProfile', {
-            evseId: 1,
-            chargingProfile: profile
-        }];
-        ws.send(JSON.stringify(call));
+    } else if (topic === 'migrid.l3.v2g') {
+        // Specific V2G/V2X Dispatch
+        await sendSetChargingProfile(payload.chargePointId, payload.limitKw, payload.mode || 'Discharge');
     }
 };
+
+async function sendSetChargingProfile(chargePointId, limitKw, mode) {
+    const connection = localConnections.get(chargePointId);
+    if (!connection || connection.ws.readyState !== WebSocket.OPEN) return;
+
+    const { ws, protocol } = connection;
+    console.log(`[L7] Dispatching ${mode} to ${chargePointId} (${limitKw}kW) via ${protocol}`);
+
+    let profile;
+    if (protocol === 'ocpp2.1') {
+        // Native OCPP 2.1 Profile
+        profile = {
+            id: Math.floor(Math.random() * 1000),
+            stackLevel: mode === 'Discharge' ? 1 : 0,
+            chargingProfilePurpose: mode === 'Discharge' ? 'V2XProfile' : 'TxProfile',
+            chargingProfileKind: 'Absolute',
+            energyTransferMode: mode === 'Discharge' ? 'Discharge' : 'Charge',
+            chargingSchedule: [{
+                chargingRateUnit: 'W',
+                chargingSchedulePeriod: [{ startPeriod: 0, limit: Math.abs(limitKw) * 1000 }]
+            }]
+        };
+    } else {
+        // OCPP 2.0.1 Translation (Legacy "Negative Limit" Hack)
+        profile = {
+            id: Math.floor(Math.random() * 1000),
+            stackLevel: 0,
+            chargingProfilePurpose: 'TxProfile',
+            chargingProfileKind: 'Absolute',
+            chargingSchedule: [{
+                chargingRateUnit: 'W',
+                chargingSchedulePeriod: [{
+                    startPeriod: 0,
+                    limit: (mode === 'Discharge' ? -Math.abs(limitKw) : limitKw) * 1000
+                }]
+            }]
+        };
+    }
+
+    const call = [2, Date.now().toString(), 'SetChargingProfile', {
+        evseId: 1,
+        chargingProfile: profile
+    }];
+    ws.send(JSON.stringify(call));
+}
 
 server.on('upgrade', (request, socket, head) => {
     const urlParts = request.url.split('/');
@@ -203,7 +213,14 @@ server.on('upgrade', (request, socket, head) => {
         : [];
 
     // 3. Negotiate the protocol (find the highest overlap)
-    const negotiatedProtocol = SUPPORTED_PROTOCOLS.find(p => requestedProtocols.includes(p)) || 'ocpp2.0.1';
+    const negotiatedProtocol = SUPPORTED_PROTOCOLS.find(p => requestedProtocols.includes(p));
+
+    if (!negotiatedProtocol) {
+        console.warn(`🛑 [L7] Protocol negotiation failed for ${chargePointId}. Requested: ${requestedProtocols.join(', ')}`);
+        socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+        socket.destroy();
+        return;
+    }
 
     wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit('connection', ws, request, chargePointId, negotiatedProtocol);

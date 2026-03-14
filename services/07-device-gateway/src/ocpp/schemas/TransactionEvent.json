@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "eventType": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "triggerReason": { "type": "string" },
+    "seqNo": { "type": "integer" },
+    "transactionInfo": {
+      "type": "object",
+      "properties": {
+        "transactionId": { "type": "string" }
+      },
+      "required": ["transactionId"]
+    }
+  },
+  "required": ["eventType", "timestamp", "triggerReason", "seqNo", "transactionInfo"]
+}

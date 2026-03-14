@@ -24,9 +24,16 @@ const mockConsumer = {
     disconnect: jest.fn().mockResolvedValue()
 };
 
+const mockProducer = {
+    connect: jest.fn().mockResolvedValue(),
+    send: jest.fn().mockResolvedValue(),
+    disconnect: jest.fn().mockResolvedValue()
+};
+
 jest.mock('kafkajs', () => ({
     Kafka: jest.fn().mockImplementation(() => ({
-        consumer: jest.fn().mockReturnValue(mockConsumer)
+        consumer: jest.fn().mockReturnValue(mockConsumer),
+        producer: jest.fn().mockReturnValue(mockProducer)
     }))
 }), { virtual: true });
 
