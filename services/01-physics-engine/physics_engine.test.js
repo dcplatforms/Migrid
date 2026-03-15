@@ -203,6 +203,73 @@ describe('L1 Physics Engine Alert Handling', () => {
     const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
     expect(alertValue.site_id).toBe('DYNAMIC-SITE-999');
   });
+
+  test('should include v2g_active and iso_region in Kafka alert', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'PHYSICS_FRAUD',
+        session_id: 'session-v2g-1',
+        variance_pct: 16.0,
+        v2g_active: true,
+        iso_region: 'ERCOT',
+        timestamp: '2023-10-27T12:00:00Z'
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.v2g_active).toBe(true);
+    expect(alertValue.iso_region).toBe('ERCOT');
+  });
+
+  test('should include v2g_active and iso_region in Redis safety context', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'PHYSICS_FRAUD',
+        session_id: 'session-v2g-2',
+        variance_pct: 20.0,
+        v2g_active: true,
+        iso_region: 'CAISO'
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"v2g_active":true'));
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"iso_region":"CAISO"'));
+  });
+
+  test('should handle CAPACITY_VIOLATION from aggressive market bid and activate safety lock', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'CAPACITY_VIOLATION',
+        vehicle_id: 'vehicle-ercot-1',
+        vin: 'TEXAS-BATT-001',
+        current_soc: 19.9,
+        threshold: 20.0,
+        vpp_active: true,
+        metadata: { msg: 'BESS Discharge Rejection: SoC < 20% (Aggressive Market Bid Rejected)' }
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    // Verify Safety Lock activation
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock', 900, 'true');
+
+    // Verify Context richness
+    const contextValue = JSON.parse(global.mockRedisSetEx.mock.calls.find(call => call[0] === 'l1:safety:lock:context')[2]);
+    expect(contextValue.event_type).toBe('CAPACITY_VIOLATION');
+    expect(contextValue.severity).toBe('CRITICAL');
+    expect(contextValue.current_soc).toBe(19.9);
+    expect(contextValue.vpp_active).toBe(true);
+
+    // Verify Kafka alert dispatch
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.event_type).toBe('CAPACITY_VIOLATION');
+    expect(alertValue.vin).toBe('TEXAS-BATT-001');
+  });
 });
 
 describe('L1 Physics Engine Digital Twin Sync', () => {
