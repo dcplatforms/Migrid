@@ -39,14 +39,19 @@ class BiddingOptimizer {
    * Checks if any safety lock (L1 Physics or L4 Grid) is active in Redis.
    * @returns {Promise<Object>} Status of safety locks
    */
-  async getSafetyLockStatus() {
+  async getSafetyLockStatus(iso = null) {
     await this.connect();
     const l1Lock = await this.redisClient.get('l1:safety:lock');
     const l4Lock = await this.redisClient.get('l4:grid:lock');
+    let l4RegionalLock = 'false';
+
+    if (iso) {
+      l4RegionalLock = await this.redisClient.get(`l4:grid:lock:${iso.toUpperCase()}`);
+    }
 
     return {
       l1: l1Lock === 'true' || l1Lock === '1',
-      l4: l4Lock === 'true' || l4Lock === '1'
+      l4: l4Lock === 'true' || l4Lock === '1' || l4RegionalLock === 'true' || l4RegionalLock === '1'
     };
   }
 
@@ -57,7 +62,7 @@ class BiddingOptimizer {
    */
   async generateDayAheadBids(iso) {
     // Verify the Physics & Grid signals: Check for safety locks before bidding
-    const locks = await this.getSafetyLockStatus();
+    const locks = await this.getSafetyLockStatus(iso);
 
     if (locks.l1 || locks.l4) {
       if (locks.l1) {
