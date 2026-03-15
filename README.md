@@ -63,9 +63,9 @@ We leverage a modern, cloud-native stack to ensure scalability and adherence to 
 
 ---
 
-## 10-Layer Microservices Architecture
+## 11-Layer Microservices Architecture
 
-The system is decoupled into ten distinct functional planes to separate concerns between physics, markets, and user experience.
+The system is decoupled into eleven distinct functional planes to separate concerns between physics, markets, data science, and user experience.
 
 | Layer | Service | Description | Standards |
 | :--- | :--- | :--- | :--- |
@@ -213,9 +213,10 @@ graph TB
 | **L4** | **Market Gateway** | CAISO/PJM/ERCOT wholesale integration | `3004` | Complete |
 | **L5** | **Driver Experience API** | Mobile backend, auth, smart routing | `3005` | Complete |
 | **L6** | **Engagement Engine** | Gamification, leaderboards, achievements | `3006` | Complete |
+| **L7** | **Device Gateway** | OCPP 2.0.1, ISO 15118, V2G control | `3007` | Complete |
 | **L7** | **Device Gateway** | OCPP 2.1, ISO 15118, V2X control | `3007` | In Progress |
 | **L8** | **Energy Manager** | Dynamic Load Management (DLM) | `3008` | Complete |
-| **L9** | **Commerce Engine** | Billing, tariffs, split-billing | `3009` | In Progress |
+| **L9** | **Commerce Engine** | Billing, tariffs, split-billing | `3009` | Complete |
 | **L10** | **Token Engine** | Web3 rewards via Open-Wallet | `3010` | Complete |
 | **L11** | **ML Engine** | AI forecasting, predictive maintenance | `3011` | Planned Q2 2026 |
 
