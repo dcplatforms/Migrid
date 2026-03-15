@@ -8,6 +8,7 @@ const { Pool } = require('pg');
 const redis = require('redis');
 const jwt = require('jsonwebtoken');
 const { Kafka } = require('kafkajs');
+const { connectProducer, dispatchV2G } = require('./src/events/producer');
 
 const app = express();
 const port = process.env.PORT || 3003;
@@ -251,10 +252,22 @@ const initKafka = async () => {
   }
 };
 
+// V2G Dispatch Endpoint (internal/test)
+app.post('/dispatch/v2g', authenticateToken, async (req, res) => {
+    const { chargePointId, amountKw } = req.body;
+    try {
+        await dispatchV2G(chargePointId, amountKw);
+        res.json({ status: 'DISPATCHED', chargePointId, amountKw });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Start server function
 async function startServer() {
   console.log(`[VPP Aggregator] Running on port ${port}`);
   await redisClient.connect();
+  await connectProducer();
   await initKafka();
 
   // Start background job

@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "timestamp": { "type": "string", "format": "date-time" },
+    "connectorStatus": { "type": "string" },
+    "evseId": { "type": "integer" },
+    "connectorId": { "type": "integer" }
+  },
+  "required": ["timestamp", "connectorStatus", "evseId", "connectorId"]
+}

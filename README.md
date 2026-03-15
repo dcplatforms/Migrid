@@ -6,7 +6,7 @@
 
 ### *The Operating System for Sustainable Fleet Electrification*
 
-[![Version](https://img.shields.io/badge/version-10.0.0-blue.svg)](https://github.com/dcplatforms/Migrid/releases)
+[![Version](https://img.shields.io/badge/version-10.1.0-blue.svg)](https://github.com/dcplatforms/Migrid/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-50%25%20complete-orange.svg)](docs/roadmap.md)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
@@ -26,7 +26,7 @@ Our unified 11-layer platform spans from the **physics of energy transfer** to t
 
 # MiGrid: The Operating System for Sustainable Fleets
 
-![Version](https://img.shields.io/badge/version-10.0.0--alpha-blue) ![License](https://img.shields.io/badge/license-Apache_2.0-green) ![Status](https://img.shields.io/badge/status-active_development-success)
+![Version](https://img.shields.io/badge/version-10.1.0-blue) ![License](https://img.shields.io/badge/license-Apache_2.0-green) ![Status](https://img.shields.io/badge/status-active_development-success)
 
 **MiGrid** is an open-source, vertically integrated operating system designed to bridge the gap between physical EV assets and digital energy markets. We enable fleets to turn parked vehicles into revenue-generating Virtual Power Plants (VPPs) through physics-verified, standards-compliant orchestration.
 
@@ -59,7 +59,7 @@ We leverage a modern, cloud-native stack to ensure scalability and adherence to 
 * **Infrastructure as Code:** Fully containerized deployments via **Docker** and **Kubernetes**, managed with **Terraform**.
 * **Data Layer:** **TimescaleDB** for high-fidelity time-series energy metrics and **PostgreSQL** for relational core data.
 * **Security & Compliance:** Built on a **Zero-Trust Architecture** with mTLS everywhere. We strictly adhere to **NERC CIP** and **IEC 62351** cybersecurity standards.
-* **Interoperability:** Native support for **OpenADR 3.0** (VEN), **OCPP 2.0.1** (Smart Charging), and **ISO 15118** (Plug & Charge).
+* **Interoperability:** Native support for **OpenADR 3.0** (VEN), **OCPP 2.1** (Native V2G/V2X), **OCPP 2.0.1** (Legacy Smart Charging), and **ISO 15118** (Plug & Charge).
 
 ---
 
@@ -75,7 +75,7 @@ The system is decoupled into eleven distinct functional planes to separate conce
 | **L4** | `market-gateway` | Arbitrage engine for CAISO, PJM, and Nord Pool. | FIX / OASIS |
 | **L5** | `driver-dx` | Smart routing, voice commands, and availability. | GraphQL |
 | **L6** | `engagement` | CRM, contextual support, and notifications. | WebSocket |
-| **L7** | `device-gateway` | Hardware abstraction for chargers. | OCPP 2.0.1 / ISO 15118 |
+| **L7** | `device-gateway` | Hardware abstraction for chargers. | OCPP 2.1 / 2.0.1 / ISO 15118 |
 | **L8** | `energy-manager` | Edge-ready dynamic load management (DLM). | Modbus TCP |
 | **L9** | `commerce-engine`| Flexible billing, tariffs, and split-billing. | Stripe / OCPI |
 | **L10**| `token-bridge` | Rewards and staking via Open-Wallet. | ERC-20 / Polygon |
@@ -158,7 +158,7 @@ Built-in Web3 rewards system via [Open-Wallet Framework](https://github.com/Thom
 <summary><b>[▸] Hardware Agnostic</b></summary>
 
 Universal hardware abstraction layer:
-- OCPP 2.0.1 & OCPP 1.6 support
+- OCPP 2.1 (Native V2X), 2.0.1 & 1.6 support
 - ISO 15118 Plug & Charge (in progress)
 - V2G bidirectional control
 - No vendor lock-in
@@ -214,6 +214,7 @@ graph TB
 | **L5** | **Driver Experience API** | Mobile backend, auth, smart routing | `3005` | Complete |
 | **L6** | **Engagement Engine** | Gamification, leaderboards, achievements | `3006` | Complete |
 | **L7** | **Device Gateway** | OCPP 2.0.1, ISO 15118, V2G control | `3007` | Complete |
+| **L7** | **Device Gateway** | OCPP 2.1, ISO 15118, V2X control | `3007` | In Progress |
 | **L8** | **Energy Manager** | Dynamic Load Management (DLM) | `3008` | Complete |
 | **L9** | **Commerce Engine** | Billing, tariffs, split-billing | `3009` | Complete |
 | **L10** | **Token Engine** | Web3 rewards via Open-Wallet | `3010` | Complete |

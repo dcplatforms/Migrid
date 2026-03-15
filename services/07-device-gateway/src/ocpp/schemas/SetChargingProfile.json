@@ -1,0 +1,36 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+        "evseId": { "type": "integer" },
+        "chargingProfile": {
+            "type": "object",
+            "properties": {
+                "id": { "type": "integer" },
+                "stackLevel": { "type": "integer" },
+                "chargingProfilePurpose": { "type": "string" },
+                "chargingProfileKind": { "type": "string" },
+                "chargingSchedule": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "chargingRateUnit": { "type": "string" },
+                            "chargingSchedulePeriod": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "startPeriod": { "type": "integer" },
+                                        "limit": { "type": "number" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "required": ["evseId", "chargingProfile"]
+}
