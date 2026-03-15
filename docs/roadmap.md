@@ -1,14 +1,14 @@
 # MiGrid Product Roadmap
 
 **Version:** 10.1.0
-**Last Updated:** January 23, 2026
+**Last Updated:** March 2026
 **License:** Apache 2.0
 
 ---
 
 ## Executive Summary
 
-MiGrid is being developed across eight major phases spanning Q1 2025 through Q4 2026. The roadmap prioritizes foundational OT infrastructure first, followed by grid integration, market access, driver experience, enterprise scale features, and advancing into AI-powered optimization, global expansion, and advanced grid services.
+MiGrid is being developed across eight major phases spanning Q1 2025 through Q4 2026. The roadmap prioritizes foundational OT infrastructure first, followed by grid integration, market access, driver experience, enterprise scale features, and advancing into the newly established **Layer 11 (ML Engine)** for AI-powered optimization, global expansion, and advanced grid services.
 
 | Phase | Version | Quarter | Focus | Status |
 |-------|---------|---------|-------|--------|
@@ -25,11 +25,11 @@ MiGrid is being developed across eight major phases spanning Q1 2025 through Q4 
 
 ## Current Status (Q1 2026)
 
-**Features Complete:** 38
-**In Progress:** 5
-**Planned:** 31
+**Features Complete:** 40
+**In Progress:** 10
+**Planned:** 30
 
-**Overall Progress:** 51%
+**Overall Progress:** 50%
 
 ---
 
@@ -78,7 +78,7 @@ MiGrid is being developed across eight major phases spanning Q1 2025 through Q4 
 | L2 | OpenADR 3.0 VEN | Virtual End Node implementation per spec | ✅ Complete |
 | L2 | Price Signal Ingestion | Day-ahead and real-time pricing events | ✅ Complete |
 | L2 | Demand Response Events | Load shed, CPP, VPP event handling | ✅ Complete |
-| L7 | OCPP 2.0.1 Upgrade | Smart charging profiles, ISO 15118 prep | ✅ Complete |
+| L7 | OCPP 2.1 Flagship | Native V2X, ISO 15118-20, and Smart Charging | ✅ Complete |
 
 **Technical Approach:**
 - Implement OpenADR 3.0 VEN per `1_OpenADR_3.1.0_20250801.yaml` spec
@@ -185,6 +185,7 @@ MiGrid is being developed across eight major phases spanning Q1 2025 through Q4 
 |-------|---------|-------------|--------|
 | L9 | Commerce Engine | Flexible billing, tariffs, split-billing | ✅ Complete |
 | L7 | ISO 15118 Plug & Charge | Certificate-based vehicle authentication | ✅ Complete |
+| L7 | OCPP 2.1 Migration | Fleet-wide transition to V2X-ready protocol | ✅ Complete |
 | L7 | OCPI 2.2 Roaming | Cross-network charging orchestration | 📋 Planned |
 
 **Technical Approach:**
@@ -217,6 +218,7 @@ MiGrid is being developed across eight major phases spanning Q1 2025 through Q4 
 
 | Layer | Feature | Description | Status |
 |-------|---------|-------------|--------|
+| L11 | ML Engine Core | TensorFlow/MLflow orchestration layer | ✅ Complete |
 | L3 | ML Demand Forecasting | Predict fleet energy demand 24-72h ahead | 📋 Planned |
 | L3 | Dynamic Pricing Optimizer | AI-driven bidding strategy optimization | 📋 Planned |
 | L1 | Predictive Maintenance | Battery health & degradation forecasting | 📋 Planned |
@@ -348,12 +350,13 @@ MiGrid is being developed across eight major phases spanning Q1 2025 through Q4 
 | L4 | Market Gateway | 10 | 4 | 2 | 4 | █████░░░░░ 40% |
 | L5 | Driver DX | 8 | 3 | 1 | 4 | ████░░░░░░ 37% |
 | L6 | Engagement | 4 | 2 | 1 | 1 | █████░░░░░ 50% |
-| L7 | Device Gateway | 9 | 8 | 1 | 0 | █████████░ 88% |
+| L7 | Device Gateway | 10 | 9 | 1 | 0 | █████████░ 90% |
 | L8 | Energy Manager | 8 | 2 | 3 | 3 | ███░░░░░░░ 25% |
 | L9 | Commerce | 5 | 1 | 1 | 3 | ██░░░░░░░░ 20% |
 | L10 | Token Bridge | 6 | 3 | 1 | 2 | █████░░░░░ 50% |
+| L11 | ML Engine | 5 | 1 | 3 | 1 | ██░░░░░░░░ 20% |
 
-**Overall Platform Completion:** 38 of 74 features (51%)
+**Overall Platform Completion:** 40 of 80 features (50%)
 
 ---
 

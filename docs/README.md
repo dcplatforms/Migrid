@@ -4,9 +4,9 @@ This folder contains the GitHub Pages documentation site for MiGrid.
 
 ## Features
 
-- **Platform Demonstration** — Embedded video showing the 10-layer microservices architecture in action
+- **Platform Demonstration** — Embedded video showing the 11-layer microservices architecture in action
 - **Linked Source Navigation** — Direct links to every service, package, and migration in the repository
-- **Standards Reference** — OpenADR 3.0, OCPP 2.0.1, OCPI 2.2, ISO 15118, Modbus documentation
+- **Standards Reference** — OpenADR 3.0, OCPP 2.1 (Flagship), OCPI 2.2, ISO 15118, Modbus documentation
 - **Quick Start Guide** — Get running in under 5 minutes
 - **Responsive Design** — Works on desktop, tablet, and mobile
 

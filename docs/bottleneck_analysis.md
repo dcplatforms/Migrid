@@ -74,4 +74,24 @@ To support our Phase 5 goals of enterprise-scale operation (1,000+ concurrent se
 
 ## Phase 5 Scalability Conclusion
 
-The current L1 architecture is robust for hundreds of sessions. To reach **1,000+ sessions**, we must prioritize **PgBouncer integration** and **Kafka partitioning** to maintain our <500ms latency requirement. Vertical scaling will suffice for the DB (64GB+ RAM) for Phase 5, but Phase 7 (Global Expansion) will require horizontal sharding.
+---
+
+## 5. ML Engine (L11) Data Ingestion & Inference
+
+### Current State
+- L11 requires high-frequency timeseries data from L1-L10.
+- Models are trained on historical data stored in TimescaleDB.
+
+### Risk
+- Bulk data extraction for training could degrade real-time L1 audit performance.
+- Inference latency for dynamic bidding (L4) must be <100ms to stay within market windows.
+
+### Recommendation
+- **Read Replicas:** Direct all L11 training queries to a read-only PostgreSQL replica to protect the primary production database.
+- **Feature Store:** Implement a lightweight feature store (Redis-backed) for pre-computed ML inputs to minimize inference-time database lookups.
+
+---
+
+## Phase 5 Scalability Conclusion
+
+The current architecture is robust for hundreds of sessions. To reach **1,000+ sessions** and support the **L11: ML Engine**, we must prioritize **PgBouncer integration**, **Kafka partitioning**, and **Read Replicas** for ML training to maintain our <500ms latency requirement. Vertical scaling will suffice for the DB (64GB+ RAM) for Phase 5, but Phase 7 (Global Expansion) will require horizontal sharding.

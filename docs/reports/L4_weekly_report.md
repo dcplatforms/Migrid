@@ -4,7 +4,7 @@
 
 ## L4 Health & Dependency Report
 
-The L4 Market Gateway remains in a "Healthy" state, maintaining a sub-50ms responsiveness for capacity queries and robust safety integration with L1. Recent updates across the 10-layer stack have been analyzed for impact:
+The L4 Market Gateway remains in a "Healthy" state, maintaining a sub-50ms responsiveness for capacity queries and robust safety integration with L1. Recent updates across the 11-layer stack have been analyzed for impact:
 
 *   **L1 (Physics Engine) Integration**: L1 now broadcasts enriched alerts with `billing_mode` and `vpp_active` metadata. L4's `BiddingOptimizer` successfully utilizes the unified `l1:safety:lock` and parses the `l1:safety:lock:context` to provide detailed reasoning (including Billing Mode and VPP status) when bidding is halted.
 *   **L2 (Grid Signal) Alignment**: L2's OpenADR 3.0 implementation now broadcasts `grid_signals` events. L4 is prepared to handle the resulting dispatch instructions from L3 as the "Market Execution" layer.
