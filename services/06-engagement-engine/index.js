@@ -7,6 +7,7 @@ const express = require('express');
 const http = require('http');
 const { Pool } = require('pg');
 const { Kafka } = require('kafkajs');
+const redis = require('redis');
 const jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
 
@@ -22,6 +23,11 @@ const port = process.env.PORT || 3006;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://localhost/migrid'
+});
+
+// Redis connection for market price context and caching
+const redisClient = redis.createClient({
+  url: process.env.REDIS_URL || 'redis://localhost:6379'
 });
 
 app.use(express.json());
@@ -80,7 +86,7 @@ async function initKafka() {
   await producer.connect();
 
   // Listen for both direct events and session completions
-  await consumer.subscribe({ topics: ['charging_events', 'SESSION_COMPLETED', 'vpp_participation_updates', 'grid_signals'], fromBeginning: false });
+  await consumer.subscribe({ topics: ['charging_events', 'SESSION_COMPLETED', 'vpp_participation_updates', 'grid_signals', 'MARKET_PRICE_UPDATED'], fromBeginning: false });
 
   await consumer.run({
     eachMessage: async ({ topic, message }) => {
@@ -94,6 +100,10 @@ async function initKafka() {
           await handleVPPParticipationUpdate(payload);
         } else if (topic === 'grid_signals') {
           await handleGridSignal(payload);
+        } else if (topic === 'MARKET_PRICE_UPDATED') {
+          const { iso, price_per_mwh, profitability_index } = payload;
+          await redisClient.hSet('market:profitability', iso, profitability_index.toString());
+          console.log(`[Engagement] Updated Redis Market Profitability for ${iso}: $${profitability_index}/MWh`);
         }
       } catch (error) {
         console.error('[Engagement] Error processing Kafka message:', error);
@@ -296,6 +306,7 @@ app.get('/challenges/active', authenticateToken, async (req, res) => {
 async function processChargingEvent(event) {
   const driverId = event.driverId || event.driver_id;
   const sessionId = event.sessionId || event.session_id;
+  const type = event.type || (event.energyDispensedKwh ? 'session_update' : 'unknown');
 
   // Get regional context (ISO) for the driver
   const driverData = await pool.query('SELECT f.iso FROM drivers d JOIN fleets f ON d.fleet_id = f.id WHERE d.id = $1', [driverId]);
@@ -311,11 +322,17 @@ async function processChargingEvent(event) {
     }
   }
 
-  if ((event.type === 'session_completed' || event.energyDispensedKwh) && isValid) {
-    await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'session_completed', JSON.stringify({ sessionId, energyDispensedKwh: event.energyDispensedKwh })]);
-    await checkFirstSessionAchievement(driverId);
-    await updateStreaks(driverId);
-    await checkSustainabilityChampion(driverId);
+  if ((type === 'SESSION_COMPLETED' || type === 'session_completed' || event.energyDispensedKwh) && isValid) {
+    const isFinal = type === 'SESSION_COMPLETED' || type === 'session_completed';
+
+    if (isFinal) {
+      await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'session_completed', JSON.stringify({ sessionId, energyDispensedKwh: event.energyDispensedKwh })]);
+      await checkFirstSessionAchievement(driverId);
+      await updateStreaks(driverId);
+      await checkSustainabilityChampion(driverId);
+      // Market Master is awarded only on session completion to ensure it's session-based
+      await checkMarketMasterAchievement(driverId, iso, sessionId);
+    }
 
     // Award Green Driver Score points (Example: 10 points per kWh if valid)
     if (event.energyDispensedKwh) {
@@ -395,6 +412,35 @@ async function processChargingEvent(event) {
   await checkPlugAndChargeAchievement(driverId);
 }
 
+async function checkMarketMasterAchievement(driverId, iso, sessionId) {
+  try {
+    const profitabilityStr = await redisClient.hGet('market:profitability', iso);
+    const profitability = parseFloat(profitabilityStr || '0');
+
+    // High Profitability Threshold: $50/MWh
+    if (profitability > 50) {
+      console.log(`[L6] High profitability charging detected in ${iso} ($${profitability}/MWh) for session ${sessionId}.`);
+
+      await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
+        [driverId, 'high_profitability_charge', JSON.stringify({ iso, profitability, sessionId })]);
+
+      const count = await pool.query(`
+        SELECT COUNT(*) FROM driver_actions
+        WHERE driver_id = $1 AND action_type = 'high_profitability_charge'
+      `, [driverId]);
+
+      if (parseInt(count.rows[0].count) >= 5) {
+        const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Market Master'");
+        if (achievement.rows.length > 0) {
+          await awardAchievement(driverId, achievement.rows[0].id);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking Market Master achievement:', error);
+  }
+}
+
 async function handleVPPParticipationUpdate(payload) {
   const { driver_id, vpp_participation_active } = payload;
   if (vpp_participation_active) {
@@ -412,40 +458,38 @@ async function handleGridSignal(payload) {
   console.log(`[L6] Handling Grid Signal for Team Challenge: ${event_id} (${priority}) - Site: ${site_id}`);
 
   try {
-    // 1. Bulk record grid response actions for active charging sessions at the target site
-    let actionQuery = `
-      INSERT INTO driver_actions (driver_id, action_type, metadata)
-      SELECT cs.driver_id, 'grid_response', $1
-      FROM charging_sessions cs
-      LEFT JOIN chargers chr ON cs.charger_id = chr.id
-      WHERE cs.end_time IS NULL
-    `;
-    const actionParams = [JSON.stringify({ event_id })];
-    if (site_id && site_id !== 'ALL') {
-      actionQuery += ` AND chr.location_id = $2`;
-      actionParams.push(site_id);
-    }
-    await pool.query(actionQuery, actionParams);
-
-    // 2. Optimized Bulk Update for Grid Response Challenges with Regional/Fleet targeting
+    // 1. Fully Bulked Database Operation:
+    // This query handles:
+    // - Recording 'grid_response' action for all target drivers
+    // - Updating challenge progress for all target drivers
+    // - Awarding points for completed challenges
+    // - Awarding 'Grid Warrior' and 'ERCOT Pioneer' achievements in bulk
+    // - Returning data needed for notifications
     const results = await pool.query(`
-      WITH updated_progress AS (
-          INSERT INTO driver_challenge_progress (driver_id, challenge_id, current_count)
-          SELECT cs.driver_id, c.id, 1
+      WITH target_drivers AS (
+          SELECT cs.driver_id, f.iso, f.id as fleet_id
           FROM charging_sessions cs
           JOIN drivers d ON cs.driver_id = d.id
           JOIN fleets f ON d.fleet_id = f.id
           LEFT JOIN chargers chr ON cs.charger_id = chr.id
-          CROSS JOIN challenges c
           WHERE cs.end_time IS NULL
-            AND c.challenge_type = 'grid_response'
-            AND c.is_active = true
-            -- Regional Targeting
-            AND (c.target_region IS NULL OR c.target_region = f.iso)
-            -- Fleet Targeting
-            AND (c.target_fleet_id IS NULL OR c.target_fleet_id = f.id)
-            -- Site/Grid Signal Targeting
             AND ($1 = 'ALL' OR chr.location_id = $1)
+      ),
+      inserted_actions AS (
+          INSERT INTO driver_actions (driver_id, action_type, metadata)
+          SELECT driver_id, 'grid_response', $2
+          FROM target_drivers
+          RETURNING driver_id
+      ),
+      updated_progress AS (
+          INSERT INTO driver_challenge_progress (driver_id, challenge_id, current_count)
+          SELECT td.driver_id, c.id, 1
+          FROM target_drivers td
+          CROSS JOIN challenges c
+          WHERE c.challenge_type = 'grid_response'
+            AND c.is_active = true
+            AND (c.target_region IS NULL OR c.target_region = td.iso)
+            AND (c.target_fleet_id IS NULL OR c.target_fleet_id = td.fleet_id)
           ON CONFLICT (driver_id, challenge_id)
           DO UPDATE SET current_count = driver_challenge_progress.current_count + 1,
                         updated_at = NOW()
@@ -461,39 +505,81 @@ async function handleGridSignal(payload) {
             AND dcp.challenge_id = up.challenge_id
             AND up.current_count >= c.required_count
           RETURNING dcp.driver_id, c.points_reward, c.name, dcp.challenge_id
+      ),
+      grid_counts AS (
+          SELECT da.driver_id, COUNT(*) as action_count
+          FROM driver_actions da
+          WHERE da.action_type = 'grid_response'
+          AND da.driver_id IN (SELECT driver_id FROM target_drivers)
+          GROUP BY da.driver_id
+      ),
+      new_achievements AS (
+          SELECT gc.driver_id, a.id as achievement_id, a.name, a.points, td.iso
+          FROM grid_counts gc
+          JOIN target_drivers td ON gc.driver_id = td.driver_id
+          CROSS JOIN achievements a
+          WHERE (
+              (a.name = 'Grid Warrior' AND gc.action_count >= 5) OR
+              (a.name = 'ERCOT Pioneer' AND td.iso = 'ERCOT' AND gc.action_count >= 1)
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM driver_achievements da2
+              WHERE da2.driver_id = gc.driver_id AND da2.achievement_id = a.id
+          )
+      ),
+      inserted_achievements AS (
+          INSERT INTO driver_achievements (driver_id, achievement_id)
+          SELECT driver_id, achievement_id FROM new_achievements
+          ON CONFLICT DO NOTHING
+          RETURNING driver_id, achievement_id
+      ),
+      points_award AS (
+          UPDATE leaderboard l
+          SET total_points = l.total_points + COALESCE(cc.points_reward, 0) + COALESCE(na.points, 0),
+              updated_at = NOW()
+          FROM target_drivers td
+          LEFT JOIN (SELECT driver_id, SUM(points_reward) as points_reward FROM completed_challenges GROUP BY 1) cc ON td.driver_id = cc.driver_id
+          LEFT JOIN (SELECT driver_id, SUM(points) as points FROM new_achievements GROUP BY 1) na ON td.driver_id = na.driver_id
+          WHERE l.driver_id = td.driver_id
+            AND (cc.points_reward IS NOT NULL OR na.points IS NOT NULL)
       )
-      UPDATE leaderboard l
-      SET total_points = l.total_points + cc.points_reward,
-          updated_at = NOW()
-      FROM completed_challenges cc
-      WHERE l.driver_id = cc.driver_id
-      RETURNING cc.driver_id, cc.name, cc.points_reward, cc.challenge_id
-    `, [site_id || 'ALL']);
+      SELECT
+          td.driver_id,
+          td.iso,
+          COALESCE(JSON_AGG(DISTINCT cc.name) FILTER (WHERE cc.name IS NOT NULL), '[]') as completed_challenges,
+          COALESCE(JSON_AGG(DISTINCT na.name) FILTER (WHERE na.name IS NOT NULL), '[]') as unlocked_achievements
+      FROM target_drivers td
+      LEFT JOIN completed_challenges cc ON td.driver_id = cc.driver_id
+      LEFT JOIN new_achievements na ON td.driver_id = na.driver_id
+      GROUP BY td.driver_id, td.iso
+    `, [site_id || 'ALL', JSON.stringify({ event_id })]);
 
-    // 3. Handle notifications for drivers who completed a challenge
+    // 2. Optimized Notification Handling
     for (const row of results.rows) {
-      const notification = {
-        driver_id: row.driver_id,
-        type: 'challenge_completed',
-        title: 'Grid Challenge Completed! 🎖️',
-        body: `You've earned ${row.points_reward} points for your grid response.`,
-        data: { challenge_id: row.challenge_id }
-      };
+      const challenges = JSON.parse(row.completed_challenges);
+      const achievements = JSON.parse(row.unlocked_achievements);
 
-      await producer.send({
-        topic: 'engagement_notifications',
-        messages: [{ key: row.driver_id, value: JSON.stringify(notification) }]
-      });
+      for (const chalName of challenges) {
+        const notification = {
+          driver_id: row.driver_id,
+          type: 'challenge_completed',
+          title: 'Challenge Completed! 🎖️',
+          body: `Congratulations! You've completed the '${chalName}' challenge.`,
+        };
+        await producer.send({ topic: 'engagement_notifications', messages: [{ key: row.driver_id, value: JSON.stringify(notification) }] });
+        io.to(`driver:${row.driver_id}`).emit('notification', notification);
+      }
 
-      io.to(`driver:${row.driver_id}`).emit('notification', notification);
-    }
-
-    // 4. Trigger Achievement check (Grid Warrior)
-    // For large scale, we should ideally also do this in bulk, but let's at least process
-    // active drivers. For now, we'll iterate through the activeSessions to check achievements.
-    const activeSessions = await pool.query("SELECT driver_id FROM charging_sessions WHERE end_time IS NULL");
-    for (const session of activeSessions.rows) {
-      await checkGridWarriorAchievement(session.driver_id);
+      for (const achName of achievements) {
+        const notification = {
+          driver_id: row.driver_id,
+          type: 'achievement_unlocked',
+          title: 'Achievement Unlocked! 🏆',
+          body: `You've earned the '${achName}' badge!`,
+        };
+        await producer.send({ topic: 'engagement_notifications', messages: [{ key: row.driver_id, value: JSON.stringify(notification) }] });
+        io.to(`driver:${row.driver_id}`).emit('notification', notification);
+      }
     }
 
     await recalculateRanks();
@@ -510,6 +596,21 @@ async function checkFirstSessionAchievement(driver_id) {
 
   if (parseInt(count.rows[0].count) === 1) {
     const achievement = await pool.query('SELECT id FROM achievements WHERE name = \'Early Adopter\'');
+    if (achievement.rows.length > 0) {
+      await awardAchievement(driver_id, achievement.rows[0].id);
+    }
+  }
+}
+
+async function checkErcotPioneerAchievement(driver_id) {
+  // Requirement: Participate in at least 1 grid response event in ERCOT
+  const count = await pool.query(`
+    SELECT COUNT(*) FROM driver_actions
+    WHERE driver_id = $1 AND action_type = 'grid_response'
+  `, [driver_id]);
+
+  if (parseInt(count.rows[0].count) >= 1) {
+    const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'ERCOT Pioneer'");
     if (achievement.rows.length > 0) {
       await awardAchievement(driver_id, achievement.rows[0].id);
     }
@@ -855,18 +956,31 @@ async function recalculateRanks() {
 }
 
 // Start server
-server.listen(port, () => {
-  console.log(`[Engagement Engine] Running on port ${port}`);
-  console.log('[Engagement Engine] Features: Leaderboards, Achievements, WebSockets');
-});
+async function start() {
+  try {
+    await redisClient.connect();
+    console.log('✅ [Engagement Engine] Connected to Redis');
+
+    server.listen(port, () => {
+      console.log(`[Engagement Engine] Running on port ${port}`);
+      console.log('[Engagement Engine] Features: Leaderboards, Achievements, WebSockets');
+    });
+  } catch (err) {
+    console.error('❌ [Engagement Engine] Startup error:', err);
+    process.exit(1);
+  }
+}
+
+start();
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('[Engagement Engine] Shutting down gracefully...');
   await consumer.disconnect();
   await producer.disconnect();
+  await redisClient.quit();
   pool.end();
   process.exit(0);
 });
 
-module.exports = { app, server, pool };
+module.exports = { app, server, pool, redisClient };
