@@ -19,6 +19,19 @@ jest.mock('kafkajs', () => {
   };
 });
 
+// Mock redis
+jest.mock('redis', () => {
+  return {
+    createClient: jest.fn().mockImplementation(() => ({
+      connect: jest.fn().mockResolvedValue(),
+      on: jest.fn(),
+      hSet: jest.fn().mockResolvedValue(),
+      hGet: jest.fn().mockResolvedValue('0'),
+      quit: jest.fn().mockResolvedValue(),
+    })),
+  };
+});
+
 // Mock pg
 jest.mock('pg', () => {
   const mPool = {
