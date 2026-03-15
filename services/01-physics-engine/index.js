@@ -88,6 +88,8 @@ async function handlePhysicsAlert(msg) {
         current_soc: payload.current_soc,
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
+      v2g_active: payload.v2g_active,
+      iso_region: payload.iso_region,
         locked_at: new Date().toISOString()
       };
       await redisClient.setEx(SAFETY_LOCK_CONTEXT_KEY, SAFETY_LOCK_TTL, JSON.stringify(context));
@@ -120,6 +122,8 @@ async function handlePhysicsAlert(msg) {
       actual: payload.actual,
       billing_mode: payload.billing_mode,
       vpp_active: payload.vpp_active,
+      v2g_active: payload.v2g_active,
+      iso_region: payload.iso_region,
       timestamp: payload.timestamp || new Date().toISOString(),
       source_layer: 'L1',
       severity: severity
