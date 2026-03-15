@@ -74,8 +74,33 @@ describe('L2 Grid Signal Service', () => {
       topic: 'grid_signals',
       messages: expect.arrayContaining([
         expect.objectContaining({
-          value: expect.stringContaining('"site_id":"ALL"'),
-          value: expect.stringContaining('"signals":[{"type":"level","value":1}]')
+          value: expect.stringMatching(/"site_id":"ALL"/)
+        })
+      ])
+    }));
+    const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
+    expect(sentValue.signals).toEqual([{ type: 'level', value: 1 }]);
+    expect(sentValue.v2g_requested).toBe(false);
+  });
+
+  test('POST /openadr/v3/events should detect V2G requests', async () => {
+    redisClient.get.mockResolvedValue(null);
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-v2g',
+        type: 'discharge',
+        signals: [{ type: 'level', value: -1 }]
+      });
+
+    expect(response.status).toBe(202);
+    expect(producer.send).toHaveBeenCalledWith(expect.objectContaining({
+      topic: 'grid_signals',
+      messages: expect.arrayContaining([
+        expect.objectContaining({
+          value: expect.stringContaining('"v2g_requested":true')
         })
       ])
     }));
@@ -108,7 +133,25 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body).toHaveProperty('reports');
     expect(response.body.market_context.iso).toBe('CAISO');
     expect(response.body.market_context.price_per_mwh).toBe(45.5);
+    expect(response.body.safety_lock.active).toBe(false);
     expect(response.body).toHaveProperty('timestamp');
+  });
+
+  test('GET /openadr/v3/reports should return safety context when locked', async () => {
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l1:safety:lock') return Promise.resolve('1');
+      if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({
+        event_type: 'PHYSICS_FRAUD',
+        severity: 'FRAUD',
+        iso_region: 'ERCOT'
+      }));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app).get('/openadr/v3/reports');
+    expect(response.status).toBe(200);
+    expect(response.body.safety_lock.active).toBe(true);
+    expect(response.body.safety_lock.context.iso_region).toBe('ERCOT');
   });
 
   test('POST /openadr/v3/events should reject when L1 safety lock is active (Phase 5 Alignment)', async () => {
@@ -166,7 +209,9 @@ describe('L2 Grid Signal Service', () => {
       variance_pct: 18.5,
       vehicle_id: 'V-123',
       billing_mode: 'PREPAID',
-      vpp_active: true
+      vpp_active: true,
+      v2g_active: true,
+      iso_region: 'CAISO'
     };
 
     await eachMessage({
@@ -179,6 +224,16 @@ describe('L2 Grid Signal Service', () => {
       'l1:safety:lock:context',
       900,
       expect.stringContaining('"reason":"HIGH_VARIANCE_THRESHOLD"')
+    );
+    expect(redisClient.setEx).toHaveBeenCalledWith(
+      'l1:safety:lock:context',
+      900,
+      expect.stringContaining('"iso_region":"CAISO"')
+    );
+    expect(redisClient.setEx).toHaveBeenCalledWith(
+      'l1:safety:lock:context',
+      900,
+      expect.stringContaining('"v2g_active":true')
     );
   });
 
