@@ -158,4 +158,23 @@ describe('BiddingOptimizer', () => {
     expect(activeBids[0]).toContain('38=0.50'); // Should bid
     expect(activeBids[0]).toContain('44=50.00');
   });
+
+  test('should return no bids when L4 grid lock is active', async () => {
+    mockRedisClient.get.mockImplementation((key) => {
+      if (key === 'l4:grid:lock') return Promise.resolve('true');
+      if (key === 'l1:safety:lock') return Promise.resolve('false');
+      if (key === 'vpp:capacity:available') return Promise.resolve('500');
+      return Promise.resolve(null);
+    });
+
+    const forecasts = [
+      { location: 'LOC1', price_per_mwh: 50.00, timestamp: new Date() }
+    ];
+    mockPricingService.getDayAheadForecast.mockResolvedValue(forecasts);
+
+    const bids = await optimizer.generateDayAheadBids('CAISO');
+
+    expect(bids).toHaveLength(0);
+    expect(mockRedisClient.get).toHaveBeenCalledWith('l4:grid:lock');
+  });
 });

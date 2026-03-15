@@ -19,15 +19,39 @@ async function connectProducer() {
 
 /**
  * Normalizes raw OCPP data and broadcasts to internal MiGrid services.
+ * Up-converts telemetry to standardized OCPP 2.1-style internal schema.
  */
-async function publishTelemetry(chargePointId, meterValuesPayload) {
-    const event = {
-        chargePointId,
-        timestamp: new Date().toISOString(),
-        // Normalize nested OCPP 2.0.1 payload into flat MiGrid schema
-        energyActiveImport: extractMeterValue(meterValuesPayload, 'Energy.Active.Import.Register'),
-        powerActiveImport: extractMeterValue(meterValuesPayload, 'Power.Active.Import')
-    };
+async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
+    let event;
+
+    if (protocol === 'ocpp2.1' && payload.bidirEnergyFlowData) {
+        // Native 2.1 NotifyBidirEnergyFlow
+        event = {
+            chargePointId,
+            timestamp: payload.timestamp || new Date().toISOString(),
+            energyActiveImport: extractBidirValue(payload.bidirEnergyFlowData, 'Energy.Active.Import.Register'),
+            energyActiveExport: extractBidirValue(payload.bidirEnergyFlowData, 'Energy.Active.Export.Register'),
+            powerActiveImport: extractBidirValue(payload.bidirEnergyFlowData, 'Power.Active.Import'),
+            powerActiveExport: extractBidirValue(payload.bidirEnergyFlowData, 'Power.Active.Export'),
+            protocol: 'ocpp2.1'
+        };
+    } else {
+        // Up-convert legacy MeterValues to 2.1 schema
+        const importEnergy = extractMeterValue(payload, 'Energy.Active.Import.Register');
+        const importPower = extractMeterValue(payload, 'Power.Active.Import');
+        const exportEnergy = extractMeterValue(payload, 'Energy.Active.Export.Register');
+        const exportPower = extractMeterValue(payload, 'Power.Active.Export');
+
+        event = {
+            chargePointId,
+            timestamp: new Date().toISOString(),
+            energyActiveImport: importEnergy,
+            energyActiveExport: exportEnergy,
+            powerActiveImport: importPower,
+            powerActiveExport: exportPower,
+            protocol: 'ocpp2.0.1_upconverted'
+        };
+    }
 
     await producer.send({
         topic: 'migrid.l1.telemetry',
@@ -49,19 +73,21 @@ async function publishSessionEvent(type, payload) {
 }
 
 function extractMeterValue(payload, measurand) {
-    // Logic to parse the complex OCPP 2.0.1 MeterValues array
-    // Returns the normalized numeric value
-    // This is a simplified implementation for Phase 5
     if (!payload || !payload.meterValue) return 0.0;
-
     for (const mv of payload.meterValue) {
         for (const rv of mv.sampledValue) {
-            if (rv.measurand === measurand) {
+            if (rv.measurand === measurand || (measurand === 'Energy.Active.Import.Register' && rv.measurand === undefined)) {
                 return parseFloat(rv.value);
             }
         }
     }
     return 0.0;
+}
+
+function extractBidirValue(bidirEnergyFlowData, measurand) {
+    if (!bidirEnergyFlowData) return 0.0;
+    const entry = bidirEnergyFlowData.find(d => d.measurand === measurand);
+    return entry ? parseFloat(entry.value) : 0.0;
 }
 
 module.exports = { connectProducer, publishTelemetry, publishSessionEvent };

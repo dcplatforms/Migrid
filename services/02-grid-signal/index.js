@@ -41,10 +41,17 @@ const pool = new Pool({
 // 2. Kafka Connection
 const kafka = new Kafka({
   clientId: 'grid-signal',
-  brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(',')
+  brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
+  retry: {
+    initialRetryTime: 100,
+    retries: 8
+  }
 });
 
-const producer = kafka.producer();
+const producer = kafka.producer({
+  allowAutoTopicCreation: true,
+  transactionTimeout: 30000
+});
 const consumer = kafka.consumer({ groupId: 'grid-signal-group' });
 
 // 3. Redis Connection
@@ -93,14 +100,21 @@ app.get('/health', (req, res) => {
 /**
  * Get OpenADR 3.0 Reports (VEN)
  * Returns recent grid events for compliance and auditing
+ * Enhanced with Market Context from L4
  */
 app.get('/openadr/v3/reports', async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT event_id, event_type, status, received_at FROM grid_events ORDER BY received_at DESC LIMIT 50'
     );
+
+    // Fetch latest market context from Redis (provided by L4)
+    const marketContextRaw = await redisClient.get('market:latest:context');
+    const marketContext = marketContextRaw ? JSON.parse(marketContextRaw) : null;
+
     res.json({
       reports: result.rows,
+      market_context: marketContext,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -156,23 +170,29 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
     await redisClient.setEx(`event:${event.id}`, 3600, JSON.stringify(event));
 
     // 4. Broadcast enriched event to other services via Kafka
-    // Mapping OpenADR 3.0 fields for L3/L8 consumption
-    await producer.send({
-      topic: 'grid_signals',
-      messages: [{
-        value: JSON.stringify({
-          event_id: event.id,
-          type: event.type,
-          priority: event.priority || 'NORMAL',
-          site_id: event.site_id || 'ALL',
-          intervals: event.intervals || [],
-          targets: event.targets || [],
-          signals: event.signals || [],
-          payload: event,
-          timestamp: new Date().toISOString()
-        })
-      }]
-    });
+    // Enhanced resilience: Wrap in try-catch with retry awareness
+    try {
+      await producer.send({
+        topic: 'grid_signals',
+        messages: [{
+          value: JSON.stringify({
+            event_id: event.id,
+            type: event.type,
+            priority: event.priority || 'NORMAL',
+            site_id: event.site_id || 'ALL',
+            intervals: event.intervals || [],
+            targets: event.targets || [],
+            signals: event.signals || [],
+            payload: event,
+            timestamp: new Date().toISOString()
+          })
+        }]
+      });
+    } catch (kafkaError) {
+      console.error(`❌ [L2] Kafka Broadcast Failed for event ${event.id}:`, kafkaError.message);
+      // We still return 202 to the utility as the event is saved in our DB,
+      // but we log the internal broadcast failure for L3/L4/L8.
+    }
 
     res.status(202).json({
       status: 'RECEIVED',
@@ -186,38 +206,49 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
 });
 
 /**
- * Listen for L1 Physics Alerts to manage Safety Lock
- * Aligned with Phase 5: Handling granular metadata and unified safety lock
+ * Listen for cross-layer Kafka events (L1 Safety & L4 Market)
+ * Aligned with Phase 5: Forward engineering for market-aware reporting
  */
 async function startSafetyConsumer() {
   await consumer.connect();
-  await consumer.subscribe({ topic: 'migrid.physics.alerts', fromBeginning: false });
+  await consumer.subscribe({ topics: ['migrid.physics.alerts', 'MARKET_PRICE_UPDATED'], fromBeginning: false });
 
   await consumer.run({
     eachMessage: async ({ topic, partition, message }) => {
-      const alert = JSON.parse(message.value.toString());
+      const payload = JSON.parse(message.value.toString());
 
-      // PHYSICS RULE: Trigger lock if CRITICAL/FRAUD OR if variance exceeds 15%
-      const isCritical = alert.severity === 'CRITICAL' || alert.severity === 'FRAUD';
-      const isHighVariance = alert.variance_pct > 15;
+      if (topic === 'migrid.physics.alerts') {
+        // PHYSICS RULE: Trigger lock if CRITICAL/FRAUD OR if variance exceeds 15%
+        const isCritical = payload.severity === 'CRITICAL' || payload.severity === 'FRAUD';
+        const isHighVariance = payload.variance_pct > 15;
 
-      if (isCritical || isHighVariance) {
-        const reason = isHighVariance ? 'HIGH_VARIANCE_THRESHOLD' : alert.event_type;
-        console.error(`🚨 [L2] L1 SAFETY ALERT: ${reason} on Site ${alert.site_id}. Locking grid dispatch.`);
+        if (isHighVariance || isCritical) {
+          const reason = isHighVariance ? 'HIGH_VARIANCE_THRESHOLD' : payload.event_type;
+          console.error(`🚨 [L2] L1 SAFETY ALERT: ${reason} on Site ${payload.site_id}. Locking grid dispatch.`);
 
-        // Detailed logging for engineering audit
-        console.log(`[L2 Audit] Metadata: Vehicle=${alert.vehicle_id}, VIN=${alert.vin}, SoC=${alert.current_soc}%, Variance=${alert.variance_pct}%, Billing=${alert.billing_mode}, VPP_Active=${alert.vpp_active}`);
+          // Detailed logging for engineering audit
+          console.log(`[L2 Audit] Metadata: Vehicle=${payload.vehicle_id}, VIN=${payload.vin}, SoC=${payload.current_soc}%, Variance=${payload.variance_pct}%, Billing=${payload.billing_mode}, VPP_Active=${payload.vpp_active}`);
 
-        // Unified Safety Lock: Set to '1' for L4 compatibility, with 15m TTL
-        await redisClient.setEx(SAFETY_LOCK_KEY, 900, '1');
+          // Unified Safety Lock: Set to '1' for L4 compatibility, with 15m TTL
+          await redisClient.setEx(SAFETY_LOCK_KEY, 900, '1');
 
-        // Store detailed alert context for UI/Diagnostics and downstream layer alignment
-        await redisClient.setEx(`${SAFETY_LOCK_KEY}:context`, 900, JSON.stringify({
-          ...alert,
-          reason,
-          billing_mode: alert.billing_mode,
-          vpp_active: alert.vpp_active,
-          locked_at: new Date().toISOString()
+          // Store detailed alert context for UI/Diagnostics and downstream layer alignment
+          await redisClient.setEx(`${SAFETY_LOCK_KEY}:context`, 900, JSON.stringify({
+            ...payload,
+            reason,
+            billing_mode: payload.billing_mode,
+            vpp_active: payload.vpp_active,
+            locked_at: new Date().toISOString()
+          }));
+        }
+      } else if (topic === 'MARKET_PRICE_UPDATED') {
+        console.log(`[L2] Received market update for ${payload.iso}: $${payload.price_per_mwh}/MWh`);
+        // Cache the latest market context with a 10-minute TTL (600s) for reporting enrichment
+        await redisClient.setEx('market:latest:context', 600, JSON.stringify({
+          iso: payload.iso,
+          price_per_mwh: payload.price_per_mwh,
+          profitability_index: payload.profitability_index,
+          updated_at: payload.timestamp
         }));
       }
     }

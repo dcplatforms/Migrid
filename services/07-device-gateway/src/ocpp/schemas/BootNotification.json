@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://openchargealliance.org/ocpp/2.1/schemas/BootNotificationRequest.json",
+  "type": "object",
+  "properties": {
+    "reason": { "type": "string" },
+    "chargingStation": {
+      "type": "object",
+      "properties": {
+        "vendorName": { "type": "string", "maxLength": 50 },
+        "model": { "type": "string", "maxLength": 20 },
+        "serialNumber": { "type": "string", "maxLength": 25 },
+        "firmwareVersion": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["vendorName", "model"]
+    }
+  },
+  "required": ["reason", "chargingStation"]
+}

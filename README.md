@@ -59,7 +59,7 @@ We leverage a modern, cloud-native stack to ensure scalability and adherence to 
 * **Infrastructure as Code:** Fully containerized deployments via **Docker** and **Kubernetes**, managed with **Terraform**.
 * **Data Layer:** **TimescaleDB** for high-fidelity time-series energy metrics and **PostgreSQL** for relational core data.
 * **Security & Compliance:** Built on a **Zero-Trust Architecture** with mTLS everywhere. We strictly adhere to **NERC CIP** and **IEC 62351** cybersecurity standards.
-* **Interoperability:** Native support for **OpenADR 3.0** (VEN), **OCPP 2.1 & 2.0.1** (Smart Charging), and **ISO 15118** (Plug & Charge).
+* **Interoperability:** Native support for **OpenADR 3.0** (VEN), **OCPP 2.1** (Native V2G/V2X), **OCPP 2.0.1** (Legacy Smart Charging), and **ISO 15118** (Plug & Charge).
 
 ---
 
@@ -75,7 +75,7 @@ The system is decoupled into eleven distinct functional planes to separate conce
 | **L4** | `market-gateway` | Arbitrage engine for CAISO, PJM, and Nord Pool. | FIX / OASIS |
 | **L5** | `driver-dx` | Smart routing, voice commands, and availability. | GraphQL |
 | **L6** | `engagement` | CRM, contextual support, and notifications. | WebSocket |
-| **L7** | `device-gateway` | Hardware abstraction for chargers. | OCPP 2.1 & 2.0.1 / ISO 15118 |
+| **L7** | `device-gateway` | Hardware abstraction for chargers. | OCPP 2.1 / 2.0.1 / ISO 15118 |
 | **L8** | `energy-manager` | Edge-ready dynamic load management (DLM). | Modbus TCP |
 | **L9** | `commerce-engine`| Flexible billing, tariffs, and split-billing. | Stripe / OCPI |
 | **L10**| `token-bridge` | Rewards and staking via Open-Wallet. | ERC-20 / Polygon |
@@ -160,6 +160,7 @@ Built-in Web3 rewards system via [Open-Wallet Framework](https://github.com/Thom
 Universal hardware abstraction layer:
 - **OCPP 2.1 (Flagship)** & 2.0.1 support
 - OCPP 1.6 legacy support
+- OCPP 2.1 (Native V2X), 2.0.1 & 1.6 support
 - ISO 15118 Plug & Charge (in progress)
 - V2G bidirectional control
 - No vendor lock-in
@@ -214,7 +215,7 @@ graph TB
 | **L4** | **Market Gateway** | CAISO/PJM/ERCOT wholesale integration | `3004` | Complete |
 | **L5** | **Driver Experience API** | Mobile backend, auth, smart routing | `3005` | Complete |
 | **L6** | **Engagement Engine** | Gamification, leaderboards, achievements | `3006` | Complete |
-| **L7** | **Device Gateway** | OCPP 2.1 (Flagship), 2.0.1, ISO 15118 | `3007` | Complete |
+| **L7** | **Device Gateway** | OCPP 2.1, ISO 15118, V2X control | `3007` | In Progress |
 | **L8** | **Energy Manager** | Dynamic Load Management (DLM) | `3008` | Complete |
 | **L9** | **Commerce Engine** | Billing, tariffs, split-billing | `3009` | Complete |
 | **L10** | **Token Engine** | Web3 rewards via Open-Wallet | `3010` | Complete |
@@ -450,7 +451,7 @@ Password: demo123
 
 [![Phase](https://img.shields.io/badge/Phase_5-In_Progress-orange.svg)](docs/roadmap.md)
 [![Features](https://img.shields.io/badge/Features-40%2F80-blue.svg)](PLATFORM_STATUS.md)
-[![Services](https://img.shields.io/badge/Services-10%2F11_Complete-green.svg)](docs/roadmap.md)
+[![Services](https://img.shields.io/badge/Services-8%2F10_Complete-green.svg)](docs/roadmap.md)
 
 </div>
 
