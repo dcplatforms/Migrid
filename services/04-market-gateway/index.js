@@ -6,6 +6,7 @@
 const express = require('express');
 const { Pool } = require('pg');
 const { Kafka } = require('kafkajs');
+const redis = require('redis');
 const Decimal = require('decimal.js');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
@@ -21,6 +22,11 @@ const pool = new Pool({
 });
 
 const pricingService = new MarketPricingService(pool);
+
+// Redis connection
+const redisClient = redis.createClient({
+  url: process.env.REDIS_URL || 'redis://localhost:6379'
+});
 
 // Kafka initialization
 const kafka = new Kafka({
@@ -102,7 +108,11 @@ async function startGridSignalConsumer() {
 
       if (signal.priority === 'HIGH' || signal.priority === 'CRITICAL') {
         console.warn(`⚠️ [Market Gateway] High priority grid signal received. Market bidding should be reviewed for site ${signal.site_id}.`);
-        // In the future, this could set a local flag in the BiddingOptimizer to automatically skip certain bid types.
+
+        // Phase 5 Forward Engineering: Halt market participation during high-priority grid events
+        // Set a 15-minute TTL lock (900 seconds)
+        await redisClient.setEx('l4:grid:lock', 900, 'true');
+        console.log(`[Market Gateway] L4 Grid Lock activated for 15 minutes due to signal ${signal.event_id}`);
       }
     }
   });
@@ -122,6 +132,8 @@ async function startPriceBroadcaster() {
       if (prices && prices.length > 0) {
         await broadcastMarketPrice(iso, prices[0].price_per_mwh);
       }
+      // Introduce jitter to optimize resource usage
+      await new Promise(resolve => setTimeout(resolve, Math.random() * 2000));
     } catch (error) {
       console.error(`[Market Gateway] Initial poll failed for ${iso}:`, error.message);
     }
@@ -135,6 +147,8 @@ async function startPriceBroadcaster() {
         if (prices && prices.length > 0) {
           await broadcastMarketPrice(iso, prices[0].price_per_mwh);
         }
+        // Jitter helps prevent bursty database/network load
+        await new Promise(resolve => setTimeout(resolve, Math.random() * 2000));
       } catch (error) {
         console.error(`[Market Gateway] Error polling prices for ${iso}:`, error.message);
       }
@@ -146,10 +160,10 @@ async function startPriceBroadcaster() {
 app.get('/health', (req, res) => {
   res.json({
     service: 'market-gateway',
-    version: '3.1.0',
+    version: '3.3.0',
     status: 'healthy',
     layer: 'L4',
-    markets: ['CAISO', 'PJM']
+    markets: ['CAISO', 'PJM', 'ERCOT', 'NORDPOOL']
   });
 });
 
@@ -289,6 +303,9 @@ app.get('/markets', (req, res) => {
 // Start server
 async function start() {
   try {
+    await redisClient.connect();
+    console.log('✅ [Market Gateway] Connected to Redis');
+
     await producer.connect();
     console.log('✅ [Market Gateway] Connected to Kafka Producer');
 
@@ -316,6 +333,7 @@ process.on('SIGTERM', async () => {
   console.log('[Market Gateway] Shutting down gracefully...');
   await producer.disconnect();
   await consumer.disconnect();
+  await redisClient.quit();
   pool.end();
   process.exit(0);
 });

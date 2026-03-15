@@ -36,13 +36,18 @@ class BiddingOptimizer {
   }
 
   /**
-   * Checks if the L1 Physics safety lock is active in Redis.
-   * @returns {Promise<boolean>} True if safety lock is active
+   * Checks if any safety lock (L1 Physics or L4 Grid) is active in Redis.
+   * @returns {Promise<Object>} Status of safety locks
    */
-  async isSafetyLockActive() {
+  async getSafetyLockStatus() {
     await this.connect();
-    const lock = await this.redisClient.get('l1:safety:lock');
-    return lock === 'true' || lock === '1';
+    const l1Lock = await this.redisClient.get('l1:safety:lock');
+    const l4Lock = await this.redisClient.get('l4:grid:lock');
+
+    return {
+      l1: l1Lock === 'true' || l1Lock === '1',
+      l4: l4Lock === 'true' || l4Lock === '1'
+    };
   }
 
   /**
@@ -51,15 +56,24 @@ class BiddingOptimizer {
    * @returns {Promise<Array<string>>} List of FIX messages
    */
   async generateDayAheadBids(iso) {
-    // Verify the Physics: Check for L1 safety lock before bidding
-    if (await this.isSafetyLockActive()) {
-      const lockContext = await this.redisClient.get('l1:safety:lock:context');
-      const details = lockContext ? JSON.parse(lockContext) : null;
+    // Verify the Physics & Grid signals: Check for safety locks before bidding
+    const locks = await this.getSafetyLockStatus();
 
-      console.warn(`🚨 [L4 Market Gateway] Bidding halted: L1 safety lock is active for ${iso}`);
-      if (details) {
-        console.warn(`[L4 Safety Context] Reason: ${details.event_type}, Severity: ${details.severity}, Site: ${details.site_id || 'N/A'}, BillingMode: ${details.billing_mode || 'N/A'}, VPPActive: ${details.vpp_active}`);
+    if (locks.l1 || locks.l4) {
+      if (locks.l1) {
+        const lockContext = await this.redisClient.get('l1:safety:lock:context');
+        const details = lockContext ? JSON.parse(lockContext) : null;
+
+        console.warn(`🚨 [L4 Market Gateway] Bidding halted: L1 safety lock is active for ${iso}`);
+        if (details) {
+          console.warn(`[L4 Safety Context] Reason: ${details.event_type}, Severity: ${details.severity}, Site: ${details.site_id || 'N/A'}, BillingMode: ${details.billing_mode || 'N/A'}, VPPActive: ${details.vpp_active}`);
+        }
       }
+
+      if (locks.l4) {
+        console.warn(`⚠️ [L4 Market Gateway] Bidding halted: L4 grid signal lock is active for ${iso}`);
+      }
+
       return [];
     }
 
