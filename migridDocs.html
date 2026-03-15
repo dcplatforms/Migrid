@@ -259,6 +259,7 @@
         .layer-card[data-layer="L8"] { --layer-color: #eab308; --layer-color-dark: #ca8a04; --layer-rgb: 234, 179, 8; }
         .layer-card[data-layer="L9"] { --layer-color: #14b8a6; --layer-color-dark: #0d9488; --layer-rgb: 20, 184, 166; }
         .layer-card[data-layer="L10"] { --layer-color: #6366f1; --layer-color-dark: #4f46e5; --layer-rgb: 99, 102, 241; }
+        .layer-card[data-layer="L11"] { --layer-color: #a855f7; --layer-color-dark: #7e22ce; --layer-rgb: 168, 85, 247; }
 
         /* Right Panel */
         .right-panel {
@@ -504,9 +505,25 @@
         <div class="main-content">
             <!-- Architecture Tower -->
             <div class="architecture-tower">
-                <div class="tower-title">10-Layer Microservices Architecture</div>
+                <div class="tower-title">11-Layer Microservices Architecture</div>
                 
                 <div class="layer-stack">
+                    <!-- L11 ML Engine -->
+                    <div class="layer-card" data-layer="L11">
+                        <div class="layer-badge">
+                            <span class="layer-num">L11</span>
+                            <svg class="layer-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><path d="M12 6v6l4 2" stroke="#06090d" stroke-width="2" fill="none"/></svg>
+                        </div>
+                        <div class="layer-info">
+                            <h3>ML Engine</h3>
+                            <p>AI demand forecasting, predictive maintenance, and reinforcement learning-based bidding.</p>
+                            <div class="standards">
+                                <span class="standard-tag">TensorFlow</span>
+                                <span class="standard-tag">MLflow</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- L10 Token Bridge -->
                     <div class="layer-card" data-layer="L10">
                         <div class="layer-badge">
@@ -563,9 +580,9 @@
                         </div>
                         <div class="layer-info">
                             <h3>Device Gateway</h3>
-                            <p>Hardware abstraction layer for OCPP, OCPI roaming, and ISO 15118 Plug&Charge.</p>
+                            <p>Hardware abstraction layer for OCPP 2.1 (Flagship), 2.0.1, OCPI roaming, and ISO 15118 Plug&Charge.</p>
                             <div class="standards">
-                                <span class="standard-tag">OCPP 2.0.1</span>
+                                <span class="standard-tag">OCPP 2.1</span>
                                 <span class="standard-tag">ISO 15118</span>
                             </div>
                         </div>
@@ -743,9 +760,9 @@
                     <div class="protocol">OpenADR 3.0</div>
                     <div class="use-case">Demand response communication</div>
                 </a>
-                <a href="https://openchargealliance.org/" target="_blank" class="standard-card">
+                <a href="https://openchargealliance.org/" target="_blank" class="standard-card" style="border-color: #00e6b8; box-shadow: 0 10px 30px rgba(0, 230, 184, 0.1);">
                     <div class="icon">OCPP</div>
-                    <div class="protocol">OCPP 2.0.1</div>
+                    <div class="protocol" style="color: #00e6b8;">OCPP 2.1</div>
                     <div class="use-case">Charger communication</div>
                 </a>
                 <a href="https://evroaming.org/" target="_blank" class="standard-card">

@@ -70,6 +70,7 @@ This section serves as the mathematical source of truth for platform completion 
 - [x] L2 OpenADR 3.0 VEN
 - [x] L2 Price Signal Ingestion
 - [x] L2 Demand Response Events
+- [x] L7 OCPP 2.1 & 2.0.1 Support
 - [x] L7 OCPP 2.0.1 Upgrade
 - [x] L1 Samsara Integration
 - [x] L1 Geotab Integration

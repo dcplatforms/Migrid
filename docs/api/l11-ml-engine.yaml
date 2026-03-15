@@ -1,0 +1,93 @@
+openapi: 3.0.0
+info:
+  title: L11 ML Engine API
+  description: AI & Optimization layer for demand forecasting, predictive maintenance, and reinforcement learning-based bidding.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3011
+    description: Local development server
+paths:
+  /forecast/demand:
+    get:
+      summary: Get energy demand forecast
+      description: Returns predicted energy demand for a specific site or fleet.
+      parameters:
+        - name: site_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: horizon_hours
+          in: query
+          schema:
+            type: integer
+            default: 24
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  forecast:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        timestamp:
+                          type: string
+                          format: date-time
+                        value_kw:
+                          type: number
+  /optimization/bid:
+    post:
+      summary: Get optimized bidding strategy
+      description: Uses reinforcement learning to suggest optimal bids for wholesale markets.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                market:
+                  type: string
+                  enum: [CAISO, PJM, ERCOT, NORDPOOL]
+                capacity_kw:
+                  type: number
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggested_price:
+                    type: number
+                  confidence_score:
+                    type: number
+  /health/battery:
+    get:
+      summary: Get battery health prediction
+      description: Predicts State of Health (SOH) and remaining useful life.
+      parameters:
+        - name: vehicle_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  soh_pct:
+                    type: number
+                  predicted_failure_date:
+                    type: string
+                    format: date

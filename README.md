@@ -158,6 +158,8 @@ Built-in Web3 rewards system via [Open-Wallet Framework](https://github.com/Thom
 <summary><b>[▸] Hardware Agnostic</b></summary>
 
 Universal hardware abstraction layer:
+- **OCPP 2.1 (Flagship)** & 2.0.1 support
+- OCPP 1.6 legacy support
 - OCPP 2.1 (Native V2X), 2.0.1 & 1.6 support
 - ISO 15118 Plug & Charge (in progress)
 - V2G bidirectional control
@@ -213,7 +215,6 @@ graph TB
 | **L4** | **Market Gateway** | CAISO/PJM/ERCOT wholesale integration | `3004` | Complete |
 | **L5** | **Driver Experience API** | Mobile backend, auth, smart routing | `3005` | Complete |
 | **L6** | **Engagement Engine** | Gamification, leaderboards, achievements | `3006` | Complete |
-| **L7** | **Device Gateway** | OCPP 2.0.1, ISO 15118, V2G control | `3007` | Complete |
 | **L7** | **Device Gateway** | OCPP 2.1, ISO 15118, V2X control | `3007` | In Progress |
 | **L8** | **Energy Manager** | Dynamic Load Management (DLM) | `3008` | Complete |
 | **L9** | **Commerce Engine** | Billing, tariffs, split-billing | `3009` | Complete |
@@ -263,7 +264,8 @@ graph TB
 <td width="50%" valign="top">
 
 **Standards & Protocols**
-- OCPP 1.6 & 2.0.1
+- OCPP 2.1 (Flagship)
+- OCPP 2.0.1 & 1.6 (Legacy)
 - ISO 15118 Plug & Charge
 - OpenADR 3.0
 - OCPI 2.2 roaming

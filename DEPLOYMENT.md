@@ -103,7 +103,7 @@ docker-compose up --build
 <td align="center"><code>:3007</code><br><code>:9220</code></td>
 <td align="center">🔌 L7</td>
 <td><b>Device Gateway</b></td>
-<td>OCPP 2.0.1 charger communication<br>(HTTP + WebSocket)</td>
+<td>OCPP 2.1 & 2.0.1 charger communication<br>(HTTP + WebSocket)</td>
 </tr>
 <tr>
 <td align="center"><code>:3008</code></td>
@@ -166,7 +166,7 @@ node scripts/seed-data.js
 - 🏢 1 demo fleet (Green Transport Co)
 - 👤 3 drivers with authentication
 - 🚗 3 vehicles (Ford F-150 Lightning, Rivian R1T, Tesla Semi)
-- ⚡ 3 OCPP 2.0.1 chargers
+- ⚡ 3 OCPP 2.1 & 2.0.1 chargers
 - 📊 20 historical charging sessions
 - 💹 24 hours of LMP price data
 

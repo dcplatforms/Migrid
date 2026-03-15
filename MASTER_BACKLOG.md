@@ -55,6 +55,21 @@
 - [~] **L7 (Device Gateway)**: Final testing of ISO 15118-20 V2G bidirectional discharge.
 - [✓] **L4 (Market Gateway)**: ERCOT adapter active; profitability index broadcasting live.
 - [✓] **L1 (Physics Engine)**: Digital Twin Redis sync complete (filtered by `FLEET_ID`).
+
+---
+
+## 🛠️ Active Engineering Sprints
+
+### Phase 6 Readiness: AI Data Epics
+- [ ] **L1 (Physics)**: **AI Data Readiness Epic** — Implement high-fidelity timeseries export of audit logs for L11 training.
+- [ ] **L7 (Device)**: **AI Data Readiness Epic** — Ensure all vehicle telemetry is perfectly structured in TimescaleDB for behavior profiling.
+- [ ] **L8 (Energy)**: **AI Data Readiness Epic** — Structure building load telemetry to enable L11 predictive load models.
+
+### Phase 5 Finalization (Enterprise Scale)
+- [~] **L9 (Commerce Engine)**: Finalizing multi-currency billing and international settlement logic.
+- [~] **L7 (Device Gateway)**: Final testing of ISO 15118-20 V2G bidirectional discharge.
+- [✓] **L4 (Market Gateway)**: ERCOT adapter active; profitability index broadcasting live.
+- [✓] **L1 (Physics Engine)**: Digital Twin Redis sync complete (filtered by `FLEET_ID`).
 | Downstream Layer | Dependency | Upstream Source | Status |
 |:---|:---|:---|:---|
 | **L5 Driver DX** | ISO 15118 Cert Status | **L7 Device Gateway** | 🚧 PKI Implementation 75% |
@@ -97,6 +112,8 @@
 | Risk ID | Description | Severity | Mitigation Strategy |
 |:---:|:---|:---:|:---|
 | **R-001** | Data Quality for L11 | High | Enforce strict L1 physics audit (<15% variance) as data filter. |
+| **R-002** | Multi-Tenant Isolation | Critical | Row-Level Security (RLS) implementation in Phase 7. |
+| **R-003** | Bidding Latency | Medium | L3 Redis Caching ensures <50ms response for high-frequency markets. |
 | **R-002** | Multi-Tenant Isolation | Critical | Row-Level Security (RLS) implementation in Phase 7. |
 | **R-003** | Bidding Latency | Medium | L3 Redis Caching ensures <50ms response for high-frequency markets. |
 | **R-001** | ISO 15118 PKI Complexity | Medium | Partner with trusted CAs; phased rollout starting with L7. |
