@@ -332,11 +332,32 @@ async function processChargingEvent(event) {
       await checkSustainabilityChampion(driverId);
       // Market Master is awarded only on session completion to ensure it's session-based
       await checkMarketMasterAchievement(driverId, iso, sessionId);
+
+      // Phase 6 AI Readiness: Check for ML Contributor (High-fidelity data)
+      const sessionData = await pool.query('SELECT variance_percentage FROM charging_sessions WHERE id = $1', [sessionId]);
+      const variance = parseFloat(sessionData.rows[0]?.variance_percentage || '100');
+      if (variance < 5.0) {
+        await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'low_variance_session', JSON.stringify({ sessionId, variance })]);
+        await checkMLContributorAchievement(driverId);
+        await updateChallengeProgress(driverId, 'low_variance_charging');
+      }
     }
 
     // Award Green Driver Score points (Example: 10 points per kWh if valid)
     if (event.energyDispensedKwh) {
-      const points = Math.floor(parseFloat(event.energyDispensedKwh) * 10);
+      let pointsMultiplier = 1.0;
+      try {
+        const profitabilityStr = await redisClient.hGet('market:profitability', iso);
+        const profitability = parseFloat(profitabilityStr || '0');
+        if (profitability > 50) {
+          pointsMultiplier = 1.5;
+          console.log(`[L6] Grid Alignment Bonus applied for ${iso}: 1.5x multiplier.`);
+        }
+      } catch (err) {
+        console.error('[L6] Error fetching market profitability for bonus:', err.message);
+      }
+
+      const points = Math.floor(parseFloat(event.energyDispensedKwh) * 10 * pointsMultiplier);
       await updateLeaderboardPoints(driverId, points);
 
       // Notify of points earned
@@ -520,7 +541,9 @@ async function handleGridSignal(payload) {
           CROSS JOIN achievements a
           WHERE (
               (a.name = 'Grid Warrior' AND gc.action_count >= 5) OR
-              (a.name = 'ERCOT Pioneer' AND td.iso = 'ERCOT' AND gc.action_count >= 1)
+              (a.name = 'ERCOT Pioneer' AND td.iso = 'ERCOT' AND gc.action_count >= 1) OR
+              (a.name = 'CAISO Pioneer' AND td.iso = 'CAISO' AND gc.action_count >= 1) OR
+              (a.name = 'PJM Pioneer' AND td.iso = 'PJM' AND gc.action_count >= 1)
           )
           AND NOT EXISTS (
               SELECT 1 FROM driver_achievements da2
@@ -789,6 +812,21 @@ async function checkGridWarriorAchievement(driver_id) {
   }
 }
 
+async function checkMLContributorAchievement(driver_id) {
+  // Requirement: 5 consecutive low-variance sessions (<5%)
+  const count = await pool.query(`
+    SELECT COUNT(*) FROM driver_actions
+    WHERE driver_id = $1 AND action_type = 'low_variance_session'
+  `, [driver_id]);
+
+  if (parseInt(count.rows[0].count) >= 5) {
+    const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'ML Contributor'");
+    if (achievement.rows.length > 0) {
+      await awardAchievement(driver_id, achievement.rows[0].id);
+    }
+  }
+}
+
 async function checkSustainabilityChampion(driver_id) {
   // 100% Compliance Check: Verify at least one valid session for each of the last 30 consecutive days
   const result = await pool.query(`
@@ -930,17 +968,19 @@ async function recalculateRanks() {
     SET rank = r.new_rank, updated_at = NOW()
     FROM ranked r
     WHERE l.driver_id = r.driver_id AND (l.rank IS DISTINCT FROM r.new_rank)
-    RETURNING l.driver_id, l.rank
+    RETURNING l.driver_id, l.rank, r.new_rank, (l.rank - r.new_rank) as rank_delta
   `);
 
-  // Notify only the drivers whose rank has shifted
+  // Phase 5 Optimization: Notify only for Top 10 or significant jumps (>= 5 positions)
   for (const row of result.rows) {
-    io.to(`driver:${row.driver_id}`).emit('notification', {
-      type: 'rank_change',
-      title: 'Rank Updated! 📈',
-      body: `Your new rank on the leaderboard is #${row.rank}.`,
-      data: { rank: row.rank }
-    });
+    if (row.new_rank <= 10 || Math.abs(row.rank_delta) >= 5) {
+      io.to(`driver:${row.driver_id}`).emit('notification', {
+        type: 'rank_change',
+        title: 'Rank Updated! 📈',
+        body: `Your new rank on the leaderboard is #${row.new_rank}.`,
+        data: { rank: row.new_rank, delta: row.rank_delta }
+      });
+    }
   }
 
   // Broadcast top 10 change to everyone if any of the top 10 changed
