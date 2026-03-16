@@ -117,12 +117,30 @@ app.get('/openadr/v3/reports', async (req, res) => {
     const safetyContextRaw = await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
     const safetyContext = safetyContextRaw ? JSON.parse(safetyContextRaw) : null;
 
+    // Fetch grid lock status (provided by L4)
+    const gridLock = await redisClient.get('l4:grid:lock');
+
+    // Fetch regional grid locks
+    const keys = await redisClient.keys('l4:grid:lock:*');
+    const regionalLocks = {};
+    for (const key of keys) {
+      const region = key.split(':').pop();
+      const value = await redisClient.get(key);
+      if (value === '1' || value === 'true') {
+        regionalLocks[region] = true;
+      }
+    }
+
     res.json({
       reports: result.rows,
       market_context: marketContext,
       safety_lock: {
         active: safetyLock === '1' || safetyLock === 'true',
         context: safetyContext
+      },
+      grid_lock: {
+        active: gridLock === '1' || gridLock === 'true',
+        regional: regionalLocks
       },
       timestamp: new Date().toISOString()
     });
@@ -167,6 +185,22 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
       });
     }
 
+    // 1.1 Check L4 Grid Lock (Global and Regional) - Phase 5 Forward Engineering
+    const gridLock = await redisClient.get('l4:grid:lock');
+    const isoRegion = event.targets?.find(t => t.type === 'region')?.value;
+    const regionalLock = isoRegion ? await redisClient.get(`l4:grid:lock:${isoRegion.toUpperCase()}`) : null;
+
+    if (gridLock === 'true' || gridLock === '1' || regionalLock === 'true' || regionalLock === '1') {
+      console.warn(`🚨 [L2] DISPATCH REJECTED: L4 Grid Lock active (Global: ${gridLock}, Regional: ${regionalLock})`);
+      return res.status(503).json({
+        status: 'REJECTED',
+        reason: 'GRID_LOCK_ACTIVE',
+        message: 'Grid dispatch suspended due to high-priority grid stability event',
+        region: isoRegion || 'GLOBAL',
+        timestamp: new Date().toISOString()
+      });
+    }
+
     console.log('📢 [L2] Received OpenADR Event:', event.id);
 
     // 1.1 V2G Detection Logic (Phase 5 Forward Engineering)
@@ -194,6 +228,7 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
             priority: event.priority || 'NORMAL',
             site_id: event.site_id || 'ALL',
             v2g_requested: v2gRequested,
+            iso_region: isoRegion,
             intervals: event.intervals || [],
             targets: event.targets || [],
             signals: event.signals || [],
@@ -216,6 +251,31 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('[L2 Grid Signal Error]', error);
     res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+  }
+});
+
+/**
+ * L11 AI Data Readiness: Export historical grid event data for training
+ */
+app.get('/data/training/events', authenticateToken, async (req, res) => {
+  const { days } = req.query;
+  const daysInt = parseInt(days) || 7;
+
+  try {
+    const result = await pool.query(
+      'SELECT event_id, event_type, payload, status, received_at FROM grid_events WHERE received_at > NOW() - ($1 || \' days\')::interval ORDER BY received_at ASC',
+      [daysInt]
+    );
+
+    res.json({
+      record_count: result.rows.length,
+      data: result.rows,
+      version: '1.0.0',
+      status: 'READY_FOR_L11'
+    });
+  } catch (error) {
+    console.error('[L11 Data Export Error]', error);
+    res.status(500).json({ error: 'Failed to export training data' });
   }
 });
 
