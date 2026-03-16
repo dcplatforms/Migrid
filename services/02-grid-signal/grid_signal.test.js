@@ -12,6 +12,7 @@ jest.mock('redis', () => ({
     get: jest.fn(),
     setEx: jest.fn().mockResolvedValue(),
     quit: jest.fn().mockResolvedValue(),
+    keys: jest.fn().mockResolvedValue([]),
     on: jest.fn()
   })
 }), { virtual: true });
@@ -265,5 +266,63 @@ describe('L2 Grid Signal Service', () => {
       600,
       expect.stringContaining('"price_per_mwh":120')
     );
+  });
+
+  test('POST /openadr/v3/events should reject when global L4 grid lock is active', async () => {
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l4:grid:lock') return Promise.resolve('true');
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-lock-global',
+        type: 'demand-response'
+      });
+
+    expect(response.status).toBe(503);
+    expect(response.body.reason).toBe('GRID_LOCK_ACTIVE');
+    expect(response.body.region).toBe('GLOBAL');
+  });
+
+  test('POST /openadr/v3/events should reject when regional L4 grid lock is active', async () => {
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l4:grid:lock:CAISO') return Promise.resolve('1');
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-lock-regional',
+        type: 'demand-response',
+        targets: [{ type: 'region', value: 'CAISO' }]
+      });
+
+    expect(response.status).toBe(503);
+    expect(response.body.reason).toBe('GRID_LOCK_ACTIVE');
+    expect(response.body.region).toBe('CAISO');
+  });
+
+  test('GET /data/training/events should return historical grid events', async () => {
+    const { Pool } = require('pg');
+    const mPool = new Pool();
+    mPool.query.mockResolvedValue({
+      rows: [
+        { event_id: 'evt-1', event_type: 'demand-response', payload: {}, status: 'active', received_at: new Date() }
+      ]
+    });
+
+    const response = await request(app)
+      .get('/data/training/events')
+      .set('Authorization', `Bearer ${mockToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe('READY_FOR_L11');
+    expect(response.body.record_count).toBe(1);
+    expect(response.body.data[0].event_id).toBe('evt-1');
   });
 });
