@@ -76,7 +76,9 @@ class BiddingOptimizer {
       }
 
       if (locks.l4) {
-        console.warn(`⚠️ [L4 Market Gateway] Bidding halted: L4 grid signal lock is active for ${iso}`);
+        const regionalLockActive = await this.redisClient.get(`l4:grid:lock:${iso.toUpperCase()}`);
+        const scope = (regionalLockActive === 'true' || regionalLockActive === '1') ? `Regional (${iso})` : 'Global';
+        console.warn(`⚠️ [L4 Market Gateway] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
       }
 
       return [];
