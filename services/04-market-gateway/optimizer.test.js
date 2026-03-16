@@ -177,4 +177,28 @@ describe('BiddingOptimizer', () => {
     expect(bids).toHaveLength(0);
     expect(mockRedisClient.get).toHaveBeenCalledWith('l4:grid:lock');
   });
+
+  test('should return no bids when regional L4 grid lock is active for specific ISO', async () => {
+    mockRedisClient.get.mockImplementation((key) => {
+      if (key === 'l4:grid:lock:ERCOT') return Promise.resolve('true');
+      if (key === 'l4:grid:lock') return Promise.resolve('false');
+      if (key === 'l1:safety:lock') return Promise.resolve('false');
+      if (key === 'vpp:capacity:available') return Promise.resolve('500');
+      return Promise.resolve(null);
+    });
+
+    const forecasts = [
+      { location: 'TEXAS_NODE', price_per_mwh: 150.00, timestamp: new Date() }
+    ];
+    mockPricingService.getDayAheadForecast.mockResolvedValue(forecasts);
+
+    const bids = await optimizer.generateDayAheadBids('ERCOT');
+
+    expect(bids).toHaveLength(0);
+    expect(mockRedisClient.get).toHaveBeenCalledWith('l4:grid:lock:ERCOT');
+
+    // Should NOT be locked for CAISO if only ERCOT is locked
+    const caisoBids = await optimizer.generateDayAheadBids('CAISO');
+    expect(caisoBids).toHaveLength(1);
+  });
 });

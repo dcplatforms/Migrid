@@ -111,8 +111,18 @@ async function startGridSignalConsumer() {
 
         // Phase 5 Forward Engineering: Halt market participation during high-priority grid events
         // Set a 15-minute TTL lock (900 seconds)
-        await redisClient.setEx('l4:grid:lock', 900, 'true');
-        console.log(`[Market Gateway] L4 Grid Lock activated for 15 minutes due to signal ${signal.event_id}`);
+        const lockDuration = 900;
+        await redisClient.setEx('l4:grid:lock', lockDuration, 'true');
+
+        // Regional locking: if signal targets a specific ISO/Region
+        const targetRegion = signal.targets?.find(t => t.type === 'region')?.value;
+        if (targetRegion) {
+          const regionLockKey = `l4:grid:lock:${targetRegion.toUpperCase()}`;
+          await redisClient.setEx(regionLockKey, lockDuration, 'true');
+          console.log(`[Market Gateway] L4 Regional Grid Lock activated for ${targetRegion} due to signal ${signal.event_id}`);
+        }
+
+        console.log(`[Market Gateway] L4 Global Grid Lock activated for 15 minutes due to signal ${signal.event_id}`);
       }
     }
   });
@@ -141,6 +151,7 @@ async function startPriceBroadcaster() {
 
   // Set interval for every 5 minutes
   setInterval(async () => {
+    console.log('[L11 Readiness] Heartbeat: LMP price streams active for ML training');
     for (const iso of isos) {
       try {
         const prices = await pricingService.getLatestPrices(iso, 1);
@@ -157,13 +168,27 @@ async function startPriceBroadcaster() {
 }
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
+  let l1Lock = 'false';
+  let l4Lock = 'false';
+
+  try {
+    l1Lock = await redisClient.get('l1:safety:lock') || 'false';
+    l4Lock = await redisClient.get('l4:grid:lock') || 'false';
+  } catch (error) {
+    console.error('[Market Gateway Health] Redis check failed:', error.message);
+  }
+
   res.json({
     service: 'market-gateway',
-    version: '3.3.0',
+    version: '3.4.0',
     status: 'healthy',
     layer: 'L4',
-    markets: ['CAISO', 'PJM', 'ERCOT', 'NORDPOOL']
+    markets: ['CAISO', 'PJM', 'ERCOT', 'NORDPOOL'],
+    safety_locks: {
+      l1_physics: l1Lock === 'true' || l1Lock === '1',
+      l4_grid: l4Lock === 'true' || l4Lock === '1'
+    }
   });
 });
 
@@ -265,6 +290,38 @@ app.post('/bids/submit', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('[Market Gateway Error]', error);
     res.status(500).json({ error: 'An internal server error occurred' });
+  }
+});
+
+/**
+ * L11 AI Data Readiness: Export historical LMP data for training
+ */
+app.get('/data/training/lmp', authenticateToken, async (req, res) => {
+  const { iso, days } = req.query;
+  const daysInt = parseInt(days) || 7;
+
+  try {
+    const result = await pool.query(`
+      SELECT iso, location, price_per_mwh, timestamp
+      FROM lmp_prices
+      WHERE ($1::text IS NULL OR iso = $1)
+        AND timestamp > NOW() - ($2 || ' days')::interval
+      ORDER BY timestamp ASC
+    `, [iso ? iso.toUpperCase() : null, daysInt]);
+
+    res.json({
+      iso: iso || 'ALL',
+      record_count: result.rows.length,
+      data: result.rows.map(r => ({
+        ...r,
+        price_per_mwh: new Decimal(r.price_per_mwh).toNumber()
+      })),
+      version: '1.0.0',
+      status: 'READY_FOR_L11'
+    });
+  } catch (error) {
+    console.error('[L11 Data Export Error]', error);
+    res.status(500).json({ error: 'Failed to export training data' });
   }
 });
 

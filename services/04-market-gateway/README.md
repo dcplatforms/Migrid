@@ -1,6 +1,6 @@
 # L4: Market Gateway Service
 
-**Version:** 3.3.0
+**Version:** 3.4.0
 **Status:** ✅ Complete (Q3 2025)
 **Phase:** Market Access
 
@@ -59,6 +59,9 @@ Market Gateway (L4)
 - `GET /markets` - List available markets
 - `GET /markets/:iso/prices` - Get current LMP prices
 - `GET /markets/:iso/forecast` - Get price forecasts
+
+### AI Data Readiness (L11)
+- `GET /data/training/lmp?iso=CAISO&days=7` - Export historical LMP data for ML training
 
 ### Bidding
 - `POST /bids/submit` - Submit energy bid
@@ -158,6 +161,7 @@ Key metrics:
 - Win rate (bid acceptance %)
 - Average LMP spread
 - Settlement accuracy
+- **L1/L4 Safety Lock Status**: Monitor `/health` for active physics or grid locks.
 
 ---
 
