@@ -90,7 +90,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.1.0',
+    version: '2.3.0',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -100,7 +100,7 @@ app.get('/health', (req, res) => {
 /**
  * Get OpenADR 3.0 Reports (VEN)
  * Returns recent grid events for compliance and auditing
- * Enhanced with Market Context from L4
+ * Enhanced with Market Context from L4 and Safety Context from L1
  */
 app.get('/openadr/v3/reports', async (req, res) => {
   try {
@@ -112,9 +112,18 @@ app.get('/openadr/v3/reports', async (req, res) => {
     const marketContextRaw = await redisClient.get('market:latest:context');
     const marketContext = marketContextRaw ? JSON.parse(marketContextRaw) : null;
 
+    // Fetch latest safety context from Redis (provided by L1)
+    const safetyLock = await redisClient.get(SAFETY_LOCK_KEY);
+    const safetyContextRaw = await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
+    const safetyContext = safetyContextRaw ? JSON.parse(safetyContextRaw) : null;
+
     res.json({
       reports: result.rows,
       market_context: marketContext,
+      safety_lock: {
+        active: safetyLock === '1' || safetyLock === 'true',
+        context: safetyContext
+      },
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -160,6 +169,10 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
 
     console.log('📢 [L2] Received OpenADR Event:', event.id);
 
+    // 1.1 V2G Detection Logic (Phase 5 Forward Engineering)
+    const v2gRequested = (event.type === 'discharge' ||
+                          (event.signals && event.signals.some(s => s.value < 0 || s.type === 'discharge')));
+
     // 2. Save event to ledger
     await pool.query(
       'INSERT INTO grid_events (event_id, event_type, payload, status, received_at) VALUES ($1, $2, $3, $4, NOW()) ON CONFLICT (event_id) DO NOTHING',
@@ -180,6 +193,7 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
             type: event.type,
             priority: event.priority || 'NORMAL',
             site_id: event.site_id || 'ALL',
+            v2g_requested: v2gRequested,
             intervals: event.intervals || [],
             targets: event.targets || [],
             signals: event.signals || [],
@@ -224,10 +238,10 @@ async function startSafetyConsumer() {
 
         if (isHighVariance || isCritical) {
           const reason = isHighVariance ? 'HIGH_VARIANCE_THRESHOLD' : payload.event_type;
-          console.error(`🚨 [L2] L1 SAFETY ALERT: ${reason} on Site ${payload.site_id}. Locking grid dispatch.`);
+          console.error(`🚨 [L2] L1 SAFETY ALERT: ${reason} on Site ${payload.site_id}. Region: ${payload.iso_region}. Locking grid dispatch.`);
 
           // Detailed logging for engineering audit
-          console.log(`[L2 Audit] Metadata: Vehicle=${payload.vehicle_id}, VIN=${payload.vin}, SoC=${payload.current_soc}%, Variance=${payload.variance_pct}%, Billing=${payload.billing_mode}, VPP_Active=${payload.vpp_active}`);
+          console.log(`[L2 Audit] Metadata: Vehicle=${payload.vehicle_id}, VIN=${payload.vin}, SoC=${payload.current_soc}%, Variance=${payload.variance_pct}%, Billing=${payload.billing_mode}, VPP_Active=${payload.vpp_active}, V2G_Active=${payload.v2g_active}`);
 
           // Unified Safety Lock: Set to '1' for L4 compatibility, with 15m TTL
           await redisClient.setEx(SAFETY_LOCK_KEY, 900, '1');
@@ -238,6 +252,8 @@ async function startSafetyConsumer() {
             reason,
             billing_mode: payload.billing_mode,
             vpp_active: payload.vpp_active,
+            v2g_active: payload.v2g_active,
+            iso_region: payload.iso_region,
             locked_at: new Date().toISOString()
           }));
         }
