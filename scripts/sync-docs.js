@@ -25,16 +25,22 @@ function syncDocumentation() {
         // 1. Read the Source of Truth
         const statusContent = fs.readFileSync(STATUS_FILE, 'utf8');
 
-        // Calculate features based on Markdown checkboxes
-        // Support both [x] and [✓] for robustness
-        const completedFeatures = (statusContent.match(/^- \[[xX✓]\] /gm) || []).length;
-        const plannedFeatures = (statusContent.match(/^- \[ \] /gm) || []).length;
-        const inProgressFeatures = (statusContent.match(/^- \[[-~]\] /gm) || []).length;
+        // Extract only the Feature Audit section to avoid counting badges or accomplishments
+        const auditSectionMatch = statusContent.match(/## Platform Truth: Feature Audit([\s\S]*?)---/);
+        if (!auditSectionMatch) {
+            throw new Error('Could not find Feature Audit section in PLATFORM_STATUS.md');
+        }
+        const auditSection = auditSectionMatch[1];
+
+        // Calculate features based on Markdown checkboxes in the audit section
+        const completedFeatures = (auditSection.match(/^- \[[xX✓]\] /gm) || []).length;
+        const plannedFeatures = (auditSection.match(/^- \[ \] /gm) || []).length;
+        const inProgressFeatures = (auditSection.match(/^- \[[-~]\] /gm) || []).length;
 
         const totalFeatures = completedFeatures + plannedFeatures + inProgressFeatures;
 
         if (totalFeatures === 0) {
-            throw new Error('No features found in PLATFORM_STATUS.md. Check formatting.');
+            throw new Error('No features found in Feature Audit. Check formatting.');
         }
 
         const completionPercentage = Math.round((completedFeatures / totalFeatures) * 100);
@@ -44,6 +50,29 @@ function syncDocumentation() {
         console.log(` > In Progress: ${inProgressFeatures}`);
         console.log(` > Planned: ${plannedFeatures}`);
         console.log(` > Overall Completion: ${completionPercentage}%`);
+
+        // 1.5 Update PLATFORM_STATUS.md header badges and metrics
+        let updatedStatusContent = statusContent;
+        const statusProgressBadgeRegex = /(https:\/\/img\.shields\.io\/badge\/Progress-)\d+%25_Complete(-blue\.svg)/;
+        updatedStatusContent = updatedStatusContent.replace(statusProgressBadgeRegex, `$1${completionPercentage}%25_Complete$2`);
+
+        const statusFeaturesBadgeRegex = /(https:\/\/img\.shields\.io\/badge\/Features-)\d+%2F\d+(-brightgreen\.svg)/;
+        updatedStatusContent = updatedStatusContent.replace(statusFeaturesBadgeRegex, `$1${completedFeatures}%2F${totalFeatures}$2`);
+
+        const statusMetricsRegex = /(Overall Progress:\s+)[█░\s]+\d+%/;
+        const barLength = 20;
+        const filledLength = Math.round((completionPercentage / 100) * barLength);
+        const bar = '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength);
+        updatedStatusContent = updatedStatusContent.replace(statusMetricsRegex, `$1${bar} ${completionPercentage}%`);
+
+        const statusDeliveredRegex = /\*\*(\d+) of (\d+) features\*\* delivered/;
+        updatedStatusContent = updatedStatusContent.replace(statusDeliveredRegex, `**${completedFeatures} of ${totalFeatures} features** delivered`);
+
+        const statusRoadmapProgressRegex = /(Overall Progress:\s+)[█░\s]+\d+%/g;
+        updatedStatusContent = updatedStatusContent.replace(statusRoadmapProgressRegex, `$1${bar} ${completionPercentage}%`);
+
+        fs.writeFileSync(STATUS_FILE, updatedStatusContent);
+        console.log(`[Meta-PO] Successfully patched PLATFORM_STATUS.md`);
 
         // 2. Update README.md
         let readmeContent = fs.readFileSync(README_FILE, 'utf8');
@@ -61,6 +90,10 @@ function syncDocumentation() {
         readmeContent = platformBadgeRegex.test(readmeContent)
             ? readmeContent.replace(platformBadgeRegex, `$1${completionPercentage}%25%20complete$2`)
             : readmeContent.replace(/(https:\/\/img\.shields\.io\/badge\/Progress-)\d+%25%20Complete(-blue\.svg)/g, `$1${completionPercentage}%25%20Complete$2`);
+
+        // Update the Services badge
+        const servicesBadgeRegex = /(https:\/\/img\.shields\.io\/badge\/Services-)\d+%2F\d+_Complete(-green\.svg)/g;
+        readmeContent = readmeContent.replace(servicesBadgeRegex, `$111%2F11_Complete$2`);
 
         fs.writeFileSync(README_FILE, readmeContent);
         console.log(`[Meta-PO] Successfully patched README.md`);
@@ -105,9 +138,9 @@ function syncDocumentation() {
             let htmlContent = fs.readFileSync(MIGRID_DOCS_ROADMAP_HTML, 'utf8');
 
             // Update Stats
-            htmlContent = htmlContent.replace(/(text-4xl font-bold text-emerald-400">)\d+(<\/div>)/i, `$1${completedFeatures}$2`);
-            htmlContent = htmlContent.replace(/(text-4xl font-bold text-amber-400">)\d+(<\/div>)/i, `$1${inProgressFeatures}$2`);
-            htmlContent = htmlContent.replace(/(text-4xl font-bold text-slate-400">)\d+(<\/div>)/i, `$1${plannedFeatures}$2`);
+            htmlContent = htmlContent.replace(/(<div[^>]*text-4xl font-bold text-emerald-400">)\d+(<\/div>)/i, `$1${completedFeatures}$2`);
+            htmlContent = htmlContent.replace(/(<div[^>]*text-4xl font-bold text-amber-400">)\d+(<\/div>)/i, `$1${inProgressFeatures}$2`);
+            htmlContent = htmlContent.replace(/(<div[^>]*text-4xl font-bold text-slate-400">)\d+(<\/div>)/i, `$1${plannedFeatures}$2`);
 
             // Update Built percentage in legend
             htmlContent = htmlContent.replace(/(Platform Built: <span[^>]*>)\d+%(<\/span>)/i, `$1${completionPercentage}%$2`);

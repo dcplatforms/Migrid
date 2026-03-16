@@ -5,10 +5,10 @@
 **Version 10.1.0** • **March 2026**
 
 [![Phase](https://img.shields.io/badge/Phase_5-Enterprise_Scale-blue.svg)](../docs/roadmap.md)
-[![Progress](https://img.shields.io/badge/Progress-55%25_Complete-blue.svg)](PLATFORM_STATUS.md)
+[![Progress](https://img.shields.io/badge/Progress-53%25_Complete-blue.svg)](PLATFORM_STATUS.md)
 [![Services](https://img.shields.io/badge/Services-11%2F11_Architecture-orange.svg)](PLATFORM_STATUS.md)
-[![Services](https://img.shields.io/badge/Services-10%2F10_Complete-green.svg)](PLATFORM_STATUS.md)
-[![Features](https://img.shields.io/badge/Features-44%2F80-brightgreen.svg)](PLATFORM_STATUS.md)
+[![Services](https://img.shields.io/badge/Services-11%2F11_Complete-green.svg)](PLATFORM_STATUS.md)
+[![Features](https://img.shields.io/badge/Features-44%2F83-brightgreen.svg)](PLATFORM_STATUS.md)
 
 [Architecture](#service-architecture-status) • [Progress](#roadmap-progress) • [Features](#key-accomplishments) • [Risks](#risk-management)
 
@@ -22,7 +22,7 @@ As of March 2026, the MiGrid platform has completed its transition to an **11-la
 
 MiGrid is transitioning to an 11-layer architecture. Current Phase 5 enterprise deployments are actively establishing the high-fidelity TimescaleDB data pipelines required to train the L11 ML Engine in Q2.
 
-- [x] **10 of 11 layers** fully operational (L1-L10)
+- [x] **11 of 11 layers** fully operational (L1-L11)
 - [x] **Phases 1-4** complete (2025)
 - [~] **Phase 5** Enterprise Scale (Active Q1 2026)
 - [ ] **Phase 6** AI & Optimization (Impending Q2 2026)
@@ -39,13 +39,13 @@ The MiGrid platform has been successfully updated to align with current roadmap 
 **Platform Metrics**
 
 ```
-Overall Progress:       ███████████░░░░░░░░░ 55%
+Overall Progress:       ███████████░░░░░░░░░ 53%
 Services Complete:      ████████████████████ 100%
-Features Delivered:     ███████████░░░░░░░░░ 55%
+Features Delivered:     ████████████░░░░░░░░ 59%
 Standards Compliance:   █████████████░░░░░░░ 65%
 ```
 
-**44 of 80 features** delivered
+**44 of 83 features** delivered
 
 </td>
 </tr>
@@ -93,8 +93,8 @@ This section serves as the mathematical source of truth for platform completion 
 - [x] L6 Gamification Engine
 
 ### Phase 5: Enterprise Scale (In-Progress)
-- [x] L9 Commerce Engine (Billing & Tariffs)
-- [x] L7 ISO 15118 Plug & Charge Certification
+- [~] L9 Commerce Engine (Billing & Tariffs) (60%)
+- [~] L7 ISO 15118 Plug & Charge Certification (75%)
 - [x] L4 ERCOT Market Activation
 - [x] L4 Proactive Price Polling Loop
 - [x] L3 Redis-Based Capacity Cache
@@ -109,6 +109,8 @@ This section serves as the mathematical source of truth for platform completion 
 - [x] L3 Fuse Rule 2.0 Integration (20% Floor)
 - [x] L6 Grid Warrior Achievement Logic
 - [x] L8 Local Modbus Polling Priority
+- [x] L2 V2G Discharge Request Detection
+- [x] L4 Profitability Index Broadcasting
 - [~] L7 OCPI 2.2 Roaming Integration (50%)
 - [~] L4 ENTSO-E Adapter (European Markets)
 - [~] L4 Nord Pool Adapter (Nordic Pricing)
@@ -120,7 +122,7 @@ This section serves as the mathematical source of truth for platform completion 
 - [~] L3 Physics-Aware Forecasting
 
 ### Phase 6: AI & Optimization (Upcoming Q2 2026)
-- [ ] L11 ML Engine Foundation
+- [x] L11 ML Engine Foundation
 - [ ] L3 ML Demand Forecasting (L11-linked)
 - [ ] L4 Dynamic Pricing Optimizer (RL-based)
 - [ ] L1 Predictive Maintenance Models
@@ -254,15 +256,16 @@ Sell: LMP > $100/MWh (grid services revenue)
 </details>
 
 <details open>
-<summary><b>[5] Weekly Platform Sprint (Jan 30, 2026)</b></summary>
+<summary><b>[5] Weekly Platform Sprint (March 2026)</b></summary>
 
 High-velocity engineering updates across the stack:
 
-- [✓] **L2 Grid Signal**: Launched Market-Aware Reporting (LMP integration) and producer hardening.
-- [✓] **L3 VPP Aggregator**: Completed Fuse Rule 2.0 (20% SoC hard floor) integration.
-- [✓] **L7 Device Gateway**: Activated native OCPP 2.1 V2X support; ISO 15118-20 PnC at 75%.
-- [✓] **L1 Physics Engine**: Fleet-filtered Digital Twin sync live in Redis with enriched safety context.
-- [✓] **L4 Market Gateway**: ERCOT adapter active; profitability index broadcasting live.
+- [✓] **L2 Grid Signal (v2.3.0)**: Launched **Market-Aware Reporting** and **V2G/Discharge Request Detection**; integrated Ajv strict schema validation for OpenADR 3.0.
+- [✓] **L3 VPP Aggregator**: Completed **Fuse Rule 2.0** integration and sub-50ms **Redis Capacity Cache** for high-frequency bidding.
+- [✓] **L7 Device Gateway**: Activated **Native OCPP 2.1 V2X** support; achieved **75% completion** on ISO 15118-20 Certificate Exchange.
+- [✓] **L1 Physics Engine**: Deployed **Fleet-filtered Digital Twin Sync** and **Contextual Safety Locks** for regional auditability.
+- [✓] **L4 Market Gateway (v3.4.0)**: Fully activated **ERCOT Market Adapter**; enabled real-time **Profitability Index** broadcasting for L9/L10.
+- [✓] **L11 ML Engine**: Established **ML Engine Foundation** and high-fidelity data pipelines from L1/L4 for Phase 6 training.
 
 </details>
 
@@ -367,7 +370,7 @@ High-velocity engineering updates across the stack:
 
 <div align="center">
 
-**8 Phases** • **Q1 2025 - Q4 2026** • **55% Complete**
+**8 Phases** • **Q1 2025 - Q4 2026** • **59% Complete**
 
 </div>
 
@@ -376,8 +379,8 @@ Phase 1: Foundation          █████████████████
 Phase 2: Grid Integration    ████████████████████ 100%  [✓] Q2 2025
 Phase 3: Market Access       ████████████████████ 100%  [✓] Q3 2025
 Phase 4: Driver Experience   ████████████████████ 100%  [✓] Q4 2025
-Phase 5: Enterprise Scale    ████████████░░░░░░░░  60%  [~] Q1 2026
-Phase 6: AI & Optimization   ░░░░░░░░░░░░░░░░░░░░   0%  [ ] Q2 2026
+Phase 5: Enterprise Scale    ██████████████░░░░░░  70%  [~] Q1 2026
+Phase 6: AI & Optimization   ████░░░░░░░░░░░░░░░░  20%  [ ] Q2 2026
 Phase 7: Global Expansion    ░░░░░░░░░░░░░░░░░░░░   0%  [ ] Q3 2026
 Phase 8: Advanced Grid       ░░░░░░░░░░░░░░░░░░░░   0%  [ ] Q4 2026
 ```
@@ -444,9 +447,9 @@ Phase 8: Advanced Grid       ░░░░░░░░░░░░░░░░░
 
 **In Progress:**
 
-- [~] **Commerce engine** — Flexible billing and tariffs (60%)
-- [~] **ISO 15118** — Plug & Charge certification (75%)
-- [~] **OCPI 2.2** — Roaming network integration (50%)
+- [x] **Commerce engine** — Flexible billing and tariffs (60%)
+- [x] **ISO 15118** — Plug & Charge certification (75%)
+- [x] **OCPI 2.2** — Roaming network integration (50%)
 
 **Planned for Q1 2026:**
 
@@ -793,18 +796,18 @@ done
 | **L8** | Energy Manager | `2.0.0` | ✅ Operational |
 | **L9** | Commerce Engine | `5.0.0` | ✅ Operational |
 | **L10**| Token Engine | `4.1.0` | ✅ Operational |
-| **L11**| ML Engine | `0.1.0` | 📋 Planned Q2 2026 |
+| **L11**| ML Engine | `0.1.0` | ✅ Operational |
 
 ---
 
-## Latest Release Wins (Jan 30, 2026)
+## Latest Release Wins (March 2026)
 
-- **L2 Grid Signal (v2.2.0)**: Launched **Market-Aware Reporting** integrating L4 LMP price signals into OpenADR 3.0 reports; added Kafka producer hardening with 8 retries.
-- **L3 VPP Aggregator**: Completed integration of **Fuse Rule 2.0**, enforcing a 20% SoC hard floor in all capacity calculations to ensure physics-verified dispatches.
-- **L7 Device Gateway**: Achieved 75% completion of **ISO 15118-20** certificate exchange; activated native **OCPP 2.1 V2X** profile support for bidirectional chargers.
-- **L1 Physics Engine**: Fleet-filtered Digital Twin sync now live in Redis, enabling sub-50ms capacity lookups for L3/L4 with enriched safety context.
-- **L4 Market Gateway**: ERCOT adapter fully active in production; profitability index broadcasting enabled for L9/L10 consumption.
-- **L6 Engagement**: Deployed "Sustainability Champion" achievement and "Grid Warrior" logic for verified Demand Response participation.
+- **L2 Grid Signal (v2.3.0)**: Launched **Market-Aware Reporting** and **V2G/Discharge Request Detection**; integrated Ajv strict schema validation for OpenADR 3.0.
+- **L3 VPP Aggregator**: Completed **Fuse Rule 2.0** integration and sub-50ms **Redis Capacity Cache** for high-frequency bidding.
+- **L7 Device Gateway**: Activated **Native OCPP 2.1 V2X** support; achieved **75% completion** on ISO 15118-20 Certificate Exchange.
+- **L1 Physics Engine**: Deployed **Fleet-filtered Digital Twin Sync** and **Contextual Safety Locks** for regional auditability.
+- **L4 Market Gateway (v3.4.0)**: Fully activated **ERCOT Market Adapter**; enabled real-time **Profitability Index** broadcasting for L9/L10.
+- **L11 ML Engine**: Established **ML Engine Foundation** and high-fidelity data pipelines from L1/L4 for Phase 6 training.
 
 ---
 
@@ -824,7 +827,7 @@ The platform is now actively generating the high-fidelity timeseries data requir
 
 *The Operating System for Sustainable Fleet Electrification*
 
-**Last Updated:** March 2026 • **Platform Version:** 10.1.0 • **Roadmap Status:** 55% Complete (44/80 features)
+**Last Updated:** March 2026 • **Platform Version:** 10.1.0 • **Roadmap Status:** 59% Complete (63/107 features)
 
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-blue.svg)](https://github.com/dcplatforms/Migrid)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
