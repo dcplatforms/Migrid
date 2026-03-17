@@ -118,7 +118,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.1.0', // Incremented for Phase 5 Enterprise Alignment
+    version: '5.2.0', // Incremented for Phase 5 Enterprise Alignment
     status: 'healthy',
     layer: 'L6'
   });
@@ -326,7 +326,13 @@ async function processChargingEvent(event) {
     const isFinal = type === 'SESSION_COMPLETED' || type === 'session_completed';
 
     if (isFinal) {
-      await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'session_completed', JSON.stringify({ sessionId, energyDispensedKwh: event.energyDispensedKwh })]);
+      const sessionData = await pool.query('SELECT variance_percentage FROM charging_sessions WHERE id = $1', [sessionId]);
+      const variance = parseFloat(sessionData.rows[0]?.variance_percentage || '100');
+      const isLowVariance = variance < 5.0;
+
+      await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
+        [driverId, 'session_completed', JSON.stringify({ sessionId, energyDispensedKwh: event.energyDispensedKwh, isLowVariance })]);
+
       await checkFirstSessionAchievement(driverId);
       await updateStreaks(driverId);
       await checkSustainabilityChampion(driverId);
@@ -334,11 +340,10 @@ async function processChargingEvent(event) {
       await checkMarketMasterAchievement(driverId, iso, sessionId);
 
       // Phase 6 AI Readiness: Check for ML Contributor (High-fidelity data)
-      const sessionData = await pool.query('SELECT variance_percentage FROM charging_sessions WHERE id = $1', [sessionId]);
-      const variance = parseFloat(sessionData.rows[0]?.variance_percentage || '100');
-      if (variance < 5.0) {
+      if (isLowVariance) {
         await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'low_variance_session', JSON.stringify({ sessionId, variance })]);
         await checkMLContributorAchievement(driverId);
+        await checkEnergyArchitectAchievement(driverId);
         await updateChallengeProgress(driverId, 'low_variance_charging');
       }
     }
@@ -543,7 +548,8 @@ async function handleGridSignal(payload) {
               (a.name = 'Grid Warrior' AND gc.action_count >= 5) OR
               (a.name = 'ERCOT Pioneer' AND td.iso = 'ERCOT' AND gc.action_count >= 1) OR
               (a.name = 'CAISO Pioneer' AND td.iso = 'CAISO' AND gc.action_count >= 1) OR
-              (a.name = 'PJM Pioneer' AND td.iso = 'PJM' AND gc.action_count >= 1)
+              (a.name = 'PJM Pioneer' AND td.iso = 'PJM' AND gc.action_count >= 1) OR
+              (a.name = 'Nord Pool Pioneer' AND td.iso = 'NORDPOOL' AND gc.action_count >= 1)
           )
           AND NOT EXISTS (
               SELECT 1 FROM driver_achievements da2
@@ -821,6 +827,32 @@ async function checkMLContributorAchievement(driver_id) {
 
   if (parseInt(count.rows[0].count) >= 5) {
     const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'ML Contributor'");
+    if (achievement.rows.length > 0) {
+      await awardAchievement(driver_id, achievement.rows[0].id);
+    }
+  }
+}
+
+async function checkEnergyArchitectAchievement(driver_id) {
+  // Requirement: 10 consecutive low-variance sessions (<5%)
+  // We check the last 10 'session_completed' actions and ensure they all have isLowVariance = true in metadata.
+  const result = await pool.query(`
+    WITH recent_sessions AS (
+      SELECT (metadata->>'isLowVariance')::boolean as is_low_variance
+      FROM driver_actions
+      WHERE driver_id = $1 AND action_type = 'session_completed'
+      ORDER BY created_at DESC
+      LIMIT 10
+    )
+    SELECT COUNT(*) as total,
+           COUNT(*) FILTER (WHERE is_low_variance = true) as low_variance_count
+    FROM recent_sessions
+  `, [driver_id]);
+
+  const { total, low_variance_count } = result.rows[0];
+
+  if (parseInt(total) >= 10 && parseInt(low_variance_count) === 10) {
+    const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Energy Architect'");
     if (achievement.rows.length > 0) {
       await awardAchievement(driver_id, achievement.rows[0].id);
     }
