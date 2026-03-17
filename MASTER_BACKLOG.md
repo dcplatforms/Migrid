@@ -53,6 +53,7 @@
 
 ### Layer 4: Market Gateway
 - [✓] **ERCOT Active**: Full integration with Texas market.
+- [✓] **Nord Pool Active**: Nordic market connectivity and pricing.
 - [✓] **Profitability Index**: Real-time $/MWh broadcasting for L9/L10.
 - [✓] **Proactive Polling**: Background market price polling loop.
 
