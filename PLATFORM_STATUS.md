@@ -791,7 +791,7 @@ done
 | **L3** | VPP Aggregator | `3.2.0` | ✅ Operational |
 | **L4** | Market Gateway | `3.3.0` | ✅ Operational |
 | **L5** | Driver Experience API | `4.0.0` | ✅ Operational |
-| **L6** | Engagement Engine | `5.1.0` | ✅ Operational |
+| **L6** | Engagement Engine | `5.2.0` | ✅ Operational |
 | **L7** | Device Gateway | `5.0.0` | ✅ Operational |
 | **L8** | Energy Manager | `2.0.0` | ✅ Operational |
 | **L9** | Commerce Engine | `5.0.0` | ✅ Operational |
@@ -807,6 +807,7 @@ done
 - **L7 Device Gateway**: Activated **Native OCPP 2.1 V2X** support; achieved **75% completion** on ISO 15118-20 Certificate Exchange.
 - **L1 Physics Engine**: Deployed **Fleet-filtered Digital Twin Sync** and **Contextual Safety Locks** for regional auditability.
 - **L4 Market Gateway (v3.4.0)**: Fully activated **ERCOT Market Adapter**; enabled real-time **Profitability Index** broadcasting for L9/L10.
+- **L6 Engagement Engine (v5.2.0)**: Launched **Nord Pool Pioneer** and **Energy Architect** (AI Data Readiness) achievements; advanced **Regional Challenges** to 50%.
 - **L11 ML Engine**: Established **ML Engine Foundation** and high-fidelity data pipelines from L1/L4 for Phase 6 training.
 
 ---
