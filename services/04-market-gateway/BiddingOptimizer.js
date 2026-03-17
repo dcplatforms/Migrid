@@ -71,7 +71,7 @@ class BiddingOptimizer {
 
         console.warn(`🚨 [L4 Market Gateway] Bidding halted: L1 safety lock is active for ${iso}`);
         if (details) {
-          console.warn(`[L4 Safety Context] Reason: ${details.event_type}, Severity: ${details.severity}, Site: ${details.site_id || 'N/A'}, BillingMode: ${details.billing_mode || 'N/A'}, VPPActive: ${details.vpp_active}`);
+          console.warn(`[L4 Safety Context] Reason: ${details.event_type}, Severity: ${details.severity}, Site: ${details.site_id || 'N/A'}, Region: ${details.iso_region || 'N/A'}, VPPActive: ${details.vpp_active}, V2GActive: ${details.v2g_active}`);
         }
       }
 
