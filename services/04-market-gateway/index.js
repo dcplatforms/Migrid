@@ -31,9 +31,16 @@ const redisClient = redis.createClient({
 // Kafka initialization
 const kafka = new Kafka({
   clientId: 'market-gateway',
-  brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(',')
+  brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
+  retry: {
+    initialRetryTime: 100,
+    retries: 8
+  }
 });
-const producer = kafka.producer();
+const producer = kafka.producer({
+  allowAutoTopicCreation: true,
+  transactionTimeout: 30000
+});
 const consumer = kafka.consumer({ groupId: 'market-gateway-group' });
 
 app.use(express.json());
@@ -64,8 +71,9 @@ const LMP_THRESHOLD_SELL = new Decimal(process.env.LMP_THRESHOLD_SELL || '100.00
 
 /**
  * Broadcast market price update to Kafka for other services (L9 Commerce)
+ * Enriched with location metadata for L11 ML Engine readiness
  */
-async function broadcastMarketPrice(iso, price_per_mwh) {
+async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE') {
   try {
     // Ensure we use Decimal for precision before broadcasting
     const price = new Decimal(price_per_mwh);
@@ -78,6 +86,7 @@ async function broadcastMarketPrice(iso, price_per_mwh) {
 
     const payload = {
       iso: iso.toUpperCase(),
+      location: location,
       price_per_mwh: price.toNumber(),
       profitability_index: profitabilityIndex.toDecimalPlaces(2).toNumber(),
       timestamp: new Date().toISOString()
@@ -140,7 +149,7 @@ async function startPriceBroadcaster() {
     try {
       const prices = await pricingService.getLatestPrices(iso, 1);
       if (prices && prices.length > 0) {
-        await broadcastMarketPrice(iso, prices[0].price_per_mwh);
+        await broadcastMarketPrice(iso, prices[0].price_per_mwh, prices[0].location);
       }
       // Introduce jitter to optimize resource usage
       await new Promise(resolve => setTimeout(resolve, Math.random() * 2000));
@@ -156,7 +165,7 @@ async function startPriceBroadcaster() {
       try {
         const prices = await pricingService.getLatestPrices(iso, 1);
         if (prices && prices.length > 0) {
-          await broadcastMarketPrice(iso, prices[0].price_per_mwh);
+          await broadcastMarketPrice(iso, prices[0].price_per_mwh, prices[0].location);
         }
         // Jitter helps prevent bursty database/network load
         await new Promise(resolve => setTimeout(resolve, Math.random() * 2000));
@@ -201,7 +210,7 @@ app.get('/markets/:iso/prices', authenticateToken, async (req, res) => {
 
     if (prices.length > 0) {
       // Broadcast the latest price for dynamic billing/L9
-      await broadcastMarketPrice(iso, prices[0].price_per_mwh);
+      await broadcastMarketPrice(iso, prices[0].price_per_mwh, prices[0].location);
     }
 
     const latestPrice = prices[0] ? prices[0].price_per_mwh : null;
