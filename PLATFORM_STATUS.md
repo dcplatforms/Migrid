@@ -5,10 +5,10 @@
 **Version 10.1.0** • **March 2026**
 
 [![Phase](https://img.shields.io/badge/Phase_5-Enterprise_Scale-blue.svg)](../docs/roadmap.md)
-[![Progress](https://img.shields.io/badge/Progress-53%25_Complete-blue.svg)](PLATFORM_STATUS.md)
+[![Progress](https://img.shields.io/badge/Progress-55%25_Complete-blue.svg)](PLATFORM_STATUS.md)
 [![Services](https://img.shields.io/badge/Services-11%2F11_Architecture-orange.svg)](PLATFORM_STATUS.md)
 [![Services](https://img.shields.io/badge/Services-11%2F11_Complete-green.svg)](PLATFORM_STATUS.md)
-[![Features](https://img.shields.io/badge/Features-44%2F83-brightgreen.svg)](PLATFORM_STATUS.md)
+[![Features](https://img.shields.io/badge/Features-46%2F84-brightgreen.svg)](PLATFORM_STATUS.md)
 
 [Architecture](#service-architecture-status) • [Progress](#roadmap-progress) • [Features](#key-accomplishments) • [Risks](#risk-management)
 
@@ -39,13 +39,13 @@ The MiGrid platform has been successfully updated to align with current roadmap 
 **Platform Metrics**
 
 ```
-Overall Progress:       ███████████░░░░░░░░░ 53%
+Overall Progress:       ███████████░░░░░░░░░ 55%
 Services Complete:      ████████████████████ 100%
 Features Delivered:     ████████████░░░░░░░░ 59%
 Standards Compliance:   █████████████░░░░░░░ 65%
 ```
 
-**44 of 83 features** delivered
+**46 of 84 features** delivered
 
 </td>
 </tr>
@@ -113,7 +113,8 @@ This section serves as the mathematical source of truth for platform completion 
 - [x] L4 Profitability Index Broadcasting
 - [~] L7 OCPI 2.2 Roaming Integration (50%)
 - [~] L4 ENTSO-E Adapter (European Markets)
-- [~] L4 Nord Pool Adapter (Nordic Pricing)
+- [x] L4 Nord Pool Adapter (Nordic Pricing)
+- [x] L2 AI Data Readiness (Historical Event Export)
 - [~] L8 Edge Runtime v2 (Multi-site Mesh)
 - [~] L1 Fraud Analytics Service
 - [~] L10 Grid Impact Achievement Logic
