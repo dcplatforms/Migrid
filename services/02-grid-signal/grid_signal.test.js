@@ -13,6 +13,8 @@ jest.mock('redis', () => ({
     setEx: jest.fn().mockResolvedValue(),
     quit: jest.fn().mockResolvedValue(),
     keys: jest.fn().mockResolvedValue([]),
+    scan: jest.fn().mockResolvedValue({ cursor: 0, keys: [] }),
+    mGet: jest.fn().mockResolvedValue([]),
     on: jest.fn()
   })
 }), { virtual: true });
@@ -136,6 +138,22 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body.market_context.price_per_mwh).toBe(45.5);
     expect(response.body.safety_lock.active).toBe(false);
     expect(response.body).toHaveProperty('timestamp');
+  });
+
+  test('GET /openadr/v3/reports should return regional market contexts', async () => {
+    const mockCaisoContext = { iso: 'CAISO', price_per_mwh: 45.5 };
+    const mockErcotContext = { iso: 'ERCOT', price_per_mwh: 120.0 };
+
+    redisClient.scan.mockResolvedValue({ cursor: 0, keys: ['market:context:CAISO', 'market:context:ERCOT'] });
+    redisClient.mGet.mockResolvedValue([
+      JSON.stringify(mockCaisoContext),
+      JSON.stringify(mockErcotContext)
+    ]);
+
+    const response = await request(app).get('/openadr/v3/reports');
+    expect(response.status).toBe(200);
+    expect(response.body.regional_markets.CAISO.price_per_mwh).toBe(45.5);
+    expect(response.body.regional_markets.ERCOT.price_per_mwh).toBe(120.0);
   });
 
   test('GET /openadr/v3/reports should return safety context when locked', async () => {
@@ -265,6 +283,11 @@ describe('L2 Grid Signal Service', () => {
       'market:latest:context',
       600,
       expect.stringContaining('"price_per_mwh":120')
+    );
+    expect(redisClient.setEx).toHaveBeenCalledWith(
+      'market:context:ERCOT',
+      600,
+      expect.stringContaining('"iso":"ERCOT"')
     );
   });
 
