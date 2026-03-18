@@ -259,6 +259,23 @@ services:
       - migrid-internal
       - open-wallet-net
 
+  # --- Layer 11: ML Engine (AI & Optimization) ---
+  ml-engine:
+    build: ./services/11-ml-engine
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://migrid:dev_password_123@postgres:5432/migrid_core
+      KAFKA_BROKERS: kafka:9092
+      PORT: 3011
+    ports:
+      - "3011:3011"
+    networks:
+      - migrid-internal
+
   # --- Frontend: Admin Portal Web ---
   admin-portal-web:
     build: ./apps/admin-portal-web
