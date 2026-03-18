@@ -28,10 +28,12 @@ jest.mock('pg', () => ({
   }))
 }), { virtual: true });
 
+global.mockRedisRPop = jest.fn();
 jest.mock('redis', () => ({
   createClient: jest.fn().mockImplementation(() => ({
     connect: jest.fn().mockResolvedValue({}),
     lPush: jest.fn().mockResolvedValue({}),
+    rPop: jest.fn().mockImplementation((key) => global.mockRedisRPop(key)),
     setEx: jest.fn().mockImplementation((key, ttl, value) => {
         global.mockRedisSetEx(key, ttl, value);
         return Promise.resolve('OK');
@@ -240,6 +242,23 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"iso_region":"CAISO"'));
   });
 
+  test('should include market_price_at_session in Redis context and Kafka alert', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'PHYSICS_FRAUD',
+        session_id: 'session-price-1',
+        variance_pct: 20.0,
+        market_price_at_session: 125.50
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"market_price_at_session":125.5'));
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.market_price_at_session).toBe(125.5);
+  });
+
   test('should handle CAPACITY_VIOLATION from aggressive market bid and activate safety lock', async () => {
     const msg = {
       payload: JSON.stringify({
@@ -303,5 +322,47 @@ describe('L1 Physics Engine Digital Twin Sync', () => {
     expect(global.mockRedisSetEx).toHaveBeenCalledTimes(2);
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:digital_twin:vehicle:v1', 60, expect.stringContaining('"id":"v1"'));
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:digital_twin:vehicle:v2', 60, expect.stringContaining('"id":"v2"'));
+  });
+});
+
+describe('L1 Physics Engine Reconciliation', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    global.mockProducerSend = jest.fn();
+    global.mockPgQuery = jest.fn();
+  });
+
+  test('should reconcile logs with full regional and market context', async () => {
+    const payload = {
+      session_id: 'recon-session-1',
+      event_type: 'PHYSICS_FRAUD',
+      efficiency_pct: 0.70,
+      billing_mode: 'FLEET',
+      vpp_active: true,
+      v2g_active: true,
+      iso_region: 'PJM',
+      market_price_at_session: 95.0,
+      timestamp: '2023-10-28T10:00:00Z'
+    };
+
+    global.mockRedisRPop
+      .mockResolvedValueOnce(JSON.stringify(payload))
+      .mockResolvedValueOnce(null);
+
+    await physicsEngine.reconcileLogs();
+
+    // Verify Kafka Alert dispatch during reconciliation
+    expect(global.mockProducerSend).toHaveBeenCalled();
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.iso_region).toBe('PJM');
+    expect(alertValue.market_price_at_session).toBe(95.0);
+    expect(alertValue.v2g_active).toBe(true);
+    expect(alertValue.reconciled).toBe(true);
+
+    // Verify DB Insertion during reconciliation
+    expect(global.mockPgQuery).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO audit_log'),
+      expect.arrayContaining(['recon-session-1', 'PHYSICS_FRAUD', 'PJM', 95.0])
+    );
   });
 });
