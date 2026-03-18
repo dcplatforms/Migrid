@@ -88,8 +88,9 @@ async function handlePhysicsAlert(msg) {
         current_soc: payload.current_soc,
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
-      v2g_active: payload.v2g_active,
-      iso_region: payload.iso_region,
+        v2g_active: payload.v2g_active,
+        iso_region: payload.iso_region,
+        market_price_at_session: payload.market_price_at_session,
         locked_at: new Date().toISOString()
       };
       await redisClient.setEx(SAFETY_LOCK_CONTEXT_KEY, SAFETY_LOCK_TTL, JSON.stringify(context));
@@ -124,6 +125,7 @@ async function handlePhysicsAlert(msg) {
       vpp_active: payload.vpp_active,
       v2g_active: payload.v2g_active,
       iso_region: payload.iso_region,
+      market_price_at_session: payload.market_price_at_session,
       timestamp: payload.timestamp || new Date().toISOString(),
       source_layer: 'L1',
       severity: severity
@@ -208,6 +210,7 @@ async function reconcileLogs() {
         vpp_active: payload.vpp_active,
         v2g_active: payload.v2g_active,
         iso_region: payload.iso_region,
+        market_price_at_session: payload.market_price_at_session,
         timestamp: payload.timestamp || new Date().toISOString(),
         source_layer: 'L1',
         severity: severity,
@@ -237,6 +240,8 @@ async function reconcileLogs() {
           severity, metadata, billing_mode, vpp_active, iso_region, market_price_at_session
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        INSERT INTO audit_log (session_id, violation_type, expected_value, actual_value, severity, metadata, billing_mode, vpp_active, v2g_active, iso_region, market_price_at_session)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         ON CONFLICT DO NOTHING
       `, [
         payload.session_id,
@@ -256,6 +261,7 @@ async function reconcileLogs() {
         }),
         payload.billing_mode,
         payload.vpp_active,
+        payload.v2g_active,
         payload.iso_region,
         payload.market_price_at_session
       ]);

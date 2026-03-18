@@ -113,7 +113,10 @@ describe('BiddingOptimizer', () => {
     const context = JSON.stringify({
       event_type: 'PHYSICS_FRAUD',
       severity: 'FRAUD',
-      site_id: 'SITE-123'
+      site_id: 'SITE-123',
+      iso_region: 'CAISO',
+      vpp_active: true,
+      v2g_active: true
     });
 
     mockRedisClient.get.mockImplementation((key) => {
@@ -125,7 +128,7 @@ describe('BiddingOptimizer', () => {
     await optimizer.generateDayAheadBids('CAISO');
 
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('L1 safety lock is active'));
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Reason: PHYSICS_FRAUD, Severity: FRAUD, Site: SITE-123'));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Reason: PHYSICS_FRAUD, Severity: FRAUD, Site: SITE-123, Region: CAISO, VPPActive: true, V2GActive: true'));
 
     consoleSpy.mockRestore();
   });
