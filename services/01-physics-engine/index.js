@@ -188,17 +188,29 @@ async function reconcileLogs() {
     try {
       const payload = JSON.parse(logEntry);
 
+      // Map severity correctly
+      const severity = (payload.event_type === 'PHYSICS_FRAUD') ? 'FRAUD' : (payload.event_type === 'CAPACITY_VIOLATION' ? 'CRITICAL' : 'WARNING');
+
       // Re-publish missed alerts to Kafka
       const alert = {
         event_type: payload.event_type || 'EFFICIENCY_ALERT',
         session_id: payload.session_id,
-        site_id: payload.site_id || SITE_ID,
+        vehicle_id: payload.vehicle_id,
+        vin: payload.vin,
+        site_id: payload.site_id || payload.metadata?.site_id || SITE_ID,
         efficiency_pct: payload.efficiency_pct,
-        threshold: payload.threshold || 0.85,
+        variance_pct: payload.variance_pct,
+        current_soc: payload.current_soc,
+        threshold: payload.threshold || (payload.event_type === 'EFFICIENCY_ALERT' ? 0.85 : (payload.event_type === 'CAPACITY_VIOLATION' ? 20.0 : null)),
+        expected: payload.expected,
+        actual: payload.actual,
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
+        v2g_active: payload.v2g_active,
+        iso_region: payload.iso_region,
         timestamp: payload.timestamp || new Date().toISOString(),
         source_layer: 'L1',
+        severity: severity,
         reconciled: true
       };
 
@@ -207,23 +219,48 @@ async function reconcileLogs() {
         messages: [{ value: JSON.stringify(alert) }],
       });
 
-      // Ensure it exists in the primary audit_log table
+      // High-Fidelity SQL Insertion: map values correctly based on event_type
+      let expectedValue = payload.threshold || 0.85;
+      let actualValue = payload.efficiency_pct;
+
+      if (payload.event_type === 'PHYSICS_FRAUD') {
+        expectedValue = payload.expected;
+        actualValue = payload.actual;
+      } else if (payload.event_type === 'CAPACITY_VIOLATION') {
+        expectedValue = payload.threshold || 20.0;
+        actualValue = payload.current_soc;
+      }
+
       await pgClient.query(`
-        INSERT INTO audit_log (session_id, violation_type, expected_value, actual_value, severity, metadata, billing_mode, vpp_active)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO audit_log (
+          session_id, violation_type, expected_value, actual_value,
+          severity, metadata, billing_mode, vpp_active, iso_region, market_price_at_session
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT DO NOTHING
       `, [
         payload.session_id,
         payload.event_type || 'EFFICIENCY_ALERT',
-        payload.threshold || 0.85,
-        payload.efficiency_pct,
-        'WARNING',
-        JSON.stringify({ reconciled: true, original_ts: payload.timestamp }),
+        expectedValue,
+        actualValue,
+        severity,
+        JSON.stringify({
+          reconciled: true,
+          original_ts: payload.timestamp,
+          vehicle_id: payload.vehicle_id,
+          vin: payload.vin,
+          v2g_active: payload.v2g_active,
+          current_soc: payload.current_soc,
+          variance_pct: payload.variance_pct,
+          efficiency_pct: payload.efficiency_pct
+        }),
         payload.billing_mode,
-        payload.vpp_active
+        payload.vpp_active,
+        payload.iso_region,
+        payload.market_price_at_session
       ]);
 
-      console.log(`✅ [L1 Physics] Reconciled log for session: ${payload.session_id}`);
+      console.log(`✅ [L1 Physics] Reconciled high-fidelity log for session: ${payload.session_id || 'CAPACITY_VIOLATION'}`);
     } catch (err) {
       console.error('❌ [L1 Physics] Reconciliation error:', err.message);
     }
@@ -271,7 +308,7 @@ if (require.main === module) {
   start();
 }
 
-module.exports = { handlePhysicsAlert, producer, connectServices, syncDigitalTwin };
+module.exports = { handlePhysicsAlert, producer, connectServices, syncDigitalTwin, reconcileLogs };
 
 process.on('SIGTERM', async () => {
   await pgClient.end();

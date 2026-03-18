@@ -1,6 +1,8 @@
-// Manual mock producer
+// Manual mocks
 global.mockProducerSend = jest.fn();
 global.mockRedisSetEx = jest.fn();
+global.mockRedisRPop = jest.fn();
+global.mockPgQuery = jest.fn();
 
 // Mock dependencies (hoisted by Jest)
 jest.mock('kafkajs', () => ({
@@ -16,7 +18,6 @@ jest.mock('kafkajs', () => ({
   }))
 }), { virtual: true });
 
-global.mockPgQuery = jest.fn();
 jest.mock('pg', () => ({
   Client: jest.fn().mockImplementation(() => ({
     connect: jest.fn().mockResolvedValue({}),
@@ -32,6 +33,9 @@ jest.mock('redis', () => ({
   createClient: jest.fn().mockImplementation(() => ({
     connect: jest.fn().mockResolvedValue({}),
     lPush: jest.fn().mockResolvedValue({}),
+    rPop: jest.fn().mockImplementation((key) => {
+        return global.mockRedisRPop(key);
+    }),
     setEx: jest.fn().mockImplementation((key, ttl, value) => {
         global.mockRedisSetEx(key, ttl, value);
         return Promise.resolve('OK');
@@ -303,5 +307,93 @@ describe('L1 Physics Engine Digital Twin Sync', () => {
     expect(global.mockRedisSetEx).toHaveBeenCalledTimes(2);
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:digital_twin:vehicle:v1', 60, expect.stringContaining('"id":"v1"'));
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:digital_twin:vehicle:v2', 60, expect.stringContaining('"id":"v2"'));
+  });
+});
+
+describe('L1 Physics Engine Log Reconciliation', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    global.mockProducerSend = jest.fn();
+    global.mockPgQuery = jest.fn();
+    global.mockRedisRPop = jest.fn();
+  });
+
+  test('should reconcile PHYSICS_FRAUD from local Redis to Cloud DB with high-fidelity', async () => {
+    const fraudPayload = {
+      event_type: 'PHYSICS_FRAUD',
+      session_id: 'reconcile-session-1',
+      expected: 50.0,
+      actual: 60.0,
+      variance_pct: 20.0,
+      billing_mode: 'FLEET',
+      iso_region: 'ERCOT',
+      market_price_at_session: 150.0,
+      timestamp: '2026-03-22T10:00:00Z'
+    };
+
+    global.mockRedisRPop
+      .mockResolvedValueOnce(JSON.stringify(fraudPayload))
+      .mockResolvedValueOnce(null);
+
+    await physicsEngine.reconcileLogs();
+
+    // Verify Kafka Alert (Re-published)
+    expect(global.mockProducerSend).toHaveBeenCalled();
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.event_type).toBe('PHYSICS_FRAUD');
+    expect(alertValue.reconciled).toBe(true);
+    expect(alertValue.severity).toBe('FRAUD');
+    expect(alertValue.iso_region).toBe('ERCOT');
+
+    // Verify Database Insertion
+    expect(global.mockPgQuery).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO audit_log'),
+      expect.arrayContaining([
+        'reconcile-session-1',
+        'PHYSICS_FRAUD',
+        50.0,
+        60.0,
+        'FRAUD',
+        expect.stringContaining('"reconciled":true'),
+        'FLEET',
+        undefined, // vpp_active not in payload
+        'ERCOT',
+        150.0
+      ])
+    );
+  });
+
+  test('should reconcile CAPACITY_VIOLATION with mapping to CRITICAL severity', async () => {
+    const capacityPayload = {
+      event_type: 'CAPACITY_VIOLATION',
+      vehicle_id: 'v-99',
+      vin: 'VIN99',
+      current_soc: 18.5,
+      threshold: 20.0,
+      vpp_active: true,
+      iso_region: 'CAISO'
+    };
+
+    global.mockRedisRPop
+      .mockResolvedValueOnce(JSON.stringify(capacityPayload))
+      .mockResolvedValueOnce(null);
+
+    await physicsEngine.reconcileLogs();
+
+    // Verify Database Insertion
+    expect(global.mockPgQuery).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO audit_log'),
+      expect.arrayContaining([
+        undefined, // session_id missing
+        'CAPACITY_VIOLATION',
+        20.0,
+        18.5,
+        'CRITICAL',
+        expect.stringContaining('"vehicle_id":"v-99"'),
+        undefined, // billing_mode missing
+        true,
+        'CAISO'
+      ])
+    );
   });
 });
