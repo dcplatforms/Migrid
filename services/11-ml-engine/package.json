@@ -1,0 +1,13 @@
+{
+  "name": "ml-engine",
+  "version": "0.1.0",
+  "description": "MiGrid ML Engine - AI Forecasting and Predictive Analytics",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 0"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
