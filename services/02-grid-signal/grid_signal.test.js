@@ -12,6 +12,7 @@ jest.mock('redis', () => ({
     get: jest.fn(),
     setEx: jest.fn().mockResolvedValue(),
     quit: jest.fn().mockResolvedValue(),
+    keys: jest.fn().mockResolvedValue([]),
     scan: jest.fn().mockResolvedValue({ cursor: 0, keys: [] }),
     mGet: jest.fn().mockResolvedValue([]),
     on: jest.fn()
