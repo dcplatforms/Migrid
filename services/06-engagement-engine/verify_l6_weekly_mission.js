@@ -12,7 +12,7 @@ async function verifyL6Mission() {
       { name: 'ERCOT Pioneer in CTE', pattern: "a.name = 'ERCOT Pioneer' AND td.iso = 'ERCOT'" },
       { name: 'CAISO Pioneer in CTE', pattern: "a.name = 'CAISO Pioneer' AND td.iso = 'CAISO'" },
       { name: 'PJM Pioneer in CTE', pattern: "a.name = 'PJM Pioneer' AND td.iso = 'PJM'" },
-      { name: 'ML Contributor Achievement Logic', pattern: "checkMLContributorAchievement" },
+      { name: 'ML Contributor Achievement Logic (Consecutive)', pattern: "WITH recent_sessions AS" },
       { name: 'ML Contributor Action Trigger', pattern: "low_variance_session" },
       { name: 'Grid Alignment Bonus (1.5x)', pattern: "pointsMultiplier = 1.5" },
       { name: 'Rank Notification Throttling', pattern: "row.new_rank <= 10 || Math.abs(row.rank_delta) >= 5" },

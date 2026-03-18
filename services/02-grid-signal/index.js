@@ -113,6 +113,27 @@ app.get('/openadr/v3/reports', async (req, res) => {
     const marketContextRaw = await redisClient.get('market:latest:context');
     const marketContext = marketContextRaw ? JSON.parse(marketContextRaw) : null;
 
+    // Phase 5 Enhancement: Aggregate all regional market contexts (Optimized with SCAN and MGET)
+    const regionalMarkets = {};
+    let cursor = 0;
+    const marketKeys = [];
+    do {
+      const result = await redisClient.scan(cursor, { MATCH: 'market:context:*', COUNT: 100 });
+      cursor = result.cursor;
+      marketKeys.push(...result.keys);
+    } while (cursor !== 0);
+
+    if (marketKeys.length > 0) {
+      const marketValues = await redisClient.mGet(marketKeys);
+      marketKeys.forEach((key, index) => {
+        const iso = key.split(':').pop();
+        const value = marketValues[index];
+        if (value) {
+          regionalMarkets[iso] = JSON.parse(value);
+        }
+      });
+    }
+
     // Fetch latest safety context from Redis (provided by L1)
     const safetyLock = await redisClient.get(SAFETY_LOCK_KEY);
     const safetyContextRaw = await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
@@ -123,10 +144,10 @@ app.get('/openadr/v3/reports', async (req, res) => {
 
     // Fetch L8 Site Safe Mode status (Phase 5 Performance Refactor: Use SCAN/MGET)
     const siteStatuses = {};
-    let cursor = 0;
+    let siteCursor = 0;
     do {
-      const { cursor: nextCursor, keys } = await redisClient.scan(cursor, { MATCH: 'l8:site:status:*', COUNT: 100 });
-      cursor = parseInt(nextCursor);
+      const { cursor: nextCursor, keys } = await redisClient.scan(siteCursor, { MATCH: 'l8:site:status:*', COUNT: 100 });
+      siteCursor = parseInt(nextCursor);
       if (keys.length > 0) {
         const values = await redisClient.mGet(keys);
         keys.forEach((key, index) => {
@@ -134,29 +155,33 @@ app.get('/openadr/v3/reports', async (req, res) => {
           siteStatuses[siteId] = values[index];
         });
       }
-    } while (cursor !== 0);
+    } while (siteCursor !== 0);
 
-    // Fetch regional grid locks (Phase 5 Performance Refactor: Use SCAN/MGET)
+    // Fetch regional grid locks (Optimized with SCAN and MGET)
     const regionalLocks = {};
-    cursor = 0;
+    let lockCursor = 0;
+    const lockKeys = [];
     do {
-      const { cursor: nextCursor, keys } = await redisClient.scan(cursor, { MATCH: 'l4:grid:lock:*', COUNT: 100 });
-      cursor = parseInt(nextCursor);
-      if (keys.length > 0) {
-        const values = await redisClient.mGet(keys);
-        keys.forEach((key, index) => {
-          const region = key.split(':').pop();
-          const value = values[index];
-          if (value === '1' || value === 'true') {
-            regionalLocks[region] = true;
-          }
-        });
-      }
-    } while (cursor !== 0);
+      const result = await redisClient.scan(lockCursor, { MATCH: 'l4:grid:lock:*', COUNT: 100 });
+      lockCursor = result.cursor;
+      lockKeys.push(...result.keys);
+    } while (lockCursor !== 0);
+
+    if (lockKeys.length > 0) {
+      const lockValues = await redisClient.mGet(lockKeys);
+      lockKeys.forEach((key, index) => {
+        const region = key.split(':').pop();
+        const value = lockValues[index];
+        if (value === '1' || value === 'true') {
+          regionalLocks[region] = true;
+        }
+      });
+    }
 
     res.json({
       reports: result.rows,
       market_context: marketContext,
+      regional_markets: regionalMarkets,
       safety_lock: {
         active: safetyLock === '1' || safetyLock === 'true',
         context: safetyContext
@@ -352,13 +377,19 @@ async function startSafetyConsumer() {
         }
       } else if (topic === 'MARKET_PRICE_UPDATED') {
         console.log(`[L2] Received market update for ${payload.iso}: $${payload.price_per_mwh}/MWh`);
-        // Cache the latest market context with a 10-minute TTL (600s) for reporting enrichment
-        await redisClient.setEx('market:latest:context', 600, JSON.stringify({
+
+        const marketContext = JSON.stringify({
           iso: payload.iso,
           price_per_mwh: payload.price_per_mwh,
           profitability_index: payload.profitability_index,
           updated_at: payload.timestamp
-        }));
+        });
+
+        // Cache the latest market context with a 10-minute TTL (600s) for reporting enrichment
+        await redisClient.setEx('market:latest:context', 600, marketContext);
+
+        // Phase 5 Enhancement: Store ISO-specific context for regional visibility
+        await redisClient.setEx(`market:context:${payload.iso.toUpperCase()}`, 600, marketContext);
       }
     }
   });

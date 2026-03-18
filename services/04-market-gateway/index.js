@@ -165,6 +165,7 @@ async function startPriceBroadcaster() {
       try {
         const prices = await pricingService.getLatestPrices(iso, 1);
         if (prices && prices.length > 0) {
+          console.log(`[L11 Readiness] Polling high-fidelity data for ${iso} at ${prices[0].location}`);
           await broadcastMarketPrice(iso, prices[0].price_per_mwh, prices[0].location);
         }
         // Jitter helps prevent bursty database/network load
@@ -193,7 +194,7 @@ app.get('/health', async (req, res) => {
     version: '3.4.0',
     status: 'healthy',
     layer: 'L4',
-    markets: ['CAISO', 'PJM', 'ERCOT', 'NORDPOOL'],
+    markets: ['CAISO', 'PJM', 'ERCOT', 'NORDPOOL', 'ENTSO-E'],
     safety_locks: {
       l1_physics: l1Lock === 'true' || l1Lock === '1',
       l4_grid: l4Lock === 'true' || l4Lock === '1'
@@ -359,6 +360,12 @@ app.get('/markets', (req, res) => {
       {
         iso: 'NORDPOOL',
         name: 'Nord Pool European Power Exchange',
+        status: 'active',
+        markets: ['day-ahead', 'intraday']
+      },
+      {
+        iso: 'ENTSO-E',
+        name: 'European Network of Transmission System Operators for Electricity',
         status: 'planned',
         markets: ['day-ahead', 'intraday']
       }

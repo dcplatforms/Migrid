@@ -820,12 +820,22 @@ async function checkGridWarriorAchievement(driver_id) {
 
 async function checkMLContributorAchievement(driver_id) {
   // Requirement: 5 consecutive low-variance sessions (<5%)
-  const count = await pool.query(`
-    SELECT COUNT(*) FROM driver_actions
-    WHERE driver_id = $1 AND action_type = 'low_variance_session'
+  const result = await pool.query(`
+    WITH recent_sessions AS (
+      SELECT (metadata->>'isLowVariance')::boolean as is_low_variance
+      FROM driver_actions
+      WHERE driver_id = $1 AND action_type = 'session_completed'
+      ORDER BY created_at DESC
+      LIMIT 5
+    )
+    SELECT COUNT(*) as total,
+           COUNT(*) FILTER (WHERE is_low_variance = true) as low_variance_count
+    FROM recent_sessions
   `, [driver_id]);
 
-  if (parseInt(count.rows[0].count) >= 5) {
+  const { total, low_variance_count } = result.rows[0];
+
+  if (parseInt(total) >= 5 && parseInt(low_variance_count) === 5) {
     const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'ML Contributor'");
     if (achievement.rows.length > 0) {
       await awardAchievement(driver_id, achievement.rows[0].id);
