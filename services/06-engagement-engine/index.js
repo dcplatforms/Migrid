@@ -432,6 +432,14 @@ async function processChargingEvent(event) {
     await checkV2GAchievements(driverId);
     await updateChallengeProgress(driverId, 'v2g_participation');
     await updateChallengeProgress(driverId, 'vpp_participation');
+
+    // V2X Pioneer Achievement (OCPP 2.1 native)
+    if (event.protocol === 'ocpp2.1') {
+      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'V2X Pioneer'");
+      if (achievement.rows.length > 0) {
+        await awardAchievement(driverId, achievement.rows[0].id);
+      }
+    }
   }
 
   // Periodic check for Plug & Charge Ready status
@@ -503,21 +511,30 @@ async function handleGridSignal(payload) {
       ),
       inserted_actions AS (
           INSERT INTO driver_actions (driver_id, action_type, metadata)
-          SELECT driver_id, 'grid_response', $2
-          FROM target_drivers
+          SELECT td.driver_id, 'grid_response', $2::jsonb || jsonb_build_object('iso', td.iso)
+          FROM target_drivers td
           RETURNING driver_id
       ),
       updated_progress AS (
           INSERT INTO driver_challenge_progress (driver_id, challenge_id, current_count)
-          SELECT td.driver_id, c.id, 1
+          SELECT td.driver_id, c.id,
+                 CASE
+                    WHEN c.challenge_type = 'iso_explorer' THEN
+                        (SELECT COUNT(DISTINCT (metadata->>'iso')) FROM driver_actions WHERE driver_id = td.driver_id AND action_type = 'grid_response')
+                    ELSE 1
+                 END
           FROM target_drivers td
           CROSS JOIN challenges c
-          WHERE c.challenge_type = 'grid_response'
+          WHERE (c.challenge_type = 'grid_response' OR c.challenge_type = 'iso_explorer')
             AND c.is_active = true
             AND (c.target_region IS NULL OR c.target_region = td.iso)
             AND (c.target_fleet_id IS NULL OR c.target_fleet_id = td.fleet_id)
           ON CONFLICT (driver_id, challenge_id)
-          DO UPDATE SET current_count = driver_challenge_progress.current_count + 1,
+          DO UPDATE SET current_count =
+                         CASE
+                            WHEN EXCLUDED.current_count > driver_challenge_progress.current_count THEN EXCLUDED.current_count
+                            ELSE driver_challenge_progress.current_count + 1
+                         END,
                         updated_at = NOW()
           WHERE driver_challenge_progress.is_completed = false
           RETURNING driver_id, challenge_id, current_count
@@ -533,7 +550,9 @@ async function handleGridSignal(payload) {
           RETURNING dcp.driver_id, c.points_reward, c.name, dcp.challenge_id
       ),
       grid_counts AS (
-          SELECT da.driver_id, COUNT(*) as action_count
+          SELECT da.driver_id,
+                 COUNT(*) as action_count,
+                 COUNT(DISTINCT (da.metadata->>'iso')) as iso_count
           FROM driver_actions da
           WHERE da.action_type = 'grid_response'
           AND da.driver_id IN (SELECT driver_id FROM target_drivers)
@@ -549,7 +568,8 @@ async function handleGridSignal(payload) {
               (a.name = 'ERCOT Pioneer' AND td.iso = 'ERCOT' AND gc.action_count >= 1) OR
               (a.name = 'CAISO Pioneer' AND td.iso = 'CAISO' AND gc.action_count >= 1) OR
               (a.name = 'PJM Pioneer' AND td.iso = 'PJM' AND gc.action_count >= 1) OR
-              (a.name = 'Nord Pool Pioneer' AND td.iso = 'NORDPOOL' AND gc.action_count >= 1)
+              (a.name = 'Nord Pool Pioneer' AND td.iso = 'NORDPOOL' AND gc.action_count >= 1) OR
+              (a.name = 'ISO Explorer' AND gc.iso_count >= 3)
           )
           AND NOT EXISTS (
               SELECT 1 FROM driver_achievements da2
