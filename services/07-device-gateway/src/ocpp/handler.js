@@ -125,7 +125,8 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                         transactionId: payload.transactionInfo?.transactionId,
                         energyDispensedKwh: energyDispensed,
                         timestamp: new Date().toISOString(),
-                        trigger: payload.triggerReason || 'Remote'
+                        trigger: payload.triggerReason || 'Remote',
+                        protocol: protocol
                     });
                 }
                 ws.send(JSON.stringify([3, messageId, {}]));
