@@ -69,16 +69,17 @@ class BiddingOptimizer {
         const lockContext = await this.redisClient.get('l1:safety:lock:context');
         const details = lockContext ? JSON.parse(lockContext) : null;
 
-        console.warn(`🚨 [L4 Market Gateway] Bidding halted: L1 safety lock is active for ${iso}`);
+        console.warn(`🚨 [L4 Market Gateway v3.4.1] Bidding halted: L1 safety lock is active for ${iso}`);
         if (details) {
           console.warn(`[L4 Safety Context] Reason: ${details.event_type}, Severity: ${details.severity}, Site: ${details.site_id || 'N/A'}, Region: ${details.iso_region || 'N/A'}, VPPActive: ${details.vpp_active}, V2GActive: ${details.v2g_active}`);
+          console.warn(`[L11 Audit Trail] ISO: ${iso}, Region: ${details.iso_region || 'N/A'}, V2G: ${details.v2g_active}, Variance: ${details.variance_pct}%`);
         }
       }
 
       if (locks.l4) {
         const regionalLockActive = await this.redisClient.get(`l4:grid:lock:${iso.toUpperCase()}`);
         const scope = (regionalLockActive === 'true' || regionalLockActive === '1') ? `Regional (${iso})` : 'Global';
-        console.warn(`⚠️ [L4 Market Gateway] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
+        console.warn(`⚠️ [L4 Market Gateway v3.4.1] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
       }
 
       return [];

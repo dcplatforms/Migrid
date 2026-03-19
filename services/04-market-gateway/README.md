@@ -1,8 +1,8 @@
 # L4: Market Gateway Service
 
-**Version:** 3.4.0
-**Status:** ✅ Complete (Q3 2025)
-**Phase:** Market Access
+**Version:** 3.4.1
+**Status:** ✅ Active (March 2026 Update)
+**Phase:** Phase 5 Enterprise Scale
 
 ## Overview
 
@@ -34,6 +34,8 @@ The Market Gateway service provides integration with wholesale energy markets (C
 | **CAISO** | Day-ahead, Real-time, Ancillary services | ✅ Live |
 | **PJM** | Day-ahead, Real-time, Regulation, Capacity | ✅ Live |
 | **ERCOT** | Day-ahead, Real-time, Ancillary Services | ✅ Live |
+| **NORDPOOL** | Day-ahead, Intraday | ✅ Live |
+| **ENTSO-E** | Day-ahead, Intraday | ✅ Active |
 
 ## Architecture
 
