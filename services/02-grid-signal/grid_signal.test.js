@@ -86,6 +86,25 @@ describe('L2 Grid Signal Service', () => {
     expect(sentValue.v2g_requested).toBe(false);
   });
 
+  test('POST /openadr/v3/events should include market_price_at_session in broadcast (Phase 5 High-Fidelity)', async () => {
+    redisClient.get.mockResolvedValue(null);
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-price-check',
+        type: 'demand-response',
+        metadata: {
+          market_price_at_session: 42.5
+        }
+      });
+
+    expect(response.status).toBe(202);
+    const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
+    expect(sentValue.market_price_at_session).toBe(42.5);
+  });
+
   test('POST /openadr/v3/events should support program_id (3.1.0 Alignment)', async () => {
     redisClient.get.mockResolvedValue(null);
 
@@ -290,6 +309,32 @@ describe('L2 Grid Signal Service', () => {
       'l1:safety:lock:context',
       900,
       expect.stringContaining('"v2g_active":true')
+    );
+  });
+
+  test('startSafetyConsumer should preserve market_price_at_session in lock context', async () => {
+    const { consumer, startSafetyConsumer } = require('./index');
+    await startSafetyConsumer();
+
+    const eachMessage = consumer.run.mock.calls[0][0].eachMessage;
+
+    const criticalAlert = {
+      severity: 'CRITICAL',
+      event_type: 'CAPACITY_VIOLATION',
+      site_id: 'SITE-LOCK-1',
+      market_price_at_session: 150.0,
+      iso_region: 'PJM'
+    };
+
+    await eachMessage({
+      topic: 'migrid.physics.alerts',
+      message: { value: Buffer.from(JSON.stringify(criticalAlert)) }
+    });
+
+    expect(redisClient.setEx).toHaveBeenCalledWith(
+      'l1:safety:lock:context',
+      900,
+      expect.stringContaining('"market_price_at_session":150')
     );
   });
 
