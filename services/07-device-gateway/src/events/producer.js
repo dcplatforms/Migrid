@@ -1,5 +1,6 @@
 const { Kafka } = require('kafkajs');
 const config = require('../config');
+const { redis } = require('../state/connectionMgr');
 
 const kafka = new Kafka({
     clientId: 'l7-device-gateway',
@@ -23,6 +24,7 @@ async function connectProducer() {
  */
 async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
     let event;
+    const isoRegion = await redis.get(`charger_region:${chargePointId}`) || 'CAISO';
 
     if (protocol === 'ocpp2.1' && payload.bidirEnergyFlowData) {
         // Native 2.1 NotifyBidirEnergyFlow
@@ -33,7 +35,8 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
             energyActiveExport: extractBidirValue(payload.bidirEnergyFlowData, 'Energy.Active.Export.Register'),
             powerActiveImport: extractBidirValue(payload.bidirEnergyFlowData, 'Power.Active.Import'),
             powerActiveExport: extractBidirValue(payload.bidirEnergyFlowData, 'Power.Active.Export'),
-            protocol: 'ocpp2.1'
+            protocol: 'ocpp2.1',
+            iso_region: isoRegion
         };
     } else {
         // Up-convert legacy MeterValues to 2.1 schema
@@ -49,7 +52,8 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
             energyActiveExport: exportEnergy,
             powerActiveImport: importPower,
             powerActiveExport: exportPower,
-            protocol: 'ocpp2.0.1_upconverted'
+            protocol: 'ocpp2.0.1_upconverted',
+            iso_region: isoRegion
         };
     }
 
@@ -66,9 +70,17 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
  * Helper to emit session events to L9 Commerce Engine
  */
 async function publishSessionEvent(type, payload) {
+    const chargePointId = payload.chargePointId || payload.evseId;
+    const isoRegion = payload.iso_region || (chargePointId ? await redis.get(`charger_region:${chargePointId}`) : 'CAISO') || 'CAISO';
+
+    const enrichedPayload = {
+        ...payload,
+        iso_region: isoRegion
+    };
+
     await producer.send({
         topic: type, // e.g., SESSION_COMPLETED
-        messages: [{ value: JSON.stringify(payload) }]
+        messages: [{ value: JSON.stringify(enrichedPayload) }]
     });
 
     // Also publish to a generic charging_events topic for L6/L10 consumption if it's a completion
