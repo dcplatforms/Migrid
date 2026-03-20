@@ -118,7 +118,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.2.0', // Incremented for Phase 5 Enterprise Alignment
+    version: '5.3.0', // Incremented for V2X and ISO Explorer updates
     status: 'healthy',
     layer: 'L6'
   });
@@ -413,7 +413,7 @@ async function processChargingEvent(event) {
   }
 
   if (event.type === 'v2g_discharge' && isValid) {
-    await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'v2g_discharge', JSON.stringify({ event })]);
+    await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'v2g_discharge', JSON.stringify({ event, protocol: event.protocol })]);
 
     // Notify L10 Token Engine for V2G fulfillment
     await producer.send({
@@ -503,8 +503,8 @@ async function handleGridSignal(payload) {
       ),
       inserted_actions AS (
           INSERT INTO driver_actions (driver_id, action_type, metadata)
-          SELECT driver_id, 'grid_response', $2
-          FROM target_drivers
+          SELECT td.driver_id, 'grid_response', jsonb_build_object('event_id', $2::jsonb->>'event_id', 'iso', td.iso)
+          FROM target_drivers td
           RETURNING driver_id
       ),
       updated_progress AS (
@@ -512,12 +512,16 @@ async function handleGridSignal(payload) {
           SELECT td.driver_id, c.id, 1
           FROM target_drivers td
           CROSS JOIN challenges c
-          WHERE c.challenge_type = 'grid_response'
+          WHERE (c.challenge_type = 'grid_response' OR c.challenge_type = 'multi_iso_response')
             AND c.is_active = true
             AND (c.target_region IS NULL OR c.target_region = td.iso)
             AND (c.target_fleet_id IS NULL OR c.target_fleet_id = td.fleet_id)
           ON CONFLICT (driver_id, challenge_id)
-          DO UPDATE SET current_count = driver_challenge_progress.current_count + 1,
+          DO UPDATE SET current_count = CASE
+                            WHEN (SELECT challenge_type FROM challenges WHERE id = EXCLUDED.challenge_id) = 'multi_iso_response' THEN
+                                (SELECT COUNT(DISTINCT metadata->>'iso') FROM driver_actions WHERE driver_id = driver_challenge_progress.driver_id AND action_type = 'grid_response') + 1
+                            ELSE driver_challenge_progress.current_count + 1
+                        END,
                         updated_at = NOW()
           WHERE driver_challenge_progress.is_completed = false
           RETURNING driver_id, challenge_id, current_count
@@ -533,11 +537,14 @@ async function handleGridSignal(payload) {
           RETURNING dcp.driver_id, c.points_reward, c.name, dcp.challenge_id
       ),
       grid_counts AS (
-          SELECT da.driver_id, COUNT(*) as action_count
-          FROM driver_actions da
-          WHERE da.action_type = 'grid_response'
-          AND da.driver_id IN (SELECT driver_id FROM target_drivers)
-          GROUP BY da.driver_id
+          SELECT td.driver_id,
+                 (SELECT COUNT(*) FROM driver_actions WHERE driver_id = td.driver_id AND action_type = 'grid_response') + 1 as action_count,
+                 (SELECT COUNT(DISTINCT val) FROM (
+                    SELECT metadata->>'iso' as val FROM driver_actions WHERE driver_id = td.driver_id AND action_type = 'grid_response'
+                    UNION
+                    SELECT td.iso
+                 ) t) as distinct_iso_count
+          FROM target_drivers td
       ),
       new_achievements AS (
           SELECT gc.driver_id, a.id as achievement_id, a.name, a.points, td.iso
@@ -549,7 +556,8 @@ async function handleGridSignal(payload) {
               (a.name = 'ERCOT Pioneer' AND td.iso = 'ERCOT' AND gc.action_count >= 1) OR
               (a.name = 'CAISO Pioneer' AND td.iso = 'CAISO' AND gc.action_count >= 1) OR
               (a.name = 'PJM Pioneer' AND td.iso = 'PJM' AND gc.action_count >= 1) OR
-              (a.name = 'Nord Pool Pioneer' AND td.iso = 'NORDPOOL' AND gc.action_count >= 1)
+              (a.name = 'Nord Pool Pioneer' AND td.iso = 'NORDPOOL' AND gc.action_count >= 1) OR
+              (a.name = 'ISO Explorer' AND gc.distinct_iso_count >= 3)
           )
           AND NOT EXISTS (
               SELECT 1 FROM driver_achievements da2
@@ -788,15 +796,28 @@ async function checkV2GAchievements(driver_id) {
     }
 
     // 2. VPP Hero (10 participations)
-    const v2gCount = await pool.query(`
-      SELECT COUNT(*) FROM driver_actions
+    const v2gCountRes = await pool.query(`
+      SELECT COUNT(*) as total,
+             COUNT(*) FILTER (WHERE LOWER(TRIM(metadata->>'protocol')) = 'ocpp2.1') as ocpp21_count
+      FROM driver_actions
       WHERE driver_id = $1 AND action_type = 'v2g_discharge'
     `, [driver_id]);
 
-    if (parseInt(v2gCount.rows[0]?.count) >= 10) {
+    const v2gCount = parseInt(v2gCountRes.rows[0]?.total || '0');
+    const ocpp21Count = parseInt(v2gCountRes.rows[0]?.ocpp21_count || '0');
+
+    if (v2gCount >= 10) {
       const heroAchievement = await pool.query('SELECT id FROM achievements WHERE name = \'VPP Hero\'');
       if (heroAchievement.rows.length > 0) {
         await awardAchievement(driver_id, heroAchievement.rows[0].id);
+      }
+    }
+
+    // 3. V2X Pioneer (1 participation via OCPP 2.1)
+    if (ocpp21Count >= 1) {
+      const pioneerAchievement = await pool.query('SELECT id FROM achievements WHERE name = \'V2X Pioneer\'');
+      if (pioneerAchievement.rows.length > 0) {
+        await awardAchievement(driver_id, pioneerAchievement.rows[0].id);
       }
     }
   } catch (error) {
