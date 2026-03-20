@@ -70,6 +70,14 @@ async function publishSessionEvent(type, payload) {
         topic: type, // e.g., SESSION_COMPLETED
         messages: [{ value: JSON.stringify(payload) }]
     });
+
+    // Also publish to a generic charging_events topic for L6/L10 consumption if it's a completion
+    if (type === 'SESSION_COMPLETED') {
+        await producer.send({
+            topic: 'charging_events',
+            messages: [{ value: JSON.stringify({ ...payload, type: 'SESSION_COMPLETED' }) }]
+        });
+    }
 }
 
 function extractMeterValue(payload, measurand) {
