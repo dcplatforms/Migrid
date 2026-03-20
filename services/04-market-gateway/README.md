@@ -1,6 +1,6 @@
 # L4: Market Gateway Service
 
-**Version:** 3.4.0
+**Version:** 3.4.1
 **Status:** ✅ Complete (Q3 2025)
 **Phase:** Market Access
 

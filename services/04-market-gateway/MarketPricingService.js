@@ -70,7 +70,7 @@ class MarketPricingService {
       SELECT iso, location, price_per_mwh, timestamp
       FROM lmp_prices
       WHERE ($1::text IS NULL OR iso = $1)
-        AND timestamp > NOW() - ($2 || ' days')::interval
+        AND timestamp > NOW() - make_interval(days => $2)
       ORDER BY timestamp ASC
     `, [iso ? iso.toUpperCase() : null, days]);
 
