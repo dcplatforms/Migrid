@@ -264,13 +264,13 @@ Sell: LMP > $100/MWh (grid services revenue)
 
 High-velocity engineering updates across the stack:
 
-- [✓] **L2 Grid Signal (v2.4.0)**: Launched **Regional Market Context Tracking** (CAISO, ERCOT, PJM, NORDPOOL) and multi-ISO reporting via Redis.
-- [✓] **L3 VPP Aggregator**: Completed **Fuse Rule 2.0** integration and sub-50ms **Redis Capacity Cache** for high-frequency bidding.
-- [✓] **L7 Device Gateway**: Activated **Native OCPP 2.1 V2X** support; achieved **75% completion** on ISO 15118-20 Certificate Exchange.
-- [✓] **L1 Physics Engine (v10.1.0)**: Deployed **High-Fidelity Reconciliation** preserving regional metadata and **Contextual Safety Locks**.
-- [✓] **L4 Market Gateway (v3.4.1)**: Fully activated **ERCOT & Nord Pool** adapters; enabled real-time **Profitability Index** broadcasting.
-- [✓] **L6 Engagement Engine (v5.3.0)**: Launched **Energy Architect** achievement for AI Readiness; advanced **Regional Challenges** to 65%.
-- [✓] **L11 ML Engine**: Established **ML Engine Foundation** and high-fidelity data pipelines from L1/L4 for Phase 6 training.
+- [✓] **L10 Token Engine (v4.2.0)**: Deployed **Dynamic Multipliers** (1.5x Grid Surplus / 2.0x V2G Scarcity) and consolidated regional price updates.
+- [✓] **L2 Grid Signal (v2.4.0)**: Hardened **Regional Market Context** tracking and AI Data Readiness for historical event export.
+- [✓] **L1 Physics Engine (v10.1.0)**: Finalized **High-Fidelity Reconciliation** preserving regional metadata and contextual safety locks.
+- [✓] **L3 VPP Aggregator (v3.2.0)**: Completed **Fuse Rule 2.0** and high-frequency **Redis Capacity Cache** for L4 bidding optimization.
+- [✓] **L4 Market Gateway (v3.4.1)**: Activated **Nord Pool & ERCOT** adapters and implemented robust **Regional Grid Lock** scanning.
+- [✓] **L6 Engagement Engine (v5.3.0)**: Launched **'ISO Explorer'** and **'Energy Architect'** achievements; regional challenges reached 85% completion.
+- [✓] **L7 Device Gateway**: Native **OCPP 2.1 V2X** support active; ISO 15118 Certificate Exchange reached 75% completion.
 
 </details>
 
@@ -795,25 +795,25 @@ done
 | **L2** | Grid Signal | `2.4.0` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.2.0` | ✅ Operational |
 | **L4** | Market Gateway | `3.4.1` | ✅ Operational |
-| **L5** | Driver Experience API | `4.0.0` | ✅ Operational |
+| **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
 | **L6** | Engagement Engine | `5.3.0` | ✅ Operational |
-| **L7** | Device Gateway | `5.0.0` | ✅ Operational |
-| **L8** | Energy Manager | `2.0.0` | ✅ Operational |
-| **L9** | Commerce Engine | `5.0.0` | ✅ Operational |
-| **L10**| Token Engine | `4.1.0` | ✅ Operational |
+| **L7** | Device Gateway | `5.1.0` | ✅ Operational |
+| **L8** | Energy Manager | `2.1.0` | ✅ Operational |
+| **L9** | Commerce Engine | `5.1.0` | ✅ Operational |
+| **L10**| Token Engine | `4.2.0` | ✅ Operational |
 | **L11**| ML Engine | `0.1.0` | ✅ Operational |
 
 ---
 
 ## Latest Release Wins (March 2026)
 
-- **L2 Grid Signal (v2.4.0)**: Launched **Regional Market Context Tracking** (CAISO, ERCOT, PJM, NORDPOOL) and multi-ISO reporting via Redis.
-- **L3 VPP Aggregator**: Completed **Fuse Rule 2.0** integration and sub-50ms **Redis Capacity Cache** for high-frequency bidding.
-- **L7 Device Gateway**: Activated **Native OCPP 2.1 V2X** support; achieved **75% completion** on ISO 15118-20 Certificate Exchange.
-- **L1 Physics Engine (v10.1.0)**: Deployed **High-Fidelity Reconciliation** preserving regional metadata and **Contextual Safety Locks**.
-- **L4 Market Gateway (v3.4.1)**: Fully activated **ERCOT & Nord Pool** adapters; enabled real-time **Profitability Index** broadcasting.
-- **L6 Engagement Engine (v5.3.0)**: Launched **Energy Architect** achievement for AI Readiness; advanced **Regional Challenges** to 65%.
-- **L11 ML Engine**: Established **ML Engine Foundation** and high-fidelity data pipelines from L1/L4 for Phase 6 training.
+- **L10 Token Engine (v4.2.0)**: Deployed **Dynamic Multipliers** (1.5x Grid Surplus / 2.0x V2G Scarcity) and consolidated regional price updates.
+- **L2 Grid Signal (v2.4.0)**: Hardened **Regional Market Context** tracking and AI Data Readiness for historical event export.
+- **L1 Physics Engine (v10.1.0)**: Finalized **High-Fidelity Reconciliation** preserving regional metadata and contextual safety locks.
+- **L3 VPP Aggregator (v3.2.0)**: Completed **Fuse Rule 2.0** and high-frequency **Redis Capacity Cache** for L4 bidding optimization.
+- **L4 Market Gateway (v3.4.1)**: Activated **Nord Pool & ERCOT** adapters and implemented robust **Regional Grid Lock** scanning.
+- **L6 Engagement Engine (v5.3.0)**: Launched **'ISO Explorer'** and **'Energy Architect'** achievements; regional challenges reached 85% completion.
+- **L7 Device Gateway**: Native **OCPP 2.1 V2X** support active; ISO 15118 Certificate Exchange reached 75% completion.
 
 ---
 
