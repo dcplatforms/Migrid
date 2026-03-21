@@ -7,7 +7,7 @@ async function verifyL6V2X() {
     const indexContent = fs.readFileSync('./index.js', 'utf8');
 
     const checks = [
-      { name: 'V2X Pioneer Check', pattern: "if (event.protocol === 'ocpp2.1')" },
+      { name: 'V2X Pioneer Check', pattern: "if (event.protocol && event.protocol.toLowerCase().trim() === 'ocpp2.1')" },
       { name: 'ISO Explorer Logic in CTE', pattern: "a.name = 'ISO Explorer' AND gc.iso_count >= 3" },
       { name: 'ISO Field in grid_response metadata', pattern: "SELECT td.driver_id, 'grid_response', $2::jsonb || jsonb_build_object('iso', td.iso)" },
       { name: 'Challenge ISO Explorer Logic', pattern: "WHEN c.challenge_type = 'iso_explorer' THEN" }

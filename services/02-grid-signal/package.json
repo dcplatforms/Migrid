@@ -1,7 +1,7 @@
 {
   "name": "grid-signal",
   "version": "2.4.0",
-  "description": "L2: Grid Signal Service (OpenADR 3.0)",
+  "description": "L2: Grid Signal Service (OpenADR 3.0.0)",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

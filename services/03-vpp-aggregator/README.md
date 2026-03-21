@@ -1,6 +1,6 @@
 # L3: VPP Aggregator Service
 
-**Version:** 3.0.0
+**Version:** 3.2.0
 **Status:** ✅ Complete (Q3 2025)
 **Phase:** Market Access
 
@@ -92,8 +92,8 @@ REDIS_URL=redis://localhost:6379
 ## Deployment
 
 ```bash
-docker build -t migrid/vpp-aggregator:3.0.0 .
-docker run -p 3003:3003 migrid/vpp-aggregator:3.0.0
+docker build -t migrid/vpp-aggregator:3.2.0 .
+docker run -p 3003:3003 migrid/vpp-aggregator:3.2.0
 ```
 
 ## Monitoring
