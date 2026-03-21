@@ -148,7 +148,7 @@ app.get('/openadr/v3/reports', async (req, res) => {
     let siteCursor = 0;
     do {
       const { cursor: nextCursor, keys } = await redisClient.scan(siteCursor, { MATCH: 'l8:site:status:*', COUNT: 100 });
-      siteCursor = parseInt(nextCursor);
+      siteCursor = nextCursor;
       if (keys.length > 0) {
         const values = await redisClient.mGet(keys);
         keys.forEach((key, index) => {
@@ -156,7 +156,7 @@ app.get('/openadr/v3/reports', async (req, res) => {
           siteStatuses[siteId] = values[index];
         });
       }
-    } while (siteCursor !== 0);
+    } while (siteCursor !== 0 && siteCursor !== '0');
 
     // Fetch regional grid locks (Optimized with SCAN and MGET)
     const regionalLocks = {};
@@ -328,6 +328,7 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
             site_status: siteStatus || 'OPERATIONAL',
             v2g_requested: v2gRequested,
             iso_region: isoRegion,
+            market_price_at_session: event.metadata?.market_price_at_session,
             intervals: event.intervals || [],
             targets: event.targets || [],
             signals: event.signals || [],
@@ -423,6 +424,7 @@ async function startSafetyConsumer() {
             vpp_active: payload.vpp_active,
             v2g_active: payload.v2g_active,
             iso_region: payload.iso_region,
+            market_price_at_session: payload.market_price_at_session,
             locked_at: new Date().toISOString()
           }));
         }
