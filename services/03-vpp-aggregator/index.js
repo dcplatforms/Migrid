@@ -77,7 +77,7 @@ const authenticateToken = (req, res, next) => {
 app.get('/health', (req, res) => {
   res.json({
     service: 'vpp-aggregator',
-    version: '3.1.1',
+    version: '3.2.0',
     status: 'healthy',
     layer: 'L3'
   });
@@ -328,14 +328,42 @@ const initKafka = async () => {
   }
 };
 
-// V2G Dispatch Endpoint (internal/test)
+/**
+ * V2G Dispatch Endpoint
+ * Authorized V2G discharge trigger for specific chargers.
+ * Security: Enforces fleet isolation and validates input.
+ */
 app.post('/dispatch/v2g', authenticateToken, async (req, res) => {
     const { chargePointId, amountKw } = req.body;
+
+    // 1. Input Validation
+    if (!chargePointId || typeof chargePointId !== 'string') {
+        return res.status(400).json({ error: 'chargePointId is required and must be a string.' });
+    }
+    if (!amountKw || typeof amountKw !== 'number' || amountKw <= 0) {
+        return res.status(400).json({ error: 'amountKw must be a positive number.' });
+    }
+
     try {
+        // 2. IDOR / Authorization Check: Ensure the charger belongs to the user's fleet
+        const chargerCheck = await pool.query(
+            'SELECT id FROM chargers WHERE serial_number = $1 AND fleet_id = $2',
+            [chargePointId, req.user.fleet_id]
+        );
+
+        if (chargerCheck.rows.length === 0) {
+            console.warn(`[Security] Unauthorized V2G dispatch attempt by fleet ${req.user.fleet_id} on charger ${chargePointId}`);
+            return res.status(403).json({
+                error: 'Forbidden: You are not authorized to dispatch this resource.'
+            });
+        }
+
+        // 3. Dispatch Signal to Kafka
         await dispatchV2G(chargePointId, amountKw);
         res.json({ status: 'DISPATCHED', chargePointId, amountKw });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error('[VPP Aggregator] Dispatch error:', error);
+        res.status(500).json({ error: 'An internal server error occurred' });
     }
 });
 

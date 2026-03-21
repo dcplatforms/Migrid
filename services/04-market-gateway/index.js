@@ -160,7 +160,7 @@ async function startPriceBroadcaster() {
 
   // Set interval for every 5 minutes
   setInterval(async () => {
-    console.log('[L11 Readiness] Heartbeat: LMP price streams active for ML training');
+    console.log(`[L11 Readiness] Heartbeat: LMP price streams active for ML training (${new Date().toISOString()})`);
     for (const iso of isos) {
       try {
         const prices = await pricingService.getLatestPrices(iso, 1);
@@ -181,23 +181,40 @@ async function startPriceBroadcaster() {
 app.get('/health', async (req, res) => {
   let l1Lock = 'false';
   let l4Lock = 'false';
+  let regionalLocks = {};
 
   try {
     l1Lock = await redisClient.get('l1:safety:lock') || 'false';
     l4Lock = await redisClient.get('l4:grid:lock') || 'false';
+
+    // Scan for regional L4 grid locks
+    let cursor = 0;
+    const pattern = 'l4:grid:lock:*';
+    do {
+      const result = await redisClient.scan(cursor, { MATCH: pattern, COUNT: 100 });
+      cursor = result.cursor;
+      for (const key of result.keys) {
+        const region = key.split(':').pop();
+        const value = await redisClient.get(key);
+        if (value === 'true' || value === '1') {
+          regionalLocks[region] = true;
+        }
+      }
+    } while (cursor !== 0 && cursor !== '0');
   } catch (error) {
     console.error('[Market Gateway Health] Redis check failed:', error.message);
   }
 
   res.json({
     service: 'market-gateway',
-    version: '3.4.0',
+    version: '3.4.1',
     status: 'healthy',
     layer: 'L4',
     markets: ['CAISO', 'PJM', 'ERCOT', 'NORDPOOL', 'ENTSO-E'],
     safety_locks: {
       l1_physics: l1Lock === 'true' || l1Lock === '1',
-      l4_grid: l4Lock === 'true' || l4Lock === '1'
+      l4_grid: l4Lock === 'true' || l4Lock === '1',
+      l4_regional: regionalLocks
     }
   });
 });
@@ -311,22 +328,16 @@ app.get('/data/training/lmp', authenticateToken, async (req, res) => {
   const daysInt = parseInt(days) || 7;
 
   try {
-    const result = await pool.query(`
-      SELECT iso, location, price_per_mwh, timestamp
-      FROM lmp_prices
-      WHERE ($1::text IS NULL OR iso = $1)
-        AND timestamp > NOW() - ($2 || ' days')::interval
-      ORDER BY timestamp ASC
-    `, [iso ? iso.toUpperCase() : null, daysInt]);
+    const prices = await pricingService.getHistoricalPrices(iso, daysInt);
 
     res.json({
       iso: iso || 'ALL',
-      record_count: result.rows.length,
-      data: result.rows.map(r => ({
-        ...r,
-        price_per_mwh: new Decimal(r.price_per_mwh).toNumber()
+      record_count: prices.length,
+      data: prices.map(p => ({
+        ...p,
+        price_per_mwh: p.price_per_mwh.toNumber()
       })),
-      version: '1.0.0',
+      version: '1.1.0',
       status: 'READY_FOR_L11'
     });
   } catch (error) {

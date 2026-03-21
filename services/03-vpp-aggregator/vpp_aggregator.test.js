@@ -172,4 +172,47 @@ describe('L3 VPP Aggregator Service', () => {
         expect(response.status).toBe(200);
         expect(response.body.success).toBe(true);
     });
+
+    describe('POST /dispatch/v2g', () => {
+        test('should return 400 if input is invalid', async () => {
+            const response = await request(app)
+                .post('/dispatch/v2g')
+                .set('Authorization', `Bearer ${mockToken}`)
+                .send({ amountKw: 100 }); // Missing chargePointId
+
+            expect(response.status).toBe(400);
+            expect(response.body.error).toContain('chargePointId is required');
+        });
+
+        test('should return 403 if charger belongs to another fleet (IDOR fix)', async () => {
+            mockPool.query.mockResolvedValue({ rows: [] }); // Charger not found for this fleet
+
+            const response = await request(app)
+                .post('/dispatch/v2g')
+                .set('Authorization', `Bearer ${mockToken}`)
+                .send({
+                    chargePointId: 'OTHER-CHG-001',
+                    amountKw: 50
+                });
+
+            expect(response.status).toBe(403);
+            expect(response.body.error).toContain('Forbidden');
+        });
+
+        test('should return 200 and dispatch if authorized', async () => {
+            mockPool.query.mockResolvedValue({ rows: [{ id: 'UUID-123' }] }); // Charger belongs to fleet
+
+            const response = await request(app)
+                .post('/dispatch/v2g')
+                .set('Authorization', `Bearer ${mockToken}`)
+                .send({
+                    chargePointId: 'CHG-001',
+                    amountKw: 50
+                });
+
+            expect(response.status).toBe(200);
+            expect(response.body.status).toBe('DISPATCHED');
+            expect(mockProducer.send).toHaveBeenCalled();
+        });
+    });
 });
