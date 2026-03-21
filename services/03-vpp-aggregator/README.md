@@ -1,6 +1,6 @@
 # L3: VPP Aggregator Service
 
-**Version:** 3.0.0
+**Version:** 3.2.0
 **Status:** ✅ Complete (Q3 2025)
 **Phase:** Market Access
 
@@ -84,16 +84,18 @@ REDIS_URL=redis://localhost:6379
 
 ## Phase 5 Backlog (Q1 2026)
 
-- [ ] **ISO 15118 PnC Ready Aggregation**: Prioritize resources with Plug & Charge capability.
-- [ ] **Redis-Based Capacity Cache**: Maintain `vpp:capacity:available` key for L4.
-- [ ] **OpenADR 3.0 Automated Dispatch**: Integrate Kafka `grid_signals` for touchless DR.
+- [~] **ISO 15118 PnC Ready Aggregation**: Prioritize resources with Plug & Charge capability (75% L7 sync).
+- [x] **Redis-Based Capacity Cache**: Sub-50ms reporting via `vpp:capacity:available` key for L4.
+- [~] **OpenADR 3.0 Automated Dispatch**: Integrated Kafka `grid_signals` with `program_id` and `market_context` for touchless DR.
+- [x] **L8 Safe Mode Integration**: Site-level exclusion from aggregation during meter offline events.
+- [x] **Contextual Safety Locks**: Respects L1 `l1:safety:lock:context` for granular physics enforcement.
 - [ ] **Physics-Aware Forecasting**: Factor L1 variance data into capacity predictions.
 
 ## Deployment
 
 ```bash
-docker build -t migrid/vpp-aggregator:3.0.0 .
-docker run -p 3003:3003 migrid/vpp-aggregator:3.0.0
+docker build -t migrid/vpp-aggregator:3.2.0 .
+docker run -p 3003:3003 migrid/vpp-aggregator:3.2.0
 ```
 
 ## Monitoring

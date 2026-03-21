@@ -37,6 +37,21 @@ const consumer = kafka.consumer({ groupId: 'vpp-aggregator-group' });
 app.use(express.json());
 
 const SAFETY_LOCK_KEY = 'l1:safety:lock';
+const SAFETY_CONTEXT_KEY = 'l1:safety:lock:context';
+const SAFE_MODE_SITES_SET = 'l3:vpp:safemode_sites';
+
+/**
+ * Helper: Get sites currently in Safe Mode from Redis
+ */
+const getSafeModeSites = async () => {
+  try {
+    // Optimization: Using SMEMBERS on a dedicated set instead of SCAN
+    return await redisClient.sMembers(SAFE_MODE_SITES_SET);
+  } catch (error) {
+    console.error('[VPP Aggregator] Error fetching Safe Mode sites:', error);
+    return [];
+  }
+};
 
 /**
  * Middleware: Verify JWT token
@@ -62,7 +77,7 @@ const authenticateToken = (req, res, next) => {
 app.get('/health', (req, res) => {
   res.json({
     service: 'vpp-aggregator',
-    version: '3.1.1',
+    version: '3.2.0',
     status: 'healthy',
     layer: 'L3'
   });
@@ -71,9 +86,24 @@ app.get('/health', (req, res) => {
 // Get available capacity
 app.get('/capacity/available', authenticateToken, async (req, res) => {
   try {
-    // 1. Check L1 Safety Lock
+    // 1. Check L1 Safety Lock (Global and Contextual)
     const safetyLock = await redisClient.get(SAFETY_LOCK_KEY);
-    if (safetyLock === '1' || safetyLock === 'true') {
+    const safetyContext = await redisClient.get(SAFETY_CONTEXT_KEY);
+    let isLocked = (safetyLock === '1' || safetyLock === 'true');
+
+    if (safetyContext) {
+      try {
+        const context = JSON.parse(safetyContext);
+        // Halt if VPP violation is active, or if it's fleet-specific
+        if (context.vpp_active || context.fleet_id === req.user.fleet_id) {
+          isLocked = true;
+        }
+      } catch (e) {
+        console.error('[VPP Aggregator] Failed to parse safety context:', e.message);
+      }
+    }
+
+    if (isLocked) {
       console.warn(`🚨 [VPP Aggregator] Capacity Request Rejected: L1 Safety Lock active for fleet ${req.user.fleet_id}`);
       return res.json({
         available_capacity_kwh: 0,
@@ -90,6 +120,9 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
       return res.json(JSON.parse(cachedCapacity));
     }
 
+    // Check Safe Mode sites from L8
+    const safeModeSites = await getSafeModeSites();
+
     const result = await pool.query(`
       SELECT
         SUM(
@@ -99,11 +132,14 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
         ) as total_capacity_kwh,
         COUNT(*) as vehicle_count
       FROM vehicles v
+      LEFT JOIN charging_sessions cs ON v.id = cs.vehicle_id AND cs.end_time IS NULL
+      LEFT JOIN chargers c ON cs.charger_id = c.id
       WHERE v.is_plugged_in = true
         AND v.v2g_enabled = true
         AND v.current_soc > GREATEST(COALESCE(v.min_soc_threshold, 0), 20.0)
         AND v.fleet_id = $1
-    `, [req.user.fleet_id]);
+        AND (c.location_id IS NULL OR c.location_id::text != ALL($2))
+    `, [req.user.fleet_id, safeModeSites]);
 
     const capacity = result.rows[0];
     const response = {
@@ -171,12 +207,33 @@ app.post('/resources/register', authenticateToken, async (req, res) => {
  */
 const updateGlobalCapacity = async () => {
   try {
-    // Check safety lock first
+    // Check safety lock first (Global and Contextual)
     const safetyLock = await redisClient.get(SAFETY_LOCK_KEY);
-    if (safetyLock === '1' || safetyLock === 'true') {
+    const safetyContext = await redisClient.get(SAFETY_CONTEXT_KEY);
+    let isLocked = (safetyLock === '1' || safetyLock === 'true');
+    let lockedFleetId = null;
+
+    if (safetyContext) {
+      try {
+        const context = JSON.parse(safetyContext);
+        if (context.vpp_active) {
+          isLocked = true;
+        }
+        if (context.fleet_id) {
+          lockedFleetId = context.fleet_id;
+        }
+      } catch (e) {
+        console.error('[VPP Aggregator] Failed to parse safety context in background job:', e.message);
+      }
+    }
+
+    if (isLocked) {
         await redisClient.set('vpp:capacity:available', '0');
         return;
     }
+
+    // Check Safe Mode sites from L8
+    const safeModeSites = await getSafeModeSites();
 
     const result = await pool.query(`
       SELECT
@@ -186,10 +243,14 @@ const updateGlobalCapacity = async () => {
           * COALESCE(v.availability_factor, 1.0)
         ) as total_capacity_kwh
       FROM vehicles v
+      LEFT JOIN charging_sessions cs ON v.id = cs.vehicle_id AND cs.end_time IS NULL
+      LEFT JOIN chargers c ON cs.charger_id = c.id
       WHERE v.is_plugged_in = true
         AND v.v2g_enabled = true
         AND v.current_soc > GREATEST(COALESCE(v.min_soc_threshold, 0), 20.0)
-    `);
+        AND (c.location_id IS NULL OR c.location_id::text != ALL($1))
+        AND ($2::UUID IS NULL OR v.fleet_id != $2)
+    `, [safeModeSites, lockedFleetId]);
 
     const totalCapacity = result.rows[0].total_capacity_kwh || 0;
     await redisClient.set('vpp:capacity:available', totalCapacity.toString());
@@ -206,7 +267,7 @@ const initKafka = async () => {
   try {
     await consumer.connect();
     await consumer.subscribe({
-        topics: ['migrid.physics.alerts', 'grid_signals', 'VPP_PARTICIPATION_CHANGED'],
+        topics: ['migrid.physics.alerts', 'grid_signals', 'VPP_PARTICIPATION_CHANGED', 'L8_SAFE_MODE_CHANGED'],
         fromBeginning: false
     });
 
@@ -240,8 +301,23 @@ const initKafka = async () => {
             await updateGlobalCapacity();
         }
 
+        if (topic === 'L8_SAFE_MODE_CHANGED') {
+            const { site_id, safe_mode } = payload;
+            console.log(`🛡️ [VPP Aggregator] L8 Safe Mode Change: Site ${site_id} is now ${safe_mode ? 'LOCKED' : 'RELEASED'}`);
+
+            if (safe_mode) {
+              await redisClient.sAdd(SAFE_MODE_SITES_SET, site_id.toString());
+            } else {
+              await redisClient.sRem(SAFE_MODE_SITES_SET, site_id.toString());
+            }
+
+            // Trigger global update
+            await updateGlobalCapacity();
+        }
+
         if (topic === 'grid_signals') {
-          console.log(`⚡ [VPP Aggregator] Grid Signal received: ${payload.event_id}. Sequence initiated.`);
+          const { event_id, program_id, market_context, site_id, priority } = payload;
+          console.log(`⚡ [VPP Aggregator] Grid Signal received: ${event_id}. Program: ${program_id}, Market: ${market_context}, Site: ${site_id}, Priority: ${priority}`);
           // TODO: Implement automated dispatch sequence according to IEEE 2030.5
         }
       },
@@ -252,14 +328,42 @@ const initKafka = async () => {
   }
 };
 
-// V2G Dispatch Endpoint (internal/test)
+/**
+ * V2G Dispatch Endpoint
+ * Authorized V2G discharge trigger for specific chargers.
+ * Security: Enforces fleet isolation and validates input.
+ */
 app.post('/dispatch/v2g', authenticateToken, async (req, res) => {
     const { chargePointId, amountKw } = req.body;
+
+    // 1. Input Validation
+    if (!chargePointId || typeof chargePointId !== 'string') {
+        return res.status(400).json({ error: 'chargePointId is required and must be a string.' });
+    }
+    if (!amountKw || typeof amountKw !== 'number' || amountKw <= 0) {
+        return res.status(400).json({ error: 'amountKw must be a positive number.' });
+    }
+
     try {
+        // 2. IDOR / Authorization Check: Ensure the charger belongs to the user's fleet
+        const chargerCheck = await pool.query(
+            'SELECT id FROM chargers WHERE serial_number = $1 AND fleet_id = $2',
+            [chargePointId, req.user.fleet_id]
+        );
+
+        if (chargerCheck.rows.length === 0) {
+            console.warn(`[Security] Unauthorized V2G dispatch attempt by fleet ${req.user.fleet_id} on charger ${chargePointId}`);
+            return res.status(403).json({
+                error: 'Forbidden: You are not authorized to dispatch this resource.'
+            });
+        }
+
+        // 3. Dispatch Signal to Kafka
         await dispatchV2G(chargePointId, amountKw);
         res.json({ status: 'DISPATCHED', chargePointId, amountKw });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error('[VPP Aggregator] Dispatch error:', error);
+        res.status(500).json({ error: 'An internal server error occurred' });
     }
 });
 

@@ -1,6 +1,6 @@
 {
   "name": "@migrid/driver-experience-api",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "Driver-facing API for mobile app, smart routing, and voice commands",
   "main": "index.js",
   "scripts": {
@@ -15,7 +15,11 @@
     "kafkajs": "^2.2.4",
     "axios": "^1.6.0"
   },
-  "keywords": ["driver-dx", "mobile-api", "smart-routing"],
+  "keywords": [
+    "driver-dx",
+    "mobile-api",
+    "smart-routing"
+  ],
   "author": "MiGrid Contributors",
   "license": "Apache-2.0"
 }

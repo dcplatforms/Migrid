@@ -188,7 +188,7 @@ async function startPriceBroadcaster() {
 
   // Set interval for every 5 minutes
   setInterval(async () => {
-    console.log('[L11 Readiness] Heartbeat: LMP price streams active for ML training');
+    console.log(`[L11 Readiness] Heartbeat: LMP price streams active for ML training (${new Date().toISOString()})`);
     for (const iso of isos) {
       try {
         const prices = await pricingService.getLatestPrices(iso, 1);
@@ -209,10 +209,26 @@ async function startPriceBroadcaster() {
 app.get('/health', async (req, res) => {
   let l1Lock = 'false';
   let l4Lock = 'false';
+  let regionalLocks = {};
 
   try {
     l1Lock = await redisClient.get('l1:safety:lock') || 'false';
     l4Lock = await redisClient.get('l4:grid:lock') || 'false';
+
+    // Scan for regional L4 grid locks
+    let cursor = 0;
+    const pattern = 'l4:grid:lock:*';
+    do {
+      const result = await redisClient.scan(cursor, { MATCH: pattern, COUNT: 100 });
+      cursor = result.cursor;
+      for (const key of result.keys) {
+        const region = key.split(':').pop();
+        const value = await redisClient.get(key);
+        if (value === 'true' || value === '1') {
+          regionalLocks[region] = true;
+        }
+      }
+    } while (cursor !== 0 && cursor !== '0');
   } catch (error) {
     console.error('[Market Gateway Health] Redis check failed:', error.message);
   }
@@ -228,7 +244,7 @@ app.get('/health', async (req, res) => {
     safety_locks: {
       l1_physics: l1Lock === 'true' || l1Lock === '1',
       l4_grid: l4Lock === 'true' || l4Lock === '1',
-      regional_grid_locks: regionalLocks
+      l4_regional: regionalLocks
     }
   });
 });
@@ -351,7 +367,7 @@ app.get('/data/training/lmp', authenticateToken, async (req, res) => {
         ...p,
         price_per_mwh: p.price_per_mwh.toNumber()
       })),
-      version: '1.0.0',
+      version: '1.1.0',
       status: 'READY_FOR_L11'
     });
   } catch (error) {
