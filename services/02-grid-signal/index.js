@@ -25,13 +25,13 @@ const eventSchema = {
     type: { type: 'string' },
     priority: { type: ['string', 'number'] },
     site_id: { type: 'string' },
-    program_id: { type: 'string' },
     signals: { type: 'array' },
     targets: { type: 'array' },
-    intervals: { type: 'array' }
+    intervals: { type: 'array' },
+    metadata: { type: 'object' }
   },
   required: ['id', 'type'],
-  additionalProperties: false
+  additionalProperties: true
 };
 const validateEvent = ajv.compile(eventSchema);
 
@@ -121,7 +121,9 @@ app.get('/openadr/v3/reports', async (req, res) => {
     do {
       const result = await redisClient.scan(cursor, { MATCH: 'market:context:*', COUNT: 100 });
       cursor = result.cursor;
-      marketKeys.push(...result.keys);
+      if (result.keys && result.keys.length > 0) {
+        marketKeys.push(...result.keys);
+      }
     } while (cursor !== 0 && cursor !== '0');
 
     if (marketKeys.length > 0) {
@@ -143,20 +145,44 @@ app.get('/openadr/v3/reports', async (req, res) => {
     // Fetch grid lock status (provided by L4)
     const gridLock = await redisClient.get('l4:grid:lock');
 
-    // Fetch L8 Site Safe Mode status (Phase 5 Performance Refactor: Use SCAN/MGET)
+    // Consistently fetch L8 Site Statuses and Safe Mode status
     const siteStatuses = {};
-    let siteCursor = 0;
-    do {
-      const { cursor: nextCursor, keys } = await redisClient.scan(siteCursor, { MATCH: 'l8:site:status:*', COUNT: 100 });
-      siteCursor = nextCursor;
-      if (keys.length > 0) {
-        const values = await redisClient.mGet(keys);
-        keys.forEach((key, index) => {
-          const siteId = key.split(':').pop();
-          siteStatuses[siteId] = values[index];
-        });
-      }
-    } while (siteCursor !== 0 && siteCursor !== '0');
+
+    try {
+      // 1. Fetch site statuses (OPERATIONAL, METER_OFFLINE, etc.)
+      let statusCursor = '0';
+      do {
+        const result = await redisClient.scan(statusCursor, { MATCH: 'l8:site:status:*', COUNT: 100 });
+        statusCursor = result.cursor;
+        if (result.keys && result.keys.length > 0) {
+          const values = await redisClient.mGet(result.keys);
+          result.keys.forEach((key, index) => {
+            const siteId = key.split(':').pop();
+            siteStatuses[siteId] = values[index];
+          });
+        }
+      } while (statusCursor !== 0 && statusCursor !== '0');
+
+      // 2. Overlay Safe Mode status (Phase 5 Forward Engineering)
+      let safeModeCursor = '0';
+      do {
+        const result = await redisClient.scan(safeModeCursor, { MATCH: 'l8:site:*:safe_mode', COUNT: 100 });
+        safeModeCursor = result.cursor;
+        if (result.keys && result.keys.length > 0) {
+          const values = await redisClient.mGet(result.keys);
+          result.keys.forEach((key, index) => {
+            const parts = key.split(':');
+            const siteId = parts[2];
+            const value = values[index];
+            if (value === 'true' || value === '1') {
+              siteStatuses[siteId] = 'SAFE_MODE';
+            }
+          });
+        }
+      } while (safeModeCursor !== 0 && safeModeCursor !== '0');
+    } catch (redisError) {
+      console.error('[L2 Grid Signal] Redis Scan Error (Site Status):', redisError.message);
+    }
 
     // Fetch regional grid locks (Optimized with SCAN and MGET)
     const regionalLocks = {};
@@ -165,7 +191,9 @@ app.get('/openadr/v3/reports', async (req, res) => {
     do {
       const result = await redisClient.scan(lockCursor, { MATCH: 'l4:grid:lock:*', COUNT: 100 });
       lockCursor = result.cursor;
-      lockKeys.push(...result.keys);
+      if (result.keys && result.keys.length > 0) {
+        lockKeys.push(...result.keys);
+      }
     } while (lockCursor !== 0 && lockCursor !== '0');
 
     if (lockKeys.length > 0) {
@@ -177,34 +205,6 @@ app.get('/openadr/v3/reports', async (req, res) => {
           regionalLocks[region] = true;
         }
       });
-    }
-
-    // Phase 5 Enhancement: Fetch L8 Safe Mode site statuses
-    const siteStatuses = {};
-    try {
-      let siteCursor = '0';
-      const siteKeys = [];
-      do {
-        const result = await redisClient.scan(siteCursor, { MATCH: 'l8:site:*:safe_mode', COUNT: 100 });
-        siteCursor = result.cursor;
-        if (result.keys) {
-          siteKeys.push(...result.keys);
-        }
-      } while (siteCursor !== 0 && siteCursor !== '0');
-
-      if (siteKeys.length > 0) {
-        const siteValues = await redisClient.mGet(siteKeys);
-        siteKeys.forEach((key, index) => {
-          const parts = key.split(':');
-          const siteId = parts[2];
-          const value = siteValues[index];
-          if (value === 'true' || value === '1') {
-            siteStatuses[siteId] = 'SAFE_MODE';
-          }
-        });
-      }
-    } catch (redisError) {
-      console.error('[L2 Grid Signal] Redis Scan Error (Site Status):', redisError.message);
     }
 
     res.json({
@@ -320,15 +320,15 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
         messages: [{
           value: JSON.stringify({
             event_id: event.id,
-            program_id: event.program_id,
+            program_id: event.program_id || 'DEFAULT',
             type: event.type,
             priority: event.priority || 'NORMAL',
             site_id: event.site_id || 'ALL',
-            program_id: event.program_id || 'DEFAULT',
             site_status: siteStatus || 'OPERATIONAL',
             v2g_requested: v2gRequested,
             iso_region: isoRegion,
             market_price_at_session: event.metadata?.market_price_at_session,
+            billing_mode: event.metadata?.billing_mode,
             intervals: event.intervals || [],
             targets: event.targets || [],
             signals: event.signals || [],
