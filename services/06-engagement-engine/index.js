@@ -118,7 +118,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.2.0', // Incremented for Phase 5 Enterprise Alignment
+    version: '5.3.0',
     status: 'healthy',
     layer: 'L6'
   });

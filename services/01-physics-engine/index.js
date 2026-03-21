@@ -235,11 +235,6 @@ async function reconcileLogs() {
       }
 
       await pgClient.query(`
-        INSERT INTO audit_log (
-          session_id, violation_type, expected_value, actual_value,
-          severity, metadata, billing_mode, vpp_active, iso_region, market_price_at_session
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         INSERT INTO audit_log (session_id, violation_type, expected_value, actual_value, severity, metadata, billing_mode, vpp_active, v2g_active, iso_region, market_price_at_session)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         ON CONFLICT DO NOTHING

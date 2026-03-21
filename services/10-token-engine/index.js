@@ -101,7 +101,7 @@ function getDynamicMultiplier(iso) {
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '4.1.0',
+    version: '4.2.0',
     status: 'healthy',
     layer: 'L10'
   });

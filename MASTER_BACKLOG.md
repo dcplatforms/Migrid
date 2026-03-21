@@ -10,11 +10,11 @@
 
 | Priority | Feature / Task | Primary Layer | Blocking Dependencies | Target Phase |
 |:---:|:---|:---:|:---|:---:|
-| **P0** | **ISO 15118 Cert Exchange** | L7 (Device) | L5 (Driver API) must update payload schemas | Phase 5 |
+| **P0** | **ISO 15118 Cert Exchange** | L7, L5 | 🚧 L5 Driver API ISO 15118 schema missing | Phase 5 |
 | **P1** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 (Market) finalized ERCOT/Nord Pool feeds | Phase 5 |
 | **P2** | **AI Data Readiness (L11)** | L11 (ML Engine) | ✅ L1 High-Fidelity Reconciliation active | Phase 6 Prep |
-| **P3** | **ML Demand Forecasting** | L11 (ML Engine) | ✅ L3 Fuse Rule 2.0 Capacity Integration | Phase 6 |
-| **P4** | **OCPI 2.2 Roaming** | L7 (Device) | L9 (Commerce) settlement engine integration | Phase 5 |
+| **P3** | **Commerce Settlement Engine** | L9, L7 | 🚧 L9 Commerce settlement engine sync | Phase 5 |
+| **P4** | **OCPI 2.2 Roaming** | L7 (Device) | 🚧 L9 Commerce settlement engine integration | Phase 5 |
 
 | Priority | Task ID | Description | Primary Layers | Status | Strategic Alignment |
 |:---:|:---:|:---|:---:|:---:|:---|

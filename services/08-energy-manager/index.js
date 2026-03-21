@@ -52,7 +52,7 @@ async function bootstrap() {
         app.get('/health', (req, res) => {
             res.json({
                 service: 'energy-manager',
-                version: '2.0.0',
+                version: '2.1.0',
                 status: 'healthy',
                 siteId: SITE_ID
             });

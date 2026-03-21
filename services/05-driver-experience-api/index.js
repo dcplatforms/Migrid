@@ -119,7 +119,7 @@ const authenticateToken = (req, res, next) => {
 app.get('/health', (req, res) => {
   res.json({
     service: 'driver-experience-api',
-    version: '5.0.0', // Incremented for Phase 5 Updates
+    version: '4.1.0',
     status: 'healthy',
     kafka_connected: kafkaConnected,
     layer: 'L5'
@@ -474,7 +474,7 @@ app.post('/voice/command', authenticateToken, async (req, res) => {
 // Start server
 app.listen(port, () => {
     console.log(`[Driver Experience API] Running on port ${port}`);
-    console.log('[Phase 5 Updates] Version 5.0.0 Synchronization Active');
+    console.log('[Phase 5 Updates] Version 4.1.0 Synchronization Active');
 });
 
 process.on('SIGTERM', async () => {

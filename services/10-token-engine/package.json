@@ -1,6 +1,6 @@
 {
   "name": "@migrid/token-engine",
-  "version": "1.0.0",
+  "version": "4.2.0",
   "main": "index.js",
   "dependencies": {
     "pg": "^8.11.0",
