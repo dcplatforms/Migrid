@@ -70,6 +70,34 @@ const LMP_THRESHOLD_BUY = new Decimal(process.env.LMP_THRESHOLD_BUY || '30.00');
 const LMP_THRESHOLD_SELL = new Decimal(process.env.LMP_THRESHOLD_SELL || '100.00');
 
 /**
+ * Discovers and returns all regional grid locks (l4:grid:lock:<ISO>)
+ */
+async function getRegionalGridLocks() {
+  const locks = {};
+  try {
+    let cursor = '0';
+    do {
+      const reply = await redisClient.scan(cursor, { MATCH: 'l4:grid:lock:*', COUNT: 100 });
+      cursor = reply.cursor;
+
+      if (reply.keys.length > 0) {
+        const values = await redisClient.mGet(reply.keys);
+        reply.keys.forEach((key, index) => {
+          const iso = key.split(':').pop();
+          const val = values[index];
+          if (val === 'true' || val === '1') {
+            locks[iso] = true;
+          }
+        });
+      }
+    } while (cursor !== 0 && cursor !== '0');
+  } catch (err) {
+    console.error('[Market Gateway] Failed to discover regional grid locks:', err.message);
+  }
+  return locks;
+}
+
+/**
  * Broadcast market price update to Kafka for other services (L9 Commerce)
  * Enriched with location metadata for L11 ML Engine readiness
  */
@@ -141,8 +169,8 @@ async function startGridSignalConsumer() {
  * Proactive background loop to poll market prices and notify other layers (L9)
  */
 async function startPriceBroadcaster() {
-  const isos = ['CAISO', 'PJM', 'ERCOT', 'NORDPOOL'];
-  console.log(`[Market Gateway] Initializing proactive price broadcaster for: ${isos.join(', ')}`);
+  const isos = ['CAISO', 'PJM', 'ERCOT', 'NORDPOOL', 'ENTSO-E'];
+  console.log(`[Market Gateway v3.4.1] Initializing proactive price broadcaster for: ${isos.join(', ')}`);
 
   // Initial poll
   for (const iso of isos) {
@@ -204,6 +232,8 @@ app.get('/health', async (req, res) => {
   } catch (error) {
     console.error('[Market Gateway Health] Redis check failed:', error.message);
   }
+
+  const regionalLocks = await getRegionalGridLocks();
 
   res.json({
     service: 'market-gateway',
@@ -347,37 +377,44 @@ app.get('/data/training/lmp', authenticateToken, async (req, res) => {
 });
 
 // Get list of available markets
-app.get('/markets', (req, res) => {
+app.get('/markets', async (req, res) => {
+  const regionalLocks = await getRegionalGridLocks();
+
   res.json({
     markets: [
       {
         iso: 'CAISO',
         name: 'California Independent System Operator',
         status: 'active',
+        grid_lock: !!regionalLocks['CAISO'],
         markets: ['day-ahead', 'real-time', 'ancillary-services']
       },
       {
         iso: 'PJM',
         name: 'PJM Interconnection',
         status: 'active',
+        grid_lock: !!regionalLocks['PJM'],
         markets: ['day-ahead', 'real-time', 'regulation', 'capacity']
       },
       {
         iso: 'ERCOT',
         name: 'Electric Reliability Council of Texas',
         status: 'active',
+        grid_lock: !!regionalLocks['ERCOT'],
         markets: ['day-ahead', 'real-time', 'ancillary-services']
       },
       {
         iso: 'NORDPOOL',
         name: 'Nord Pool European Power Exchange',
         status: 'active',
+        grid_lock: !!regionalLocks['NORDPOOL'],
         markets: ['day-ahead', 'intraday']
       },
       {
         iso: 'ENTSO-E',
         name: 'European Network of Transmission System Operators for Electricity',
-        status: 'planned',
+        status: 'active',
+        grid_lock: !!regionalLocks['ENTSO-E'],
         markets: ['day-ahead', 'intraday']
       }
     ]

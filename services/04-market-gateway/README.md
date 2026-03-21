@@ -34,6 +34,8 @@ The Market Gateway service provides integration with wholesale energy markets (C
 | **CAISO** | Day-ahead, Real-time, Ancillary services | ✅ Live |
 | **PJM** | Day-ahead, Real-time, Regulation, Capacity | ✅ Live |
 | **ERCOT** | Day-ahead, Real-time, Ancillary Services | ✅ Live |
+| **NORDPOOL** | Day-ahead, Intraday | ✅ Live |
+| **ENTSO-E** | Day-ahead, Intraday | ✅ Active |
 
 ## Architecture
 
