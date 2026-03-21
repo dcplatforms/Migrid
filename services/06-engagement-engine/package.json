@@ -1,6 +1,6 @@
 {
   "name": "@migrid/engagement-engine",
-  "version": "5.2.0",
+  "version": "5.3.0",
   "description": "Gamification, leaderboards, and driver engagement",
   "main": "index.js",
   "scripts": {
