@@ -118,7 +118,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.3.0', // Incremented for V2X and ISO Explorer updates
+    version: '5.3.0', // Incremented for Phase 5 Enterprise Alignment
     status: 'healthy',
     layer: 'L6'
   });
@@ -434,7 +434,7 @@ async function processChargingEvent(event) {
     await updateChallengeProgress(driverId, 'vpp_participation');
 
     // V2X Pioneer Achievement (OCPP 2.1 native)
-    if (event.protocol === 'ocpp2.1') {
+    if (event.protocol && event.protocol.toLowerCase().trim() === 'ocpp2.1') {
       const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'V2X Pioneer'");
       if (achievement.rows.length > 0) {
         await awardAchievement(driverId, achievement.rows[0].id);
@@ -520,7 +520,11 @@ async function handleGridSignal(payload) {
           SELECT td.driver_id, c.id,
                  CASE
                     WHEN c.challenge_type = 'iso_explorer' THEN
-                        (SELECT COUNT(DISTINCT (metadata->>'iso')) FROM driver_actions WHERE driver_id = td.driver_id AND action_type = 'grid_response')
+                        (SELECT COUNT(DISTINCT iso_val) FROM (
+                            SELECT metadata->>'iso' as iso_val FROM driver_actions WHERE driver_id = td.driver_id AND action_type = 'grid_response'
+                            UNION
+                            SELECT td.iso as iso_val
+                        ) as combined_isos)
                     ELSE 1
                  END
           FROM target_drivers td
@@ -532,7 +536,7 @@ async function handleGridSignal(payload) {
           ON CONFLICT (driver_id, challenge_id)
           DO UPDATE SET current_count =
                          CASE
-                            WHEN EXCLUDED.current_count > driver_challenge_progress.current_count THEN EXCLUDED.current_count
+                            WHEN (SELECT challenge_type FROM challenges WHERE id = EXCLUDED.challenge_id) = 'iso_explorer' THEN EXCLUDED.current_count
                             ELSE driver_challenge_progress.current_count + 1
                          END,
                         updated_at = NOW()
