@@ -21,6 +21,7 @@ const eventSchema = {
   type: 'object',
   properties: {
     id: { type: 'string' },
+    program_id: { type: 'string' },
     type: { type: 'string' },
     priority: { type: ['string', 'number'] },
     site_id: { type: 'string' },
@@ -141,6 +142,21 @@ app.get('/openadr/v3/reports', async (req, res) => {
 
     // Fetch grid lock status (provided by L4)
     const gridLock = await redisClient.get('l4:grid:lock');
+
+    // Fetch L8 Site Safe Mode status (Phase 5 Performance Refactor: Use SCAN/MGET)
+    const siteStatuses = {};
+    let siteCursor = 0;
+    do {
+      const { cursor: nextCursor, keys } = await redisClient.scan(siteCursor, { MATCH: 'l8:site:status:*', COUNT: 100 });
+      siteCursor = parseInt(nextCursor);
+      if (keys.length > 0) {
+        const values = await redisClient.mGet(keys);
+        keys.forEach((key, index) => {
+          const siteId = key.split(':').pop();
+          siteStatuses[siteId] = values[index];
+        });
+      }
+    } while (siteCursor !== 0);
 
     // Fetch regional grid locks (Optimized with SCAN and MGET)
     const regionalLocks = {};
@@ -286,12 +302,15 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
 
     // 2. Save event to ledger
     await pool.query(
-      'INSERT INTO grid_events (event_id, event_type, payload, status, received_at) VALUES ($1, $2, $3, $4, NOW()) ON CONFLICT (event_id) DO NOTHING',
-      [event.id, event.type || 'demand-response', JSON.stringify(event), 'active']
+      'INSERT INTO grid_events (event_id, event_type, payload, status, received_at, metadata) VALUES ($1, $2, $3, $4, NOW(), $5) ON CONFLICT (event_id) DO NOTHING',
+      [event.id, event.type || 'demand-response', JSON.stringify(event), 'active', JSON.stringify({ program_id: event.program_id })]
     );
 
     // 3. Cache event in Redis for 1 hour
     await redisClient.setEx(`event:${event.id}`, 3600, JSON.stringify(event));
+
+    // 1.2 Check L8 Site Status (Safe Mode / Meter Offline)
+    const siteStatus = event.site_id ? await redisClient.get(`l8:site:status:${event.site_id}`) : null;
 
     // 4. Broadcast enriched event to other services via Kafka
     // Enhanced resilience: Wrap in try-catch with retry awareness
@@ -301,10 +320,12 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
         messages: [{
           value: JSON.stringify({
             event_id: event.id,
+            program_id: event.program_id,
             type: event.type,
             priority: event.priority || 'NORMAL',
             site_id: event.site_id || 'ALL',
             program_id: event.program_id || 'DEFAULT',
+            site_status: siteStatus || 'OPERATIONAL',
             v2g_requested: v2gRequested,
             iso_region: isoRegion,
             intervals: event.intervals || [],
@@ -363,13 +384,17 @@ app.get('/data/training/events', authenticateToken, async (req, res) => {
  */
 async function startSafetyConsumer() {
   await consumer.connect();
-  await consumer.subscribe({ topics: ['migrid.physics.alerts', 'MARKET_PRICE_UPDATED'], fromBeginning: false });
+  await consumer.subscribe({ topics: ['migrid.physics.alerts', 'MARKET_PRICE_UPDATED', 'migrid.l8.status'], fromBeginning: false });
 
   await consumer.run({
     eachMessage: async ({ topic, partition, message }) => {
       const payload = JSON.parse(message.value.toString());
 
-      if (topic === 'migrid.physics.alerts') {
+      if (topic === 'migrid.l8.status') {
+        console.log(`[L2] Received status update from L8 for site ${payload.site_id}: ${payload.status}`);
+        // Cache site status (e.g., SAFE_MODE, METER_OFFLINE)
+        await redisClient.setEx(`l8:site:status:${payload.site_id}`, 3600, payload.status);
+      } else if (topic === 'migrid.physics.alerts') {
         // PHYSICS RULE: Trigger lock if CRITICAL/FRAUD OR if variance exceeds 15%
         const isCritical = payload.severity === 'CRITICAL' || payload.severity === 'FRAUD';
         const isHighVariance = payload.variance_pct > 15;

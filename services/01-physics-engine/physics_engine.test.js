@@ -1,6 +1,8 @@
-// Manual mock producer
+// Manual mocks
 global.mockProducerSend = jest.fn();
 global.mockRedisSetEx = jest.fn();
+global.mockRedisRPop = jest.fn();
+global.mockPgQuery = jest.fn();
 
 // Mock dependencies (hoisted by Jest)
 jest.mock('kafkajs', () => ({
@@ -16,7 +18,6 @@ jest.mock('kafkajs', () => ({
   }))
 }), { virtual: true });
 
-global.mockPgQuery = jest.fn();
 jest.mock('pg', () => ({
   Client: jest.fn().mockImplementation(() => ({
     connect: jest.fn().mockResolvedValue({}),

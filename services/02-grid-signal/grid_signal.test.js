@@ -104,6 +104,23 @@ describe('L2 Grid Signal Service', () => {
     expect(sentValue.program_id).toBe('PROG-ABC');
   });
 
+  test('POST /openadr/v3/events should support program_id (3.1.0 Alignment)', async () => {
+    redisClient.get.mockResolvedValue(null);
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-prog-1',
+        program_id: 'PROG-ALPHA',
+        type: 'demand-response'
+      });
+
+    expect(response.status).toBe(202);
+    const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
+    expect(sentValue.program_id).toBe('PROG-ALPHA');
+  });
+
   test('POST /openadr/v3/events should detect V2G requests', async () => {
     redisClient.get.mockResolvedValue(null);
 
@@ -125,6 +142,26 @@ describe('L2 Grid Signal Service', () => {
         })
       ])
     }));
+  });
+
+  test('POST /openadr/v3/events should include L8 site status in broadcast', async () => {
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l8:site:status:SITE-456') return Promise.resolve('SAFE_MODE');
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-site-status',
+        type: 'demand-response',
+        site_id: 'SITE-456'
+      });
+
+    expect(response.status).toBe(202);
+    const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
+    expect(sentValue.site_status).toBe('SAFE_MODE');
   });
 
   test('POST /openadr/v3/events should reject unauthorized request', async () => {
@@ -271,6 +308,30 @@ describe('L2 Grid Signal Service', () => {
       'l1:safety:lock:context',
       900,
       expect.stringContaining('"v2g_active":true')
+    );
+  });
+
+  test('startSafetyConsumer should cache L8 site status updates', async () => {
+    const { consumer, startSafetyConsumer } = require('./index');
+    await startSafetyConsumer();
+
+    const eachMessage = consumer.run.mock.calls[0][0].eachMessage;
+
+    const l8Update = {
+      site_id: 'SITE-X',
+      status: 'METER_OFFLINE',
+      timestamp: new Date().toISOString()
+    };
+
+    await eachMessage({
+      topic: 'migrid.l8.status',
+      message: { value: Buffer.from(JSON.stringify(l8Update)) }
+    });
+
+    expect(redisClient.setEx).toHaveBeenCalledWith(
+      'l8:site:status:SITE-X',
+      3600,
+      'METER_OFFLINE'
     );
   });
 
