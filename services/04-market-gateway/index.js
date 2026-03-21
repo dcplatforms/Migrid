@@ -160,7 +160,7 @@ async function startPriceBroadcaster() {
 
   // Set interval for every 5 minutes
   setInterval(async () => {
-    console.log('[L11 Readiness] Heartbeat: LMP price streams active for ML training');
+    console.log(`[L11 Readiness] Heartbeat: LMP price streams active for ML training (${new Date().toISOString()})`);
     for (const iso of isos) {
       try {
         const prices = await pricingService.getLatestPrices(iso, 1);
@@ -200,7 +200,7 @@ app.get('/health', async (req, res) => {
           regionalLocks[region] = true;
         }
       }
-    } while (cursor !== 0);
+    } while (cursor !== 0 && cursor !== '0');
   } catch (error) {
     console.error('[Market Gateway Health] Redis check failed:', error.message);
   }

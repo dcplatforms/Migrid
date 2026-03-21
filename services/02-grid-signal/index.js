@@ -25,6 +25,7 @@ const eventSchema = {
     type: { type: 'string' },
     priority: { type: ['string', 'number'] },
     site_id: { type: 'string' },
+    program_id: { type: 'string' },
     signals: { type: 'array' },
     targets: { type: 'array' },
     intervals: { type: 'array' }
@@ -91,7 +92,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.3.0',
+    version: '2.4.0',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -115,13 +116,13 @@ app.get('/openadr/v3/reports', async (req, res) => {
 
     // Phase 5 Enhancement: Aggregate all regional market contexts (Optimized with SCAN and MGET)
     const regionalMarkets = {};
-    let cursor = 0;
+    let cursor = '0';
     const marketKeys = [];
     do {
       const result = await redisClient.scan(cursor, { MATCH: 'market:context:*', COUNT: 100 });
       cursor = result.cursor;
       marketKeys.push(...result.keys);
-    } while (cursor !== 0);
+    } while (cursor !== 0 && cursor !== '0');
 
     if (marketKeys.length > 0) {
       const marketValues = await redisClient.mGet(marketKeys);
@@ -147,7 +148,7 @@ app.get('/openadr/v3/reports', async (req, res) => {
     let siteCursor = 0;
     do {
       const { cursor: nextCursor, keys } = await redisClient.scan(siteCursor, { MATCH: 'l8:site:status:*', COUNT: 100 });
-      siteCursor = parseInt(nextCursor);
+      siteCursor = nextCursor;
       if (keys.length > 0) {
         const values = await redisClient.mGet(keys);
         keys.forEach((key, index) => {
@@ -155,17 +156,17 @@ app.get('/openadr/v3/reports', async (req, res) => {
           siteStatuses[siteId] = values[index];
         });
       }
-    } while (siteCursor !== 0);
+    } while (siteCursor !== 0 && siteCursor !== '0');
 
     // Fetch regional grid locks (Optimized with SCAN and MGET)
     const regionalLocks = {};
-    let lockCursor = 0;
+    let lockCursor = '0';
     const lockKeys = [];
     do {
       const result = await redisClient.scan(lockCursor, { MATCH: 'l4:grid:lock:*', COUNT: 100 });
       lockCursor = result.cursor;
       lockKeys.push(...result.keys);
-    } while (lockCursor !== 0);
+    } while (lockCursor !== 0 && lockCursor !== '0');
 
     if (lockKeys.length > 0) {
       const lockValues = await redisClient.mGet(lockKeys);
@@ -176,6 +177,34 @@ app.get('/openadr/v3/reports', async (req, res) => {
           regionalLocks[region] = true;
         }
       });
+    }
+
+    // Phase 5 Enhancement: Fetch L8 Safe Mode site statuses
+    const siteStatuses = {};
+    try {
+      let siteCursor = '0';
+      const siteKeys = [];
+      do {
+        const result = await redisClient.scan(siteCursor, { MATCH: 'l8:site:*:safe_mode', COUNT: 100 });
+        siteCursor = result.cursor;
+        if (result.keys) {
+          siteKeys.push(...result.keys);
+        }
+      } while (siteCursor !== 0 && siteCursor !== '0');
+
+      if (siteKeys.length > 0) {
+        const siteValues = await redisClient.mGet(siteKeys);
+        siteKeys.forEach((key, index) => {
+          const parts = key.split(':');
+          const siteId = parts[2];
+          const value = siteValues[index];
+          if (value === 'true' || value === '1') {
+            siteStatuses[siteId] = 'SAFE_MODE';
+          }
+        });
+      }
+    } catch (redisError) {
+      console.error('[L2 Grid Signal] Redis Scan Error (Site Status):', redisError.message);
     }
 
     res.json({
@@ -250,6 +279,21 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
       });
     }
 
+    // 1.2 Check L8 Safe Mode (Site Specific)
+    if (event.site_id) {
+      const safeMode = await redisClient.get(`l8:site:${event.site_id}:safe_mode`);
+      if (safeMode === 'true' || safeMode === '1') {
+        console.warn(`🚨 [L2] DISPATCH REJECTED: Site ${event.site_id} in L8 Safe Mode`);
+        return res.status(503).json({
+          status: 'REJECTED',
+          reason: 'SITE_IN_SAFE_MODE',
+          message: 'Grid dispatch suspended: Site energy manager is in Safe Mode (Meter Offline)',
+          site_id: event.site_id,
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+
     console.log('📢 [L2] Received OpenADR Event:', event.id);
 
     // 1.1 V2G Detection Logic (Phase 5 Forward Engineering)
@@ -280,9 +324,11 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
             type: event.type,
             priority: event.priority || 'NORMAL',
             site_id: event.site_id || 'ALL',
+            program_id: event.program_id || 'DEFAULT',
             site_status: siteStatus || 'OPERATIONAL',
             v2g_requested: v2gRequested,
             iso_region: isoRegion,
+            market_price_at_session: event.metadata?.market_price_at_session,
             intervals: event.intervals || [],
             targets: event.targets || [],
             signals: event.signals || [],
@@ -356,7 +402,13 @@ async function startSafetyConsumer() {
 
         if (isHighVariance || isCritical) {
           const reason = isHighVariance ? 'HIGH_VARIANCE_THRESHOLD' : payload.event_type;
-          console.error(`🚨 [L2] L1 SAFETY ALERT: ${reason} on Site ${payload.site_id}. Region: ${payload.iso_region}. Locking grid dispatch.`);
+
+          // CORE INVARIANT: Respect <15% variance threshold from L1 Physics Engine
+          if (isHighVariance) {
+            console.error(`🚨 [L2] CRITICAL INVARIANT VIOLATION: Variance (${payload.variance_pct}%) exceeds 15% threshold on Site ${payload.site_id}. Locking grid dispatch.`);
+          } else {
+            console.error(`🚨 [L2] L1 SAFETY ALERT: ${reason} on Site ${payload.site_id}. Region: ${payload.iso_region}. Locking grid dispatch.`);
+          }
 
           // Detailed logging for engineering audit
           console.log(`[L2 Audit] Metadata: Vehicle=${payload.vehicle_id}, VIN=${payload.vin}, SoC=${payload.current_soc}%, Variance=${payload.variance_pct}%, Billing=${payload.billing_mode}, VPP_Active=${payload.vpp_active}, V2G_Active=${payload.v2g_active}`);
@@ -372,6 +424,7 @@ async function startSafetyConsumer() {
             vpp_active: payload.vpp_active,
             v2g_active: payload.v2g_active,
             iso_region: payload.iso_region,
+            market_price_at_session: payload.market_price_at_session,
             locked_at: new Date().toISOString()
           }));
         }
