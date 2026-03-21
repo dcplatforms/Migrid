@@ -290,6 +290,31 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.event_type).toBe('CAPACITY_VIOLATION');
     expect(alertValue.vin).toBe('TEXAS-BATT-001');
   });
+
+  test('should handle ERCOT capacity violation during scarcity event (LMP > 100)', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'CAPACITY_VIOLATION',
+        vehicle_id: 'vehicle-tx-99',
+        current_soc: 18.5,
+        iso_region: 'ERCOT',
+        market_price_at_session: 120.0,
+        vpp_active: true
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    // Verify Redis context captures the scarcity price and region
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"iso_region":"ERCOT"'));
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"market_price_at_session":120'));
+
+    // Verify Kafka alert captures market context
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.iso_region).toBe('ERCOT');
+    expect(alertValue.market_price_at_session).toBe(120.0);
+    expect(alertValue.severity).toBe('CRITICAL');
+  });
 });
 
 describe('L1 Physics Engine Digital Twin Sync', () => {

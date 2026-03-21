@@ -209,8 +209,8 @@ async function reconcileLogs() {
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
         v2g_active: payload.v2g_active,
-        iso_region: payload.iso_region,
-        market_price_at_session: payload.market_price_at_session,
+        iso_region: payload.iso_region || 'CAISO',
+        market_price_at_session: payload.market_price_at_session || 0.0,
         timestamp: payload.timestamp || new Date().toISOString(),
         source_layer: 'L1',
         severity: severity,
@@ -257,8 +257,8 @@ async function reconcileLogs() {
         payload.billing_mode,
         payload.vpp_active,
         payload.v2g_active,
-        payload.iso_region,
-        payload.market_price_at_session
+        payload.iso_region || 'CAISO',
+        payload.market_price_at_session || 0.0
       ]);
 
       console.log(`✅ [L1 Physics] Reconciled high-fidelity log for session: ${payload.session_id || 'CAPACITY_VIOLATION'}`);
