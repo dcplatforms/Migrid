@@ -24,6 +24,10 @@ const priceCache = {
   ENTSOE: { price: 45.0, timestamp: new Date() }
 };
 
+// Thresholds for Dynamic Multipliers (surplus/scarcity) - Configurable via ENV
+const LMP_THRESHOLD_SURPLUS = new Decimal(process.env.LMP_THRESHOLD_SURPLUS || '30.0');
+const LMP_THRESHOLD_SCARCITY = new Decimal(process.env.LMP_THRESHOLD_SCARCITY || '100.0');
+
 // --- Helper Functions for Database Interaction ---
 
 async function getRewardRule(actionType) {
@@ -41,11 +45,7 @@ async function getOrCreateDriverWallet(driverId) {
   );
 
   if (res.rows.length === 0) {
-    // In a real system, this would involve calling open-wallet to create an address
-    // For now, we'll generate a mock address.
     const mockOpenWalletAddress = `OW-${driverId.substring(0, 8)}-${Date.now()}`;
-
-    // Get fleet ISO for regional context
     const fleetRes = await pgClient.query(
       'SELECT f.iso FROM drivers d JOIN fleets f ON d.fleet_id = f.id WHERE d.id = $1;',
       [driverId]
@@ -78,21 +78,15 @@ async function updateRewardTransactionStatus(logId, newStatus, openWalletTransac
 
 // --- Reward Multiplier Logic ---
 
-function getDynamicMultiplier(iso) {
+function getDynamicMultiplier(iso, actionType) {
   const priceData = priceCache[iso.toUpperCase()];
-  if (!priceData) return new Decimal(1.0);
+  const latestPrice = priceData ? new Decimal(priceData.price) : new Decimal(50.0);
 
-  const price = new Decimal(priceData.price);
-
-  // Bonus for Surplus (Price < $30/MWh)
-  if (price.lt(30)) {
-    console.log(`[L10] Surplus detected in ${iso} ($${price}/MWh). Applying 1.5x Multiplier.`);
+  if (actionType === 'session_completed' && latestPrice.lt(LMP_THRESHOLD_SURPLUS)) {
+    console.log(`[L10 Strategy] Surplus detected in ${iso} ($${latestPrice}). Applying 1.5x bonus for charging.`);
     return new Decimal(1.5);
-  }
-
-  // Bonus for Scarcity (Price > $100/MWh)
-  if (price.gt(100)) {
-    console.log(`[L10] Scarcity detected in ${iso} ($${price}/MWh). Applying 2.0x Multiplier.`);
+  } else if (actionType === 'v2g_discharge' && latestPrice.gt(LMP_THRESHOLD_SCARCITY)) {
+    console.log(`[L10 Strategy] Scarcity detected in ${iso} ($${latestPrice}). Applying 2.0x bonus for grid support.`);
     return new Decimal(2.0);
   }
 
@@ -109,13 +103,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-// --- Dynamic Reward Multiplier State ---
-const currentMarketPrices = {}; // ISO -> latest price_per_mwh
-
-// Thresholds for Dynamic Multipliers (surplus/scarcity) - Configurable via ENV
-const LMP_THRESHOLD_SURPLUS = parseFloat(process.env.LMP_THRESHOLD_SURPLUS || '30.0');
-const LMP_THRESHOLD_SCARCITY = parseFloat(process.env.LMP_THRESHOLD_SCARCITY || '100.0');
-
 // --- Main Application Logic ---
 
 async function start() {
@@ -124,7 +111,6 @@ async function start() {
     console.log('✅ [L10 Token Engine] Connected to Ledger.');
 
     await consumer.connect();
-    // Subscribe to driver actions and market price updates
     await consumer.subscribe({ topics: ['driver_actions', 'MARKET_PRICE_UPDATED'], fromBeginning: true });
 
     app.listen(port, () => {
@@ -140,7 +126,7 @@ async function start() {
           currentMarketPrices[payload.iso] = payload.price_per_mwh;
           priceCache[payload.iso] = {
             price: payload.price_per_mwh,
-            timestamp: new Date(payload.timestamp)
+            timestamp: new Date(payload.timestamp || Date.now())
           };
           return;
         }
@@ -157,7 +143,7 @@ async function start() {
         }
         const iso = payloadIso || driverWallet.iso || 'CAISO';
 
-        let pointsAwarded;
+        let calculatedPoints;
         let rule_id;
 
         if (action_type === 'challenge_completed' || action_type === 'achievement_unlocked') {
@@ -169,7 +155,6 @@ async function start() {
 
           console.log(`[L10] ${action_type} by driver ${driver_id}. Awarding ${pointsAwarded} tokens.`);
         } else {
-          // 1. Get Reward Rule
           const rule = await getRewardRule(action_type);
           if (!rule) {
             console.warn(`⚠️ No active reward rule found for action type: ${action_type}`);
@@ -182,39 +167,42 @@ async function start() {
           const baseReward = new Decimal(source_value || 0).times(rule.reward_multiplier);
           pointsAwarded = baseReward.times(marketMultiplier).toDecimalPlaces(8).toNumber();
 
-          console.log(`[L10] Calculated reward: ${pointsAwarded} points for driver ${driver_id} (Source: ${source_value}, Rule Multiplier: ${rule.reward_multiplier}, Market Multiplier: ${marketMultiplier})`);
+          console.log(`[L10] Reward calculated: ${calculatedPoints} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Market Mult: ${marketMultiplier})`);
         }
 
-        // 4. Log the Reward (initial pending state)
+        if (calculatedPoints.isZero()) {
+          console.log(`[L10] Reward is zero for event ${event_id}, skipping.`);
+          return;
+        }
+
+        // 3. Log the Reward (pending)
         const rewardLog = await logRewardTransaction(
           driver_id,
           rule_id,
           event_id,
           source_value || 0,
-          pointsAwarded,
+          calculatedPoints.toNumber(),
           'pending',
-          iso
+          regionalIso
         );
-        console.log(`Reward logged (pending): ${rewardLog.log_id}`);
 
-        // 5. Call Open-Wallet API
+        // 4. Execute Open-Wallet Transaction
         try {
-          const openWalletResponse = await axios.post(process.env.OPEN_WALLET_API_URL + '/transactions', {
+          const openWalletResponse = await axios.post(`${process.env.OPEN_WALLET_API_URL}/transactions`, {
             walletAddress: driverWallet.open_wallet_address,
-            amount: pointsAwarded,
+            amount: calculatedPoints.toNumber(),
             currency: 'MiGridPoints',
-            referenceId: rewardLog.log_id // Link back to our log
+            referenceId: rewardLog.log_id
           });
           await updateRewardTransactionStatus(rewardLog.log_id, 'complete', openWalletResponse.data.transactionId);
-          console.log(`✅ Reward transaction completed via Open-Wallet: ${openWalletResponse.data.transactionId}`);
-        } catch (openWalletError) {
-          console.error(`❌ Failed to send reward to Open-Wallet for log ${rewardLog.log_id}:`, openWalletError.message);
+          console.log(`✅ [L10] Reward transaction completed: ${openWalletResponse.data.transactionId}`);
+        } catch (error) {
+          console.error(`❌ [L10] Open-Wallet transaction failed for log ${rewardLog.log_id}:`, error.message);
           await updateRewardTransactionStatus(rewardLog.log_id, 'failed');
         }
       },
     });
 
-    console.log('✅ [L10 Token Engine] Listening for driver_actions.');
   } catch (error) {
     console.error('❌ [L10 Token Engine] Startup error:', error);
     process.exit(1);
