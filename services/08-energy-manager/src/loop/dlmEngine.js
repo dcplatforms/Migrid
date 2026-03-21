@@ -1,6 +1,10 @@
 const { getSiteState } = require('../state/topologyMgr');
 const { calculateAllocations } = require('../dlm/allocator');
 const { publishDlmProfiles } = require('../events/producer');
+const Redis = require('ioredis');
+
+// Shared Redis client for the control loop to prevent connection leaks
+const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 async function runDlmCycle(siteId) {
     try {
@@ -11,6 +15,9 @@ async function runDlmCycle(siteId) {
         // We also check if buildingLoadKw is explicitly null or undefined from a more robust check.
         if (buildingLoadKw === 0 && limitKw > 0) {
             console.warn(`[L8 DLM] WARNING: Building load is 0 for Site ${siteId}. Entering SAFE MODE.`);
+
+            await redis.set(`l8:site:${siteId}:safe_mode`, 'true', 'EX', 300); // 5 min TTL
+
             const safeAllocations = activeSessions.map(s => ({
                 chargePointId: s.chargePointId,
                 allocatedKw: 1.4, // ~6 Amps at 230V
@@ -18,6 +25,8 @@ async function runDlmCycle(siteId) {
             }));
             await publishDlmProfiles(siteId, safeAllocations);
             return;
+        } else {
+            await redis.del(`l8:site:${siteId}:safe_mode`);
         }
 
         if (activeSessions.length === 0) return; // Nothing to manage

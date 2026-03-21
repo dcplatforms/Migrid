@@ -113,12 +113,16 @@ app.post('/iso15118/stop-charge', authenticateInternal, async (req, res) => {
       );
       await pool.query('UPDATE vehicles SET is_plugged_in = false WHERE id = $1', [vehicle_id]);
 
+      const isoRegion = await redis.get(`charger_region:${evse_id}`) || 'CAISO';
+
       await publishSessionEvent('SESSION_COMPLETED', {
         sessionId: session.id,
         vehicleId: vehicle_id,
         energyDispensedKwh: energy_dispensed_kwh,
         timestamp: new Date().toISOString(),
-        evseId: evse_id
+        evseId: evse_id,
+        iso_region: isoRegion,
+        protocol: 'iso15118'
       });
     }
     res.json({ status: 'STOPPED', sessionId: session?.id });
@@ -136,56 +140,6 @@ const wss = new WebSocket.Server({ noServer: true });
 const SUPPORTED_PROTOCOLS = ['ocpp2.1', 'ocpp2.0.1'];
 
 const handleControlSignal = async (topic, payload) => {
-    const { chargePointId, limitKw, schedule } = payload;
-    const connection = localConnections.get(chargePointId);
-
-    if (connection && connection.ws.readyState === WebSocket.OPEN) {
-        const { ws, protocol } = connection;
-        // 1. Verify the Physics: Check for L1 Safety Lock before dispatching control
-        const safetyLock = await redis.get('l1:safety:lock');
-        if (safetyLock === '1' || safetyLock === 'true') {
-            console.warn(`🛑 [L7] Control Signal HALTED for ${chargePointId}. L1 Safety Lock is ACTIVE.`);
-            return;
-        }
-
-        console.log(`[L7] Sending SetChargingProfile to ${chargePointId} (${limitKw}kW) via ${protocol}`);
-
-        let profile;
-        if (protocol === 'ocpp2.1' && topic === 'migrid.l3.v2g') {
-            // OCPP 2.1: Native V2X Profile
-            profile = {
-                id: 101,
-                stackLevel: 1,
-                chargingProfilePurpose: 'V2XProfile',
-                chargingProfileKind: 'Absolute',
-                energyTransferMode: 'Discharge',
-                chargingSchedule: [{
-                    chargingRateUnit: 'W',
-                    chargingSchedulePeriod: [{ startPeriod: 0, limit: Math.abs(limitKw) * 1000 }]
-                }]
-            };
-        } else {
-            // OCPP 2.0.1: Standard/Legacy Profile
-            profile = {
-                id: 101,
-                stackLevel: 0,
-                chargingProfilePurpose: 'TxProfile',
-                chargingProfileKind: 'Absolute',
-                chargingSchedule: [{
-                    chargingRateUnit: 'W',
-                    chargingSchedulePeriod: [{
-                        startPeriod: 0,
-                        limit: (topic === 'migrid.l3.v2g' ? -Math.abs(limitKw) : limitKw) * 1000
-                    }]
-                }]
-            };
-        }
-
-        const call = [2, Date.now().toString(), 'SetChargingProfile', {
-            evseId: 1,
-            chargingProfile: profile
-        }];
-        ws.send(JSON.stringify(call));
     // 1. Verify the Physics: Check for L1 Safety Lock before dispatching control
     const safetyLock = await redis.get('l1:safety:lock');
     if (safetyLock === '1' || safetyLock === 'true') {
@@ -207,6 +161,13 @@ const handleControlSignal = async (topic, payload) => {
 async function sendSetChargingProfile(chargePointId, limitKw, mode) {
     const connection = localConnections.get(chargePointId);
     if (!connection || connection.ws.readyState !== WebSocket.OPEN) return;
+
+    const isoRegion = await redis.get(`charger_region:${chargePointId}`) || 'CAISO';
+    const gridLock = await redis.get(`l4:grid:lock:${isoRegion}`);
+    if (gridLock === '1' || gridLock === 'true') {
+        console.warn(`🛑 [L7] Control Signal HALTED for ${chargePointId}. L4 GRID LOCK in ${isoRegion} is ACTIVE.`);
+        return;
+    }
 
     const { ws, protocol } = connection;
     console.log(`[L7] Dispatching ${mode} to ${chargePointId} (${limitKw}kW) via ${protocol}`);
@@ -263,7 +224,6 @@ server.on('upgrade', (request, socket, head) => {
         : [];
 
     // 3. Negotiate the protocol (find the highest overlap)
-    const negotiatedProtocol = SUPPORTED_PROTOCOLS.find(p => requestedProtocols.includes(p)) || 'ocpp2.0.1';
     const negotiatedProtocol = SUPPORTED_PROTOCOLS.find(p => requestedProtocols.includes(p));
 
     if (!negotiatedProtocol) {
@@ -282,8 +242,11 @@ wss.on('connection', async (ws, request, chargePointId, protocol) => {
     console.log(`[L7] Charger Connected: ${chargePointId} | Protocol: ${protocol}`);
     const podId = process.env.POD_ID || 'gateway-instance-1';
 
-    localConnections.set(chargePointId, { ws, protocol });
-    await registerConnection(chargePointId, podId);
+    const chargerRes = await pool.query('SELECT iso_region FROM chargers WHERE serial_number = $1', [chargePointId]);
+    const isoRegion = chargerRes.rows[0]?.iso_region || 'CAISO';
+
+    localConnections.set(chargePointId, { ws, protocol, isoRegion });
+    await registerConnection(chargePointId, podId, isoRegion);
 
     ws.on('message', async (data) => {
         // Pass negotiated protocol to the handler
