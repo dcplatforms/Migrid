@@ -49,7 +49,10 @@
 ### Layer 3: VPP Aggregator
 - [✓] **Redis Capacity Cache**: Sub-50ms reporting for L4 bidding.
 - [✓] **Fuse Rule 2.0**: 20% SoC hard floor integrated into capacity formula.
+- [✓] **L8 Safe Mode Integration**: Site-level capacity exclusion (meter offline fallback).
+- [✓] **Contextual Safety Locks**: metadata-aware `l1:safety:lock:context` enforcement.
 - [ ] **BESS Integration**: Support for stationary storage assets.
+- [ ] **IEEE 2030.5 Dispatch**: Automated regional sequence (ERCOT/Nord Pool) based on L2 metadata.
 
 ### Layer 4: Market Gateway
 - [✓] **ERCOT Active**: Full integration with Texas market.

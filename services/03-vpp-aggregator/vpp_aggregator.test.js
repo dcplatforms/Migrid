@@ -9,6 +9,10 @@ const mockRedisClient = {
     setEx: jest.fn().mockResolvedValue(),
     del: jest.fn().mockResolvedValue(),
     quit: jest.fn().mockResolvedValue(),
+    keys: jest.fn().mockResolvedValue([]),
+    sMembers: jest.fn().mockResolvedValue([]),
+    sAdd: jest.fn().mockResolvedValue(),
+    sRem: jest.fn().mockResolvedValue(),
     on: jest.fn()
 };
 
@@ -96,6 +100,37 @@ describe('L3 VPP Aggregator Service', () => {
         expect(response.body.available_capacity_kwh).toBe(0);
         expect(response.body.status).toBe('HALTED_BY_PHYSICS_SAFEGUARD');
         expect(mockPool.query).not.toHaveBeenCalled();
+    });
+
+    test('GET /capacity/available should return 0 when L1 contextual safety lock is active', async () => {
+        mockRedisClient.get.mockImplementation((key) => {
+            if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({ vpp_active: true }));
+            return Promise.resolve(null);
+        });
+
+        const response = await request(app)
+            .get('/capacity/available')
+            .set('Authorization', `Bearer ${mockToken}`);
+
+        expect(response.status).toBe(200);
+        expect(response.body.available_capacity_kwh).toBe(0);
+        expect(response.body.status).toBe('HALTED_BY_PHYSICS_SAFEGUARD');
+    });
+
+    test('GET /capacity/available should exclude Safe Mode sites', async () => {
+        mockRedisClient.get.mockResolvedValue(null);
+        mockRedisClient.sMembers.mockResolvedValue(['SITE-001']);
+        mockPool.query.mockResolvedValue({
+            rows: [{ total_capacity_kwh: 50, vehicle_count: 1 }]
+        });
+
+        const response = await request(app)
+            .get('/capacity/available')
+            .set('Authorization', `Bearer ${mockToken}`);
+
+        expect(response.status).toBe(200);
+        expect(mockPool.query).toHaveBeenCalledWith(expect.stringContaining('!= ALL($2)'), expect.any(Array));
+        expect(mockPool.query.mock.calls[0][1][1]).toContain('SITE-001');
     });
 
     test('GET /capacity/available should return cached capacity if available', async () => {
