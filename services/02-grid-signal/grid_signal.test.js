@@ -84,6 +84,24 @@ describe('L2 Grid Signal Service', () => {
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
     expect(sentValue.signals).toEqual([{ type: 'level', value: 1 }]);
     expect(sentValue.v2g_requested).toBe(false);
+    expect(sentValue.program_id).toBe('DEFAULT');
+  });
+
+  test('POST /openadr/v3/events should accept program_id (OpenADR 3.1.0)', async () => {
+    redisClient.get.mockResolvedValue(null);
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-310',
+        type: 'demand-response',
+        program_id: 'PROG-ABC'
+      });
+
+    expect(response.status).toBe(202);
+    const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
+    expect(sentValue.program_id).toBe('PROG-ABC');
   });
 
   test('POST /openadr/v3/events should support program_id (3.1.0 Alignment)', async () => {
@@ -389,6 +407,44 @@ describe('L2 Grid Signal Service', () => {
     expect(response.status).toBe(503);
     expect(response.body.reason).toBe('GRID_LOCK_ACTIVE');
     expect(response.body.region).toBe('CAISO');
+  });
+
+  test('POST /openadr/v3/events should reject when site is in L8 Safe Mode', async () => {
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l8:site:SITE-456:safe_mode') return Promise.resolve('true');
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-safe-mode',
+        type: 'demand-response',
+        site_id: 'SITE-456'
+      });
+
+    expect(response.status).toBe(503);
+    expect(response.body.reason).toBe('SITE_IN_SAFE_MODE');
+    expect(response.body.site_id).toBe('SITE-456');
+  });
+
+  test('GET /openadr/v3/reports should return L8 site statuses', async () => {
+    redisClient.scan.mockImplementation((cursor, options) => {
+      if (options.MATCH === 'market:context:*') return Promise.resolve({ cursor: 0, keys: [] });
+      if (options.MATCH === 'l4:grid:lock:*') return Promise.resolve({ cursor: 0, keys: [] });
+      if (options.MATCH === 'l8:site:*:safe_mode') return Promise.resolve({ cursor: 0, keys: ['l8:site:SITE-789:safe_mode'] });
+      return Promise.resolve({ cursor: 0, keys: [] });
+    });
+
+    redisClient.mGet.mockImplementation((keys) => {
+      if (keys[0] && keys[0].includes('l8:site:SITE-789:safe_mode')) return Promise.resolve(['true']);
+      return Promise.resolve([]);
+    });
+
+    const response = await request(app).get('/openadr/v3/reports');
+    expect(response.status).toBe(200);
+    expect(response.body.site_statuses['SITE-789']).toBe('SAFE_MODE');
   });
 
   test('GET /data/training/events should return historical grid events', async () => {
