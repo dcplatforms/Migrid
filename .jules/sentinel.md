@@ -19,3 +19,8 @@
 **Vulnerability:** Insecure Direct Object Reference (IDOR) in the tariff selection endpoint.
 **Learning:** Drivers were able to select any tariff ID in the system regardless of its fleet association, bypassing multi-tenancy isolation and potentially accessing unauthorized pricing structures.
 **Prevention:** All resource-related updates in a multi-tenant system must explicitly verify that the target resource (e.g., `tariff_id`) is owned by or associated with the user's tenant (e.g., `fleet_id`).
+
+## 2026-03-12 - [V2G Dispatch IDOR in VPP Aggregator]
+**Vulnerability:** Insecure Direct Object Reference (IDOR) in the V2G dispatch endpoint.
+**Learning:** The `POST /dispatch/v2g` endpoint allowed any authenticated user to trigger a discharge on any charger by its `chargePointId` (serial number) because it lacked a fleet ownership check in the database query.
+**Prevention:** Sensitive control endpoints must cross-reference the target resource's owner (e.g., `fleet_id`) against the user's authenticated context before executing high-impact actions like power dispatch.
