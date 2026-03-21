@@ -123,34 +123,37 @@ async function start() {
 
         if (topic === 'MARKET_PRICE_UPDATED') {
           console.log(`[L10 Market Watch] Received price update for ${payload.iso}: $${payload.price_per_mwh}/MWh`);
-          priceCache[payload.iso.toUpperCase()] = {
+          currentMarketPrices[payload.iso] = payload.price_per_mwh;
+          priceCache[payload.iso] = {
             price: payload.price_per_mwh,
             timestamp: new Date(payload.timestamp || Date.now())
           };
           return;
         }
 
-        console.log(`⚡ [L10] Processing event from ${topic}:`, payload);
-        const { driver_id, action_type, source_value, event_id, token_reward, iso: eventIso } = payload;
+        console.log(`⚡ Received message from ${topic}:`, payload);
 
-        // 1. Ensure Driver Wallet Exists
+        const { driver_id, action_type, source_value, event_id, iso: payloadIso } = payload;
+
+        // 1. Ensure Driver Wallet Exists (and get address)
         const driverWallet = await getOrCreateDriverWallet(driver_id);
         if (!driverWallet) {
           console.error(`❌ Failed to get or create wallet for driver: ${driver_id}`);
           return;
         }
-        const regionalIso = eventIso || driverWallet.iso || 'CAISO';
+        const iso = payloadIso || driverWallet.iso || 'CAISO';
 
         let calculatedPoints;
         let rule_id;
 
-        // 2. Calculate Reward
-        if (action_type === 'challenge_completed') {
-          // Challenge rewards are direct token amounts (from metadata)
-          calculatedPoints = new Decimal(token_reward || 0);
-          const challengeRule = await getRewardRule('challenge_completed');
-          rule_id = challengeRule ? challengeRule.rule_id : '00000000-0000-0000-0000-000000000000';
-          console.log(`[L10] Challenge completed by driver ${driver_id}. Awarding ${calculatedPoints} tokens.`);
+        if (action_type === 'challenge_completed' || action_type === 'achievement_unlocked') {
+          // Fixed-value rewards (points/tokens)
+          pointsAwarded = new Decimal(source_value || 0).toNumber();
+
+          const rule = await getRewardRule(action_type);
+          rule_id = rule ? rule.rule_id : '00000000-0000-0000-0000-000000000000';
+
+          console.log(`[L10] ${action_type} by driver ${driver_id}. Awarding ${pointsAwarded} tokens.`);
         } else {
           const rule = await getRewardRule(action_type);
           if (!rule) {
@@ -159,9 +162,10 @@ async function start() {
           }
           rule_id = rule.rule_id;
 
-          const marketMultiplier = getDynamicMultiplier(regionalIso, action_type);
-          const baseReward = new Decimal(source_value || 0).times(rule.reward_multiplier || 1);
-          calculatedPoints = baseReward.times(marketMultiplier).toDecimalPlaces(8);
+          // 2. Calculate Reward with Dynamic Boosting (Energy-based)
+          const marketMultiplier = getDynamicMultiplier(iso);
+          const baseReward = new Decimal(source_value || 0).times(rule.reward_multiplier);
+          pointsAwarded = baseReward.times(marketMultiplier).toDecimalPlaces(8).toNumber();
 
           console.log(`[L10] Reward calculated: ${calculatedPoints} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Market Mult: ${marketMultiplier})`);
         }
