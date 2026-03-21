@@ -110,7 +110,7 @@ This section serves as the mathematical source of truth for platform completion 
 - [x] L6 Grid Warrior Achievement Logic
 - [x] L6 Nord Pool Pioneer Achievement
 - [x] L6 Energy Architect Achievement (AI Readiness)
-- [~] L6 Regional Team Challenges (50%)
+- [~] L6 Regional Team Challenges (65%)
 - [x] L8 Local Modbus Polling Priority
 - [x] L2 V2G Discharge Request Detection
 - [x] L4 Profitability Index Broadcasting

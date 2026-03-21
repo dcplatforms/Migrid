@@ -11,7 +11,7 @@ app.use(express.json());
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', service: 'Commerce Engine', version: '5.0.0' });
+  res.json({ status: 'OK', service: 'Commerce Engine', version: '5.1.0' });
 });
 
 /**
