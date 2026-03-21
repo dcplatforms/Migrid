@@ -214,26 +214,15 @@ app.get('/health', async (req, res) => {
   try {
     l1Lock = await redisClient.get('l1:safety:lock') || 'false';
     l4Lock = await redisClient.get('l4:grid:lock') || 'false';
-
-    // Scan for regional L4 grid locks
-    let cursor = 0;
-    const pattern = 'l4:grid:lock:*';
-    do {
-      const result = await redisClient.scan(cursor, { MATCH: pattern, COUNT: 100 });
-      cursor = result.cursor;
-      for (const key of result.keys) {
-        const region = key.split(':').pop();
-        const value = await redisClient.get(key);
-        if (value === 'true' || value === '1') {
-          regionalLocks[region] = true;
-        }
-      }
-    } while (cursor !== 0 && cursor !== '0');
   } catch (error) {
-    console.error('[Market Gateway Health] Redis check failed:', error.message);
+    console.error('[Market Gateway Health] Redis basic locks check failed:', error.message);
   }
 
-  const regionalLocks = await getRegionalGridLocks();
+  try {
+    regionalLocks = await getRegionalGridLocks();
+  } catch (error) {
+    console.error('[Market Gateway Health] Redis regional locks check failed:', error.message);
+  }
 
   res.json({
     service: 'market-gateway',
