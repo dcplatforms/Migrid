@@ -5,25 +5,30 @@ async function verifyL6Mission() {
 
   try {
     const indexContent = fs.readFileSync('./index.js', 'utf8');
+    const packageContent = fs.readFileSync('./package.json', 'utf8');
 
     const checks = [
       { name: 'Redis Integration', pattern: "require('redis')" },
       { name: 'Bulk CTE handleGridSignal', pattern: 'WITH target_drivers AS' },
+      { name: 'Global Grid Guardian in CTE', pattern: "(a.name = 'Global Grid Guardian' AND gc.iso_count >= 5)" },
       { name: 'ERCOT Pioneer in CTE', pattern: "a.name = 'ERCOT Pioneer' AND td.iso = 'ERCOT'" },
       { name: 'CAISO Pioneer in CTE', pattern: "a.name = 'CAISO Pioneer' AND td.iso = 'CAISO'" },
       { name: 'PJM Pioneer in CTE', pattern: "a.name = 'PJM Pioneer' AND td.iso = 'PJM'" },
       { name: 'ML Contributor Achievement Logic (Consecutive)', pattern: "WITH recent_sessions AS" },
-      { name: 'ML Contributor Action Trigger', pattern: "low_variance_session" },
-      { name: 'Grid Alignment Bonus (1.5x)', pattern: "pointsMultiplier = 1.5" },
-      { name: 'Rank Notification Throttling', pattern: "row.new_rank <= 10 || Math.abs(row.rank_delta) >= 5" },
-      { name: 'Market update to Redis', pattern: "await redisClient.hSet('market:profitability', iso" }
+      { name: 'Sustainability Champion Strict Check', pattern: "WITH RECURSIVE dates AS" },
+      { name: 'Rank Notification previous_rank', pattern: "previous_rank: row.new_rank + row.rank_delta" },
+      { name: 'Achievement Notification Metadata', pattern: "data: { achievement_id, name, points, icon }" },
+      { name: 'Service Version 5.3.1', pattern: "version: '5.3.1'" }
     ];
 
     let allPassed = true;
     for (const check of checks) {
-      const passed = indexContent.includes(check.pattern);
+      const passed = indexContent.includes(check.pattern) || packageContent.includes(check.pattern);
       console.log(`- ${check.name}: ${passed ? '✅' : '❌'}`);
-      if (!passed) allPassed = false;
+      if (!passed) {
+          console.log(`  (Pattern not found: ${check.pattern})`);
+          allPassed = false;
+      }
     }
 
     if (allPassed) {
