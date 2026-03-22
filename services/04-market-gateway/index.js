@@ -23,6 +23,9 @@ const pool = new Pool({
 
 const pricingService = new MarketPricingService(pool);
 
+// Supported market regions for L4
+const SUPPORTED_ISOS = ['CAISO', 'PJM', 'ERCOT', 'NORDPOOL', 'ENTSO-E'];
+
 // Redis connection
 const redisClient = redis.createClient({
   url: process.env.REDIS_URL || 'redis://localhost:6379'
@@ -114,9 +117,10 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
 
     const payload = {
       iso: iso.toUpperCase(),
-      location: location,
+      location: location || 'SYSTEM_WIDE',
       price_per_mwh: price.toNumber(),
       profitability_index: profitabilityIndex.toDecimalPlaces(2).toNumber(),
+      degradation_cost_mwh: degradationCostMwh.toNumber(),
       timestamp: new Date().toISOString()
     };
 
@@ -169,11 +173,10 @@ async function startGridSignalConsumer() {
  * Proactive background loop to poll market prices and notify other layers (L9)
  */
 async function startPriceBroadcaster() {
-  const isos = ['CAISO', 'PJM', 'ERCOT', 'NORDPOOL', 'ENTSO-E'];
-  console.log(`[Market Gateway v3.4.1] Initializing proactive price broadcaster for: ${isos.join(', ')}`);
+  console.log(`[Market Gateway v3.4.1] Initializing proactive price broadcaster for: ${SUPPORTED_ISOS.join(', ')}`);
 
   // Initial poll
-  for (const iso of isos) {
+  for (const iso of SUPPORTED_ISOS) {
     try {
       const prices = await pricingService.getLatestPrices(iso, 1);
       if (prices && prices.length > 0) {
@@ -189,7 +192,7 @@ async function startPriceBroadcaster() {
   // Set interval for every 5 minutes
   setInterval(async () => {
     console.log(`[L11 Readiness] Heartbeat: LMP price streams active for ML training (${new Date().toISOString()})`);
-    for (const iso of isos) {
+    for (const iso of SUPPORTED_ISOS) {
       try {
         const prices = await pricingService.getLatestPrices(iso, 1);
         if (prices && prices.length > 0) {
@@ -212,14 +215,28 @@ app.get('/health', async (req, res) => {
   let regionalLocks = {};
 
   try {
-    l1Lock = await redisClient.get('l1:safety:lock') || 'false';
-    l4Lock = await redisClient.get('l4:grid:lock') || 'false';
+    const [l1, l4] = await Promise.all([
+      redisClient.get('l1:safety:lock'),
+      redisClient.get('l4:grid:lock')
+    ]);
+    l1Lock = l1 || 'false';
+    l4Lock = l4 || 'false';
   } catch (error) {
     console.error('[Market Gateway Health] Redis basic locks check failed:', error.message);
   }
 
   try {
-    regionalLocks = await getRegionalGridLocks();
+    // Proactively check all known ISO locks concurrently for sub-50ms responsiveness
+    const lockPromises = SUPPORTED_ISOS.map(iso => redisClient.get(`l4:grid:lock:${iso}`));
+    const lockValues = await Promise.all(lockPromises);
+
+    SUPPORTED_ISOS.forEach((iso, index) => {
+      regionalLocks[iso] = (lockValues[index] === 'true' || lockValues[index] === '1');
+    });
+
+    // Also include any discovered locks via SCAN (edge cases)
+    const discovered = await getRegionalGridLocks();
+    regionalLocks = { ...regionalLocks, ...discovered };
   } catch (error) {
     console.error('[Market Gateway Health] Redis regional locks check failed:', error.message);
   }
@@ -229,7 +246,7 @@ app.get('/health', async (req, res) => {
     version: '3.4.1',
     status: 'healthy',
     layer: 'L4',
-    markets: ['CAISO', 'PJM', 'ERCOT', 'NORDPOOL', 'ENTSO-E'],
+    markets: SUPPORTED_ISOS,
     safety_locks: {
       l1_physics: l1Lock === 'true' || l1Lock === '1',
       l4_grid: l4Lock === 'true' || l4Lock === '1',
@@ -367,7 +384,21 @@ app.get('/data/training/lmp', authenticateToken, async (req, res) => {
 
 // Get list of available markets
 app.get('/markets', async (req, res) => {
-  const regionalLocks = await getRegionalGridLocks();
+  const regionalLocks = {};
+
+  try {
+    const lockPromises = SUPPORTED_ISOS.map(iso => redisClient.get(`l4:grid:lock:${iso}`));
+    const lockValues = await Promise.all(lockPromises);
+
+    SUPPORTED_ISOS.forEach((iso, index) => {
+      regionalLocks[iso] = (lockValues[index] === 'true' || lockValues[index] === '1');
+    });
+
+    const discovered = await getRegionalGridLocks();
+    Object.assign(regionalLocks, discovered);
+  } catch (error) {
+    console.error('[Market Gateway Markets] Redis check failed:', error.message);
+  }
 
   res.json({
     markets: [
