@@ -118,7 +118,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.3.0', // Incremented for Phase 5 Enterprise Alignment
+    version: '5.3.1', // Weekly Product Update: Global Grid Guardian & Sustainability Champion Refinement
     status: 'healthy',
     layer: 'L6'
   });
@@ -573,7 +573,8 @@ async function handleGridSignal(payload) {
               (a.name = 'CAISO Pioneer' AND td.iso = 'CAISO' AND gc.action_count >= 1) OR
               (a.name = 'PJM Pioneer' AND td.iso = 'PJM' AND gc.action_count >= 1) OR
               (a.name = 'Nord Pool Pioneer' AND td.iso = 'NORDPOOL' AND gc.action_count >= 1) OR
-              (a.name = 'ISO Explorer' AND gc.iso_count >= 3)
+              (a.name = 'ISO Explorer' AND gc.iso_count >= 3) OR
+              (a.name = 'Global Grid Guardian' AND gc.iso_count >= 5)
           )
           AND NOT EXISTS (
               SELECT 1 FROM driver_achievements da2
@@ -624,11 +625,16 @@ async function handleGridSignal(payload) {
       }
 
       for (const achName of achievements) {
+        const achData = await pool.query('SELECT points, icon FROM achievements WHERE name = $1', [achName]);
+        const points = achData.rows[0]?.points || 0;
+        const icon = achData.rows[0]?.icon;
+
         const notification = {
           driver_id: row.driver_id,
           type: 'achievement_unlocked',
           title: 'Achievement Unlocked! 🏆',
           body: `You've earned the '${achName}' badge!`,
+          data: { name: achName, points, icon }
         };
         await producer.send({ topic: 'engagement_notifications', messages: [{ key: row.driver_id, value: JSON.stringify(notification) }] });
         io.to(`driver:${row.driver_id}`).emit('notification', notification);
@@ -907,27 +913,34 @@ async function checkEnergyArchitectAchievement(driver_id) {
 }
 
 async function checkSustainabilityChampion(driver_id) {
-  // 100% Compliance Check: Verify at least one valid session for each of the last 30 consecutive days
+  // 100% Compliance Check: Verify at least one valid session for each of the last 30 consecutive days.
+  // This enforces the "Green Audit" (<15% variance) via the L1-verified 'is_valid' flag.
   const result = await pool.query(`
-    WITH daily_status AS (
-      SELECT
-        DATE_TRUNC('day', start_time) as session_day,
-        BOOL_AND(is_valid) as all_valid
-      FROM charging_sessions
-      WHERE driver_id = $1 AND start_time > NOW() - INTERVAL '30 days'
-      GROUP BY 1
+    WITH RECURSIVE dates AS (
+        SELECT CURRENT_DATE - INTERVAL '29 days' as day
+        UNION ALL
+        SELECT day + INTERVAL '1 day' FROM dates WHERE day < CURRENT_DATE
+    ),
+    daily_compliance AS (
+        SELECT
+            d.day,
+            COUNT(cs.id) as session_count,
+            BOOL_AND(cs.is_valid) as all_valid
+        FROM dates d
+        LEFT JOIN charging_sessions cs ON DATE_TRUNC('day', cs.start_time) = d.day AND cs.driver_id = $1
+        GROUP BY d.day
     )
     SELECT
-      COUNT(*) as consecutive_days,
-      BOOL_AND(all_valid) as remains_valid
-    FROM daily_status
+        COUNT(*) as compliant_days
+    FROM daily_compliance
+    WHERE session_count > 0 AND all_valid = true
   `, [driver_id]);
 
   if (result.rows.length > 0) {
-    const { consecutive_days, remains_valid } = result.rows[0];
+    const { compliant_days } = result.rows[0];
 
-    // Achievement requires 30 distinct days of charging, all of which must be valid
-    if (parseInt(consecutive_days) >= 30 && remains_valid === true) {
+    // Achievement requires 30 distinct, consecutive days of valid charging
+    if (parseInt(compliant_days) >= 30) {
       const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Sustainability Champion'");
       if (achievement.rows.length > 0) {
         await awardAchievement(driver_id, achievement.rows[0].id);
@@ -991,12 +1004,15 @@ async function awardAchievement(driver_id, achievement_id) {
     console.log(`[Engagement] Achievement '${name}' awarded to driver ${driver_id}. L10 notified.`);
 
     // 6. Emit Engagement Notification for L5 Driver Experience
+    const achievementData = await pool.query('SELECT icon FROM achievements WHERE id = $1', [achievement_id]);
+    const icon = achievementData.rows[0]?.icon;
+
     const notification = {
       driver_id,
       type: 'achievement_unlocked',
       title: 'Achievement Unlocked! 🏆',
       body: `You've earned the '${name}' badge and ${points} points!`,
-      data: { achievement_id, points }
+      data: { achievement_id, name, points, icon }
     };
 
     await producer.send({
@@ -1057,7 +1073,11 @@ async function recalculateRanks() {
         type: 'rank_change',
         title: 'Rank Updated! 📈',
         body: `Your new rank on the leaderboard is #${row.new_rank}.`,
-        data: { rank: row.new_rank, delta: row.rank_delta }
+        data: {
+          rank: row.new_rank,
+          previous_rank: row.new_rank + row.rank_delta,
+          delta: row.rank_delta
+        }
       });
     }
   }
