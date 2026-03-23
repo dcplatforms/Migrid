@@ -163,23 +163,13 @@ app.get('/openadr/v3/reports', async (req, res) => {
         }
       } while (statusCursor !== 0 && statusCursor !== '0');
 
-      // 2. Overlay Safe Mode status (Phase 5 Forward Engineering)
-      let safeModeCursor = '0';
-      do {
-        const result = await redisClient.scan(safeModeCursor, { MATCH: 'l8:site:*:safe_mode', COUNT: 100 });
-        safeModeCursor = result.cursor;
-        if (result.keys && result.keys.length > 0) {
-          const values = await redisClient.mGet(result.keys);
-          result.keys.forEach((key, index) => {
-            const parts = key.split(':');
-            const siteId = parts[2];
-            const value = values[index];
-            if (value === 'true' || value === '1') {
-              siteStatuses[siteId] = 'SAFE_MODE';
-            }
-          });
-        }
-      } while (safeModeCursor !== 0 && safeModeCursor !== '0');
+      // 2. Overlay Safe Mode status (Phase 5 Forward Engineering - Optimized with SMEMBERS)
+      const safeModeSites = await redisClient.sMembers('l3:vpp:safemode_sites');
+      if (safeModeSites && safeModeSites.length > 0) {
+        safeModeSites.forEach(siteId => {
+          siteStatuses[siteId] = 'SAFE_MODE';
+        });
+      }
     } catch (redisError) {
       console.error('[L2 Grid Signal] Redis Scan Error (Site Status):', redisError.message);
     }
@@ -265,8 +255,8 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
 
     // 1.1 Check L4 Grid Lock (Global and Regional) - Phase 5 Forward Engineering
     const gridLock = await redisClient.get('l4:grid:lock');
-    const isoRegion = event.targets?.find(t => t.type === 'region')?.value;
-    const regionalLock = isoRegion ? await redisClient.get(`l4:grid:lock:${isoRegion.toUpperCase()}`) : null;
+    const isoRegion = (event.targets?.find(t => t.type === 'region')?.value || '').toUpperCase();
+    const regionalLock = isoRegion ? await redisClient.get(`l4:grid:lock:${isoRegion}`) : null;
 
     if (gridLock === 'true' || gridLock === '1' || regionalLock === 'true' || regionalLock === '1') {
       console.warn(`🚨 [L2] DISPATCH REJECTED: L4 Grid Lock active (Global: ${gridLock}, Regional: ${regionalLock})`);
@@ -385,7 +375,10 @@ app.get('/data/training/events', authenticateToken, async (req, res) => {
  */
 async function startSafetyConsumer() {
   await consumer.connect();
-  await consumer.subscribe({ topics: ['migrid.physics.alerts', 'MARKET_PRICE_UPDATED', 'migrid.l8.status'], fromBeginning: false });
+  await consumer.subscribe({
+    topics: ['migrid.physics.alerts', 'MARKET_PRICE_UPDATED', 'migrid.l8.status', 'L8_SAFE_MODE_CHANGED'],
+    fromBeginning: false
+  });
 
   await consumer.run({
     eachMessage: async ({ topic, partition, message }) => {
@@ -395,6 +388,17 @@ async function startSafetyConsumer() {
         console.log(`[L2] Received status update from L8 for site ${payload.site_id}: ${payload.status}`);
         // Cache site status (e.g., SAFE_MODE, METER_OFFLINE)
         await redisClient.setEx(`l8:site:status:${payload.site_id}`, 3600, payload.status);
+      } else if (topic === 'L8_SAFE_MODE_CHANGED') {
+        const { site_id, safe_mode } = payload;
+        console.log(`🛡️ [L2] L8 Safe Mode Change: Site ${site_id} is now ${safe_mode ? 'LOCKED' : 'RELEASED'}`);
+
+        if (safe_mode) {
+          await redisClient.sAdd('l3:vpp:safemode_sites', site_id.toString());
+          await redisClient.setEx(`l8:site:status:${site_id}`, 3600, 'SAFE_MODE');
+        } else {
+          await redisClient.sRem('l3:vpp:safemode_sites', site_id.toString());
+          await redisClient.setEx(`l8:site:status:${site_id}`, 3600, 'OPERATIONAL');
+        }
       } else if (topic === 'migrid.physics.alerts') {
         // PHYSICS RULE: Trigger lock if CRITICAL/FRAUD OR if variance exceeds 15%
         const isCritical = payload.severity === 'CRITICAL' || payload.severity === 'FRAUD';
