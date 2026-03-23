@@ -107,23 +107,36 @@ describe('L2 Grid Signal Service', () => {
     expect(sentValue.program_id).toBe('PROG-ABC');
   });
 
-  test('POST /openadr/v3/events should include market_price_at_session in broadcast (Phase 5 High-Fidelity)', async () => {
-    redisClient.get.mockResolvedValue(null);
+  test('POST /openadr/v3/events should include market_price_at_session and high-fidelity metadata in broadcast', async () => {
+    const mockMarketContext = {
+      price_per_mwh: 42.5,
+      profitability_index: 22.5,
+      degradation_cost_mwh: 20.0
+    };
+
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'market:context:CAISO') return Promise.resolve(JSON.stringify(mockMarketContext));
+      return Promise.resolve(null);
+    });
 
     const response = await request(app)
       .post('/openadr/v3/events')
       .set('Authorization', `Bearer ${mockToken}`)
       .send({
-        id: 'evt-price-check',
+        id: 'evt-high-fidelity-check',
         type: 'demand-response',
+        targets: [{ type: 'region', value: 'caiso' }],
         metadata: {
-          market_price_at_session: 42.5
+          billing_mode: 'V2G_OPTIMIZED'
         }
       });
 
     expect(response.status).toBe(202);
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
     expect(sentValue.market_price_at_session).toBe(42.5);
+    expect(sentValue.profitability_index).toBe(22.5);
+    expect(sentValue.degradation_cost_mwh).toBe(20.0);
+    expect(sentValue.billing_mode).toBe('V2G_OPTIMIZED');
   });
 
   test('POST /openadr/v3/events should support program_id (3.1.0 Alignment)', async () => {
@@ -383,7 +396,7 @@ describe('L2 Grid Signal Service', () => {
     );
   });
 
-  test('startSafetyConsumer should cache market price updates', async () => {
+  test('startSafetyConsumer should cache market price updates with degradation cost', async () => {
     const { consumer, startSafetyConsumer } = require('./index');
     await startSafetyConsumer();
 
@@ -393,6 +406,7 @@ describe('L2 Grid Signal Service', () => {
       iso: 'ERCOT',
       price_per_mwh: 120.0,
       profitability_index: 100.0,
+      degradation_cost_mwh: 20.0,
       timestamp: new Date().toISOString()
     };
 
@@ -409,7 +423,7 @@ describe('L2 Grid Signal Service', () => {
     expect(redisClient.setEx).toHaveBeenCalledWith(
       'market:latest:context',
       600,
-      expect.stringContaining('"price_per_mwh":120')
+      expect.stringContaining('"degradation_cost_mwh":20')
     );
     expect(redisClient.setEx).toHaveBeenCalledWith(
       'market:context:ERCOT',
