@@ -230,4 +230,58 @@ describe('BiddingOptimizer', () => {
     const caisoBids = await optimizer.generateDayAheadBids('CAISO');
     expect(caisoBids).toHaveLength(1);
   });
+
+  test('should prioritize regional capacity from Redis when available', async () => {
+    const globalCapacity = '500'; // 0.5 MW
+    const regionalData = JSON.stringify({
+      'ERCOT': '1200', // 1.2 MW
+      'CAISO': '800'   // 0.8 MW
+    });
+
+    mockRedisClient.get.mockImplementation((key) => {
+      if (key === 'vpp:capacity:available') return Promise.resolve(globalCapacity);
+      if (key === 'vpp:capacity:regional') return Promise.resolve(regionalData);
+      return Promise.resolve(null);
+    });
+
+    mockPricingService.getDayAheadForecast.mockResolvedValue([
+      { location: 'LOC1', price_per_mwh: 100.00, timestamp: new Date() }
+    ]);
+
+    // Test ERCOT specific capacity
+    const ercotBids = await optimizer.generateDayAheadBids('ERCOT');
+    expect(ercotBids[0]).toContain('38=1.20');
+
+    // Test CAISO specific capacity
+    const caisoBids = await optimizer.generateDayAheadBids('CAISO');
+    expect(caisoBids[0]).toContain('38=0.80');
+
+    // Test PJM (not in regional data) should fall back to global
+    const pjmBids = await optimizer.generateDayAheadBids('PJM');
+    expect(pjmBids[0]).toContain('38=0.50');
+  });
+
+  test('should fall back to global capacity if regional data is malformed', async () => {
+    const globalCapacity = '500';
+    mockRedisClient.get.mockImplementation((key) => {
+      if (key === 'vpp:capacity:available') return Promise.resolve(globalCapacity);
+      if (key === 'vpp:capacity:regional') return Promise.resolve('invalid-json');
+      return Promise.resolve(null);
+    });
+
+    mockPricingService.getDayAheadForecast.mockResolvedValue([
+      { location: 'LOC1', price_per_mwh: 100.00, timestamp: new Date() }
+    ]);
+
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+    const bids = await optimizer.generateDayAheadBids('CAISO');
+    expect(bids[0]).toContain('38=0.50');
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to parse regional capacity'),
+      expect.anything()
+    );
+
+    consoleSpy.mockRestore();
+  });
 });

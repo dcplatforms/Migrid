@@ -102,7 +102,7 @@ async function getRegionalGridLocks() {
 
 /**
  * Broadcast market price update to Kafka for other services (L9 Commerce)
- * Enriched with location metadata for L11 ML Engine readiness
+ * Enriched with location metadata and L1 Physics Scores for L11 ML Engine readiness
  */
 async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE') {
   try {
@@ -115,12 +115,27 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
     const degradationCostMwh = degradationCostKwh.times(1000);
     const profitabilityIndex = price.minus(degradationCostMwh);
 
+    // AI Readiness: Include physics score from L1 safety context if available
+    let physicsScore = 1.0;
+    try {
+      const lockContext = await redisClient.get('l1:safety:lock:context');
+      if (lockContext) {
+        const details = JSON.parse(lockContext);
+        if (details.physics_score !== undefined) {
+          physicsScore = parseFloat(details.physics_score);
+        }
+      }
+    } catch (err) {
+      console.warn('[Market Gateway] Failed to parse physics score for broadcast:', err.message);
+    }
+
     const payload = {
       iso: iso.toUpperCase(),
       location: location || 'SYSTEM_WIDE',
       price_per_mwh: price.toNumber(),
       profitability_index: profitabilityIndex.toDecimalPlaces(2).toNumber(),
       degradation_cost_mwh: degradationCostMwh.toNumber(),
+      physics_score: physicsScore,
       timestamp: new Date().toISOString()
     };
 
@@ -158,9 +173,10 @@ async function startGridSignalConsumer() {
         // Regional locking: if signal targets a specific ISO/Region
         const targetRegion = signal.targets?.find(t => t.type === 'region')?.value;
         if (targetRegion) {
-          const regionLockKey = `l4:grid:lock:${targetRegion.toUpperCase()}`;
+          const iso = targetRegion.toUpperCase();
+          const regionLockKey = `l4:grid:lock:${iso}`;
           await redisClient.setEx(regionLockKey, lockDuration, 'true');
-          console.log(`[Market Gateway] L4 Regional Grid Lock activated for ${targetRegion} due to signal ${signal.event_id}`);
+          console.warn(`[Market Gateway] L4 Regional Grid Lock ACTIVATED for ${iso} for ${lockDuration}s due to signal ${signal.event_id}`);
         }
 
         console.log(`[Market Gateway] L4 Global Grid Lock activated for 15 minutes due to signal ${signal.event_id}`);
