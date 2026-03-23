@@ -77,6 +77,21 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.event_type).toBe('PHYSICS_FRAUD');
     expect(alertValue.severity).toBe('FRAUD');
     expect(alertValue.variance_pct).toBe(18.5);
+    expect(alertValue.physics_score).toBe("0.0000"); // 1 - (18.5/15) = -0.23 -> clamp to 0
+  });
+
+  test('should calculate physics_score correctly for moderate variance', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'PHYSICS_FRAUD',
+        variance_pct: 7.5
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.physics_score).toBe("0.5000"); // 1 - (7.5/15) = 0.5
   });
 
   test('should dispatch CAPACITY_VIOLATION alert to Kafka', async () => {
@@ -160,6 +175,7 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"severity":"FRAUD"'));
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"site_id":"SITE-001"'));
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"billing_mode":"FLEET"'));
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"physics_score":"0.0000"'));
   });
 
   test('should set safety lock and context in Redis for CAPACITY_VIOLATION', async () => {
