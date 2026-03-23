@@ -128,7 +128,33 @@ describe('BiddingOptimizer', () => {
     await optimizer.generateDayAheadBids('CAISO');
 
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('L1 safety lock is active'));
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Reason: PHYSICS_FRAUD, Severity: FRAUD, Site: SITE-123, Region: CAISO, VPPActive: true, V2GActive: true'));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Reason: PHYSICS_FRAUD, Severity: FRAUD, Score: N/A, Site: SITE-123, Region: CAISO, VPPActive: true, V2GActive: true'));
+
+    consoleSpy.mockRestore();
+  });
+
+  test('should log physics_score when present in safety lock context', async () => {
+    const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+    const context = JSON.stringify({
+      event_type: 'CAPACITY_VIOLATION',
+      severity: 'CRITICAL',
+      physics_score: 0.85,
+      site_id: 'SITE-456',
+      iso_region: 'PJM',
+      vpp_active: true,
+      v2g_active: false
+    });
+
+    mockRedisClient.get.mockImplementation((key) => {
+      if (key === 'l1:safety:lock') return Promise.resolve('true');
+      if (key === 'l1:safety:lock:context') return Promise.resolve(context);
+      return Promise.resolve(null);
+    });
+
+    await optimizer.generateDayAheadBids('PJM');
+
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Score: 0.85'));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Reason: CAPACITY_VIOLATION, Severity: CRITICAL, Score: 0.85, Site: SITE-456, Region: PJM'));
 
     consoleSpy.mockRestore();
   });
