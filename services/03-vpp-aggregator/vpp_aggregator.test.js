@@ -72,7 +72,7 @@ describe('L3 VPP Aggregator Service', () => {
     test('GET /capacity/available should return capacity from database', async () => {
         mockRedisClient.get.mockResolvedValue(null); // No cache, no safety lock
         mockPool.query.mockResolvedValue({
-            rows: [{ total_capacity_kwh: 150.5, vehicle_count: 3 }]
+            rows: [{ raw_capacity_kwh: 150.5, vehicle_count: 3 }]
         });
 
         const response = await request(app)
@@ -121,7 +121,7 @@ describe('L3 VPP Aggregator Service', () => {
         mockRedisClient.get.mockResolvedValue(null);
         mockRedisClient.sMembers.mockResolvedValue(['SITE-001']);
         mockPool.query.mockResolvedValue({
-            rows: [{ total_capacity_kwh: 50, vehicle_count: 1 }]
+            rows: [{ raw_capacity_kwh: 50, vehicle_count: 1 }]
         });
 
         const response = await request(app)
