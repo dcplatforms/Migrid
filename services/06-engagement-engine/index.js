@@ -118,7 +118,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.3.2', // Weekly Product Update: Global Grid Guardian & Sustainability Champion Refinement
+    version: '5.3.2', // Weekly Product Update: ENTSO-E Pioneer & Sustainability Refinement
     status: 'healthy',
     layer: 'L6'
   });
@@ -569,10 +569,11 @@ async function handleGridSignal(payload) {
           CROSS JOIN achievements a
           WHERE (
               (a.name = 'Grid Warrior' AND gc.action_count >= 5) OR
-              (a.name = 'ERCOT Pioneer' AND td.iso = 'ERCOT' AND gc.action_count >= 1) OR
               (a.name = 'CAISO Pioneer' AND td.iso = 'CAISO' AND gc.action_count >= 1) OR
               (a.name = 'PJM Pioneer' AND td.iso = 'PJM' AND gc.action_count >= 1) OR
+              (a.name = 'ERCOT Pioneer' AND td.iso = 'ERCOT' AND gc.action_count >= 1) OR
               (a.name = 'Nord Pool Pioneer' AND td.iso = 'NORDPOOL' AND gc.action_count >= 1) OR
+              (a.name = 'ENTSO-E Pioneer' AND td.iso = 'ENTSOE' AND gc.action_count >= 1) OR
               (a.name = 'ISO Explorer' AND gc.iso_count >= 3) OR
               (a.name = 'Global Grid Guardian' AND gc.iso_count >= 5)
           )
@@ -915,19 +916,25 @@ async function checkEnergyArchitectAchievement(driver_id) {
 async function checkSustainabilityChampion(driver_id) {
   // 100% Compliance Check: Verify at least one valid session for each of the last 30 consecutive days.
   // This enforces the "Green Audit" (<15% variance) via the L1-verified 'is_valid' flag.
+  // Performance Optimization: Use a filtered subquery for charging_sessions to minimize join overhead.
   const result = await pool.query(`
     WITH RECURSIVE dates AS (
         SELECT CURRENT_DATE - INTERVAL '29 days' as day
         UNION ALL
         SELECT day + INTERVAL '1 day' FROM dates WHERE day < CURRENT_DATE
     ),
+    recent_sessions AS (
+        SELECT DATE_TRUNC('day', start_time) as session_day, is_valid
+        FROM charging_sessions
+        WHERE driver_id = $1 AND start_time >= CURRENT_DATE - INTERVAL '30 days'
+    ),
     daily_compliance AS (
         SELECT
             d.day,
-            COUNT(cs.id) as session_count,
-            BOOL_AND(cs.is_valid) as all_valid
+            COUNT(rs.session_day) as session_count,
+            COALESCE(BOOL_AND(rs.is_valid), false) as all_valid
         FROM dates d
-        LEFT JOIN charging_sessions cs ON DATE_TRUNC('day', cs.start_time) = d.day AND cs.driver_id = $1
+        LEFT JOIN recent_sessions rs ON rs.session_day = d.day
         GROUP BY d.day
     )
     SELECT

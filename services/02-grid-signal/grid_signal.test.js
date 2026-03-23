@@ -11,6 +11,9 @@ jest.mock('redis', () => ({
     connect: jest.fn().mockResolvedValue(),
     get: jest.fn(),
     setEx: jest.fn().mockResolvedValue(),
+    sAdd: jest.fn().mockResolvedValue(),
+    sRem: jest.fn().mockResolvedValue(),
+    sMembers: jest.fn().mockResolvedValue([]),
     quit: jest.fn().mockResolvedValue(),
     keys: jest.fn().mockResolvedValue([]),
     scan: jest.fn().mockResolvedValue({ cursor: 0, keys: [] }),
@@ -434,7 +437,7 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body.region).toBe('GLOBAL');
   });
 
-  test('POST /openadr/v3/events should reject when regional L4 grid lock is active', async () => {
+  test('POST /openadr/v3/events should reject when regional L4 grid lock is active (Case-Insensitive Hardening)', async () => {
     redisClient.get.mockImplementation((key) => {
       if (key === 'l4:grid:lock:CAISO') return Promise.resolve('1');
       return Promise.resolve(null);
@@ -444,14 +447,14 @@ describe('L2 Grid Signal Service', () => {
       .post('/openadr/v3/events')
       .set('Authorization', `Bearer ${mockToken}`)
       .send({
-        id: 'evt-lock-regional',
+        id: 'evt-lock-regional-case',
         type: 'demand-response',
-        targets: [{ type: 'region', value: 'CAISO' }]
+        targets: [{ type: 'region', value: 'caiso' }] // Lowercase region
       });
 
     expect(response.status).toBe(503);
     expect(response.body.reason).toBe('GRID_LOCK_ACTIVE');
-    expect(response.body.region).toBe('CAISO');
+    expect(response.body.region).toBe('CAISO'); // Should be normalized to uppercase
   });
 
   test('POST /openadr/v3/events should reject when site is in L8 Safe Mode', async () => {
@@ -474,22 +477,65 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body.site_id).toBe('SITE-456');
   });
 
-  test('GET /openadr/v3/reports should return L8 site statuses', async () => {
+  test('GET /openadr/v3/reports should return L8 site statuses (Optimized with SMEMBERS)', async () => {
     redisClient.scan.mockImplementation((cursor, options) => {
-      if (options.MATCH === 'market:context:*') return Promise.resolve({ cursor: 0, keys: [] });
-      if (options.MATCH === 'l4:grid:lock:*') return Promise.resolve({ cursor: 0, keys: [] });
-      if (options.MATCH === 'l8:site:*:safe_mode') return Promise.resolve({ cursor: 0, keys: ['l8:site:SITE-789:safe_mode'] });
+      if (options.MATCH === 'l8:site:status:*') {
+        return Promise.resolve({ cursor: 0, keys: ['l8:site:status:SITE-1', 'l8:site:status:SITE-2'] });
+      }
       return Promise.resolve({ cursor: 0, keys: [] });
     });
 
     redisClient.mGet.mockImplementation((keys) => {
-      if (keys[0] && keys[0].includes('l8:site:SITE-789:safe_mode')) return Promise.resolve(['true']);
+      if (keys.includes('l8:site:status:SITE-1')) return Promise.resolve(['OPERATIONAL', 'OPERATIONAL']);
+      return Promise.resolve([]);
+    });
+
+    redisClient.sMembers.mockImplementation((key) => {
+      if (key === 'l3:vpp:safemode_sites') return Promise.resolve(['SITE-2']);
       return Promise.resolve([]);
     });
 
     const response = await request(app).get('/openadr/v3/reports');
     expect(response.status).toBe(200);
-    expect(response.body.site_statuses['SITE-789']).toBe('SAFE_MODE');
+    expect(response.body.site_statuses['SITE-1']).toBe('OPERATIONAL');
+    expect(response.body.site_statuses['SITE-2']).toBe('SAFE_MODE');
+  });
+
+  test('startSafetyConsumer should handle L8_SAFE_MODE_CHANGED event', async () => {
+    const { consumer, startSafetyConsumer } = require('./index');
+    await startSafetyConsumer();
+
+    const eachMessage = consumer.run.mock.calls[0][0].eachMessage;
+
+    // 1. Test Safe Mode Activation
+    const safeModeActivation = {
+      site_id: 'SITE-LOCK-99',
+      safe_mode: true,
+      timestamp: new Date().toISOString()
+    };
+
+    await eachMessage({
+      topic: 'L8_SAFE_MODE_CHANGED',
+      message: { value: Buffer.from(JSON.stringify(safeModeActivation)) }
+    });
+
+    expect(redisClient.sAdd).toHaveBeenCalledWith('l3:vpp:safemode_sites', 'SITE-LOCK-99');
+    expect(redisClient.setEx).toHaveBeenCalledWith('l8:site:status:SITE-LOCK-99', 3600, 'SAFE_MODE');
+
+    // 2. Test Safe Mode Release
+    const safeModeRelease = {
+      site_id: 'SITE-LOCK-99',
+      safe_mode: false,
+      timestamp: new Date().toISOString()
+    };
+
+    await eachMessage({
+      topic: 'L8_SAFE_MODE_CHANGED',
+      message: { value: Buffer.from(JSON.stringify(safeModeRelease)) }
+    });
+
+    expect(redisClient.sRem).toHaveBeenCalledWith('l3:vpp:safemode_sites', 'SITE-LOCK-99');
+    expect(redisClient.setEx).toHaveBeenCalledWith('l8:site:status:SITE-LOCK-99', 3600, 'OPERATIONAL');
   });
 
   test('GET /data/training/events should return historical grid events', async () => {

@@ -56,7 +56,7 @@
 - [✓] **Profitability Index**: Real-time $/MWh broadcasting enriched with degradation costs.
 - [✓] **Regional Locks**: ISO-specific bidding halts via Redis SCAN/MGET logic.
 
-### Layer 6: Engagement Engine (v5.3.0)
+### Layer 6: Engagement Engine (v5.3.1)
 - [✓] **ISO Explorer**: Multi-regional achievement logic using bulk CTE/UNION.
 - [✓] **Energy Architect**: Achievement for AI Readiness and historical data contribution.
 - [~] **Grid-Aware Gamification**: Regional challenges using L2 Kafka signals (85%).

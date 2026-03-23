@@ -72,6 +72,16 @@ async function handlePhysicsAlert(msg) {
 
   const severity = (payload.event_type === 'PHYSICS_FRAUD') ? 'FRAUD' : (payload.event_type === 'CAPACITY_VIOLATION' ? 'CRITICAL' : 'WARNING');
 
+  // L1-103 Enhancement: Confidence Score (Physics Score)
+  // Higher score (closer to 1.0) means more trustworthy data.
+  // Lower score (closer to 0.0) indicates high variance and potential fraud.
+  let physicsScore = 1.0;
+  if (payload.variance_pct !== undefined) {
+    physicsScore = Math.max(0, Math.min(1, 1 - (payload.variance_pct / 15.0)));
+  } else if (payload.efficiency_pct !== undefined) {
+    physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
+  }
+
   // 1. Verify the Physics: Set Safety Lock in Redis for critical violations
   if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
     try {
@@ -85,6 +95,7 @@ async function handlePhysicsAlert(msg) {
         vehicle_id: payload.vehicle_id,
         vin: payload.vin,
         variance_pct: payload.variance_pct,
+        physics_score: physicsScore.toFixed(4),
         current_soc: payload.current_soc,
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
@@ -95,7 +106,7 @@ async function handlePhysicsAlert(msg) {
       };
       await redisClient.setEx(SAFETY_LOCK_CONTEXT_KEY, SAFETY_LOCK_TTL, JSON.stringify(context));
 
-      console.log(`🔒 [L1 Physics] Safety Lock and Context activated in Redis: ${SAFETY_LOCK_KEY}`);
+      console.log(`🔒 [L1 Physics] Safety Lock and Context activated in Redis: ${SAFETY_LOCK_KEY} (Physics Score: ${physicsScore.toFixed(4)})`);
     } catch (redisErr) {
       console.error('❌ [L1 Physics] Failed to set safety lock in Redis:', redisErr.message);
     }
@@ -121,6 +132,7 @@ async function handlePhysicsAlert(msg) {
       threshold: payload.threshold || (payload.event_type === 'EFFICIENCY_ALERT' ? 0.85 : (payload.event_type === 'CAPACITY_VIOLATION' ? 20.0 : null)),
       expected: payload.expected,
       actual: payload.actual,
+      physics_score: physicsScore.toFixed(4),
       billing_mode: payload.billing_mode,
       vpp_active: payload.vpp_active,
       v2g_active: payload.v2g_active,

@@ -111,9 +111,6 @@ This section serves as the mathematical source of truth for platform completion 
 - [x] L6 Nord Pool Pioneer Achievement
 - [x] L6 Energy Architect Achievement (AI Readiness)
 - [~] L6 Regional Team Challenges (85%)
-- [x] L6 Global Grid Guardian Achievement
-- [x] L6 ENTSO-E Pioneer Achievement
-- [x] L6 V2X Pioneer Achievement
 - [x] L8 Local Modbus Polling Priority
 - [x] L2 V2G Discharge Request Detection
 - [x] L4 Profitability Index Broadcasting
@@ -273,7 +270,7 @@ High-velocity engineering updates across the stack:
 - [✓] **L1 Physics Engine (v10.1.0)**: Finalized **High-Fidelity Reconciliation** preserving regional metadata and contextual safety locks.
 - [✓] **L3 VPP Aggregator (v3.2.0)**: Completed **Fuse Rule 2.0** and high-frequency **Redis Capacity Cache** for L4 bidding optimization.
 - [✓] **L4 Market Gateway (v3.4.1)**: Activated **Nord Pool & ERCOT** adapters and implemented robust **Regional Grid Lock** scanning.
-- [✓] **L6 Engagement Engine (v5.3.2)**: Rolled out optimized bulk CTEs for grid response; launched **'Global Grid Guardian'** and **'ENTSO-E Pioneer'** achievements.
+- [✓] **L6 Engagement Engine (v5.3.1)**: Launched **'ISO Explorer'** and **'Energy Architect'** achievements; regional challenges reached 85% completion.
 - [✓] **L7 Device Gateway**: Native **OCPP 2.1 V2X** support active; ISO 15118 Certificate Exchange reached 75% completion.
 
 </details>
@@ -800,7 +797,7 @@ done
 | **L3** | VPP Aggregator | `3.2.0` | ✅ Operational |
 | **L4** | Market Gateway | `3.4.1` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
-| **L6** | Engagement Engine | `5.3.2` | ✅ Operational |
+| **L6** | Engagement Engine | `5.3.1` | ✅ Operational |
 | **L7** | Device Gateway | `5.1.0` | ✅ Operational |
 | **L8** | Energy Manager | `2.1.0` | ✅ Operational |
 | **L9** | Commerce Engine | `5.1.0` | ✅ Operational |
@@ -816,7 +813,7 @@ done
 - **L1 Physics Engine (v10.1.0)**: Finalized **High-Fidelity Reconciliation** preserving regional metadata and contextual safety locks.
 - **L3 VPP Aggregator (v3.2.0)**: Completed **Fuse Rule 2.0** and high-frequency **Redis Capacity Cache** for L4 bidding optimization.
 - **L4 Market Gateway (v3.4.1)**: Activated **Nord Pool & ERCOT** adapters and implemented robust **Regional Grid Lock** scanning.
-- **L6 Engagement Engine (v5.3.2)**: Rolled out optimized bulk CTEs for grid response; launched **'Global Grid Guardian'** and **'ENTSO-E Pioneer'** achievements.
+- **L6 Engagement Engine (v5.3.1)**: Launched **'ISO Explorer'** and **'Energy Architect'** achievements; regional challenges reached 85% completion.
 - **L7 Device Gateway**: Native **OCPP 2.1 V2X** support active; ISO 15118 Certificate Exchange reached 75% completion.
 
 ---
