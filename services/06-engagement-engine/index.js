@@ -118,7 +118,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.3.1', // Weekly Product Update: Global Grid Guardian & Sustainability Champion Refinement
+    version: '5.3.2', // Weekly Product Update: Global Grid Guardian & Sustainability Champion Refinement
     status: 'healthy',
     layer: 'L6'
   });

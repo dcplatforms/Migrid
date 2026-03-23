@@ -10,9 +10,9 @@
 
 | Priority | Feature / Task | Primary Layer | Blocking Dependencies | Target Phase |
 |:---:|:---|:---:|:---|:---:|
-| **P0** | **ISO 15118 Cert Exchange** | L7 (Device) | L5 (Driver API) v4.1.0 payload schema update | Phase 5 |
-| **P1** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 (Market) v3.4.1 ERCOT/Nord Pool feeds | Phase 5 |
-| **P2** | **ML Demand Forecasting** | L11 (ML Engine) | ✅ L3 (VPP) v3.2.0 Redis Capacity Cache | Phase 6 |
+| **P0** | **ML Demand Forecasting** | L11 (ML Engine) | ✅ L3 (VPP) v3.2.0 Redis Capacity Cache | Phase 6 |
+| **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | ✅ L5 (Driver API) v4.1.0 payload schema update | Phase 5 |
+| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 (Market) v3.4.1 ERCOT/Nord Pool feeds | Phase 5 |
 | **P3** | **OCPI 2.2 Roaming** | L7 (Device) | L9 (Commerce) v5.1.0 settlement engine sync | Phase 5 |
 | **P4** | **AI Anomaly Detection** | L8 (Energy) | L11 (ML Engine) Foundation active | Phase 6 |
 
