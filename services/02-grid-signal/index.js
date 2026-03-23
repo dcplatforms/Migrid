@@ -258,6 +258,15 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
     const isoRegion = (event.targets?.find(t => t.type === 'region')?.value || '').toUpperCase();
     const regionalLock = isoRegion ? await redisClient.get(`l4:grid:lock:${isoRegion}`) : null;
 
+    // Fetch regional market metadata for broadcast enrichment
+    let marketMetadata = {};
+    if (isoRegion) {
+      const marketRaw = await redisClient.get(`market:context:${isoRegion}`);
+      if (marketRaw) {
+        marketMetadata = JSON.parse(marketRaw);
+      }
+    }
+
     if (gridLock === 'true' || gridLock === '1' || regionalLock === 'true' || regionalLock === '1') {
       console.warn(`🚨 [L2] DISPATCH REJECTED: L4 Grid Lock active (Global: ${gridLock}, Regional: ${regionalLock})`);
       return res.status(503).json({
@@ -293,7 +302,7 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
     // 2. Save event to ledger
     await pool.query(
       'INSERT INTO grid_events (event_id, event_type, payload, status, received_at, metadata) VALUES ($1, $2, $3, $4, NOW(), $5) ON CONFLICT (event_id) DO NOTHING',
-      [event.id, event.type || 'demand-response', JSON.stringify(event), 'active', JSON.stringify({ program_id: event.program_id })]
+      [event.id, event.type || 'demand-response', JSON.stringify(event), 'active', JSON.stringify({ ...event.metadata, program_id: event.program_id })]
     );
 
     // 3. Cache event in Redis for 1 hour
@@ -317,7 +326,9 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
             site_status: siteStatus || 'OPERATIONAL',
             v2g_requested: v2gRequested,
             iso_region: isoRegion,
-            market_price_at_session: event.metadata?.market_price_at_session,
+            market_price_at_session: event.metadata?.market_price_at_session ?? marketMetadata.price_per_mwh,
+            profitability_index: marketMetadata.profitability_index,
+            degradation_cost_mwh: marketMetadata.degradation_cost_mwh,
             billing_mode: event.metadata?.billing_mode,
             intervals: event.intervals || [],
             targets: event.targets || [],
@@ -439,6 +450,7 @@ async function startSafetyConsumer() {
           iso: payload.iso,
           price_per_mwh: payload.price_per_mwh,
           profitability_index: payload.profitability_index,
+          degradation_cost_mwh: payload.degradation_cost_mwh,
           updated_at: payload.timestamp
         });
 
