@@ -139,6 +139,25 @@ describe('L2 Grid Signal Service', () => {
     expect(sentValue.billing_mode).toBe('V2G_OPTIMIZED');
   });
 
+  test('POST /openadr/v3/events should include physics_score in broadcast (Phase 5)', async () => {
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({ physics_score: '0.9850' }));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-physics-check',
+        type: 'demand-response'
+      });
+
+    expect(response.status).toBe(202);
+    const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
+    expect(sentValue.physics_score).toBe('0.9850');
+  });
+
   test('POST /openadr/v3/events should support program_id (3.1.0 Alignment)', async () => {
     redisClient.get.mockResolvedValue(null);
 
@@ -244,6 +263,20 @@ describe('L2 Grid Signal Service', () => {
     expect(response.status).toBe(200);
     expect(response.body.regional_markets.CAISO.price_per_mwh).toBe(45.5);
     expect(response.body.regional_markets.ERCOT.price_per_mwh).toBe(120.0);
+  });
+
+  test('GET /openadr/v3/reports should return regional capacity data (Phase 5)', async () => {
+    const mockRegionalCapacity = { CAISO: 500.5, ERCOT: 1200.0 };
+
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'vpp:capacity:regional') return Promise.resolve(JSON.stringify(mockRegionalCapacity));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app).get('/openadr/v3/reports');
+    expect(response.status).toBe(200);
+    expect(response.body.regional_capacity.CAISO).toBe(500.5);
+    expect(response.body.regional_capacity.ERCOT).toBe(1200.0);
   });
 
   test('GET /openadr/v3/reports should return safety context when locked', async () => {
