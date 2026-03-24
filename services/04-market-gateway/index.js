@@ -24,7 +24,7 @@ const pool = new Pool({
 const pricingService = new MarketPricingService(pool);
 
 // Supported market regions for L4
-const SUPPORTED_ISOS = ['CAISO', 'PJM', 'ERCOT', 'NORDPOOL', 'ENTSO-E'];
+const SUPPORTED_ISOS = ['CAISO', 'PJM', 'ERCOT', 'NORDPOOL', 'ENTSOE'];
 
 // Redis connection
 const redisClient = redis.createClient({
@@ -189,7 +189,26 @@ async function startGridSignalConsumer() {
  * Proactive background loop to poll market prices and notify other layers (L9)
  */
 async function startPriceBroadcaster() {
-  console.log(`[Market Gateway v3.4.1] Initializing proactive price broadcaster for: ${SUPPORTED_ISOS.join(', ')}`);
+  console.log(`[Market Gateway v3.5.0] Initializing proactive price broadcaster for: ${SUPPORTED_ISOS.join(', ')}`);
+
+  const simulationEnabled = process.env.ENABLE_MARKET_SIMULATION === 'true' || process.env.NODE_ENV === 'test';
+
+  // Phase 5 Enhancement: Simulated Market Feed
+  // If no prices exist, seed the database with initial values to unblock L9/L10
+  if (simulationEnabled) {
+    for (const iso of SUPPORTED_ISOS) {
+      try {
+        const existing = await pricingService.getLatestPrices(iso, 1);
+        if (existing.length === 0) {
+          console.log(`[L4 Simulation] Seeding initial market data for ${iso}...`);
+          const mockPrice = new Decimal(30).plus(new Decimal(Math.random()).times(100));
+          await pricingService.ingestPrice(iso, 'SIMULATED_NODE_001', mockPrice);
+        }
+      } catch (err) {
+        console.warn(`[L4 Simulation] Failed to seed ${iso}:`, err.message);
+      }
+    }
+  }
 
   // Initial poll
   for (const iso of SUPPORTED_ISOS) {
@@ -210,6 +229,12 @@ async function startPriceBroadcaster() {
     console.log(`[L11 Readiness] Heartbeat: LMP price streams active for ML training (${new Date().toISOString()})`);
     for (const iso of SUPPORTED_ISOS) {
       try {
+        // Phase 5 Enhancement: Inject fresh simulated data periodically
+        if (simulationEnabled) {
+          const mockPrice = new Decimal(30).plus(new Decimal(Math.random()).times(100));
+          await pricingService.ingestPrice(iso, 'SIMULATED_NODE_001', mockPrice);
+        }
+
         const prices = await pricingService.getLatestPrices(iso, 1);
         if (prices && prices.length > 0) {
           console.log(`[L11 Readiness] Polling high-fidelity data for ${iso} at ${prices[0].location}`);
@@ -259,7 +284,7 @@ app.get('/health', async (req, res) => {
 
   res.json({
     service: 'market-gateway',
-    version: '3.4.1',
+    version: '3.5.0',
     status: 'healthy',
     layer: 'L4',
     markets: SUPPORTED_ISOS,
@@ -447,10 +472,10 @@ app.get('/markets', async (req, res) => {
         markets: ['day-ahead', 'intraday']
       },
       {
-        iso: 'ENTSO-E',
+        iso: 'ENTSOE',
         name: 'European Network of Transmission System Operators for Electricity',
         status: 'active',
-        grid_lock: !!regionalLocks['ENTSO-E'],
+        grid_lock: !!regionalLocks['ENTSOE'],
         markets: ['day-ahead', 'intraday']
       }
     ]
