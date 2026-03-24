@@ -118,7 +118,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.3.2', // Weekly Product Update: ENTSO-E Pioneer & Sustainability Refinement
+    version: '5.4.0', // Weekly Product Update: Grid Impact Achievement & Scarcity Alignment
     status: 'healthy',
     layer: 'L6'
   });
@@ -451,8 +451,8 @@ async function checkMarketMasterAchievement(driverId, iso, sessionId) {
     const profitabilityStr = await redisClient.hGet('market:profitability', iso);
     const profitability = parseFloat(profitabilityStr || '0');
 
-    // High Profitability Threshold: $50/MWh
-    if (profitability > 50) {
+    // High Profitability Threshold: $100/MWh (Matching L10 Scarcity Boost)
+    if (profitability > 100) {
       console.log(`[L6] High profitability charging detected in ${iso} ($${profitability}/MWh) for session ${sessionId}.`);
 
       await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
@@ -569,6 +569,7 @@ async function handleGridSignal(payload) {
           CROSS JOIN achievements a
           WHERE (
               (a.name = 'Grid Warrior' AND gc.action_count >= 5) OR
+              (a.name = 'Grid Impact' AND gc.action_count >= 10) OR
               (a.name = 'CAISO Pioneer' AND td.iso = 'CAISO' AND gc.action_count >= 1) OR
               (a.name = 'PJM Pioneer' AND td.iso = 'PJM' AND gc.action_count >= 1) OR
               (a.name = 'ERCOT Pioneer' AND td.iso = 'ERCOT' AND gc.action_count >= 1) OR
