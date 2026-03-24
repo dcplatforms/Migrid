@@ -27,10 +27,29 @@ class BiddingOptimizer {
 
   /**
    * Fetches real-time aggregated capacity from Redis.
+   * Supports regional aggregation (Phase 5 Forward Engineering).
+   * @param {string} iso - Optional ISO for regional capacity lookup
    * @returns {Promise<Decimal>} Capacity in kW
    */
-  async getAggregatedCapacity() {
+  async getAggregatedCapacity(iso = null) {
     await this.connect();
+
+    if (iso) {
+      try {
+        const regionalCapacityRaw = await this.redisClient.get('vpp:capacity:regional');
+        if (regionalCapacityRaw) {
+          const regionalCapacity = JSON.parse(regionalCapacityRaw);
+          const isoKey = iso.toUpperCase();
+          if (regionalCapacity[isoKey] !== undefined) {
+            console.log(`[BiddingOptimizer] Using regional capacity for ${isoKey}: ${regionalCapacity[isoKey]} kWh`);
+            return new Decimal(regionalCapacity[isoKey]);
+          }
+        }
+      } catch (err) {
+        console.error(`[BiddingOptimizer] Failed to parse regional capacity for ${iso}:`, err.message);
+      }
+    }
+
     const capacity = await this.redisClient.get('vpp:capacity:available');
     return new Decimal(capacity || '0');
   }
@@ -89,7 +108,7 @@ class BiddingOptimizer {
     }
 
     const forecasts = await this.pricingService.getDayAheadForecast(iso);
-    const pVppKw = await this.getAggregatedCapacity();
+    const pVppKw = await this.getAggregatedCapacity(iso);
     const pVppMw = pVppKw.dividedBy(1000);
 
     const degradationCostKwh = new Decimal(process.env.DEGRADATION_COST_KWH || '0.02');
