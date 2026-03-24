@@ -114,6 +114,10 @@ app.get('/openadr/v3/reports', async (req, res) => {
     const marketContextRaw = await redisClient.get('market:latest:context');
     const marketContext = marketContextRaw ? JSON.parse(marketContextRaw) : null;
 
+    // Phase 5 Enhancement: Fetch regional capacity aggregation (from L3)
+    const regionalCapacityRaw = await redisClient.get('vpp:capacity:regional');
+    const regionalCapacity = regionalCapacityRaw ? JSON.parse(regionalCapacityRaw) : {};
+
     // Phase 5 Enhancement: Aggregate all regional market contexts (Optimized with SCAN and MGET)
     const regionalMarkets = {};
     let cursor = '0';
@@ -201,6 +205,7 @@ app.get('/openadr/v3/reports', async (req, res) => {
       reports: result.rows,
       market_context: marketContext,
       regional_markets: regionalMarkets,
+      regional_capacity: regionalCapacity,
       safety_lock: {
         active: safetyLock === '1' || safetyLock === 'true',
         context: safetyContext
@@ -314,6 +319,9 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
     // 4. Broadcast enriched event to other services via Kafka
     // Enhanced resilience: Wrap in try-catch with retry awareness
     try {
+      const safetyContextRaw = await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
+      const safetyContext = safetyContextRaw ? JSON.parse(safetyContextRaw) : {};
+
       await producer.send({
         topic: 'grid_signals',
         messages: [{
@@ -329,6 +337,7 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
             market_price_at_session: event.metadata?.market_price_at_session ?? marketMetadata.price_per_mwh,
             profitability_index: marketMetadata.profitability_index,
             degradation_cost_mwh: marketMetadata.degradation_cost_mwh,
+            physics_score: safetyContext.physics_score || '1.0000',
             billing_mode: event.metadata?.billing_mode,
             intervals: event.intervals || [],
             targets: event.targets || [],
