@@ -18,8 +18,10 @@ async function verifyL6Mission() {
       { name: 'Sustainability Champion Strict Check', pattern: "WITH RECURSIVE dates AS" },
       { name: 'Rank Notification previous_rank', pattern: "previous_rank: row.new_rank + row.rank_delta" },
       { name: 'Achievement Notification Metadata', pattern: "data: { achievement_id, name, points, icon }" },
-      { name: 'Service Version 5.3.2', pattern: "version: '5.3.2'" },
-      { name: 'ENTSO-E Pioneer in CTE', pattern: "a.name = 'ENTSO-E Pioneer' AND td.iso = 'ENTSOE'" }
+      { name: 'Service Version 5.4.0', pattern: "version: '5.4.0'" },
+      { name: 'ENTSO-E Pioneer in CTE', pattern: "a.name = 'ENTSO-E Pioneer' AND td.iso = 'ENTSOE'" },
+      { name: 'Grid Impact in CTE', pattern: "(a.name = 'Grid Impact' AND gc.action_count >= 10)" },
+      { name: 'Market Master Scarcity Alignment', pattern: "High Profitability Threshold: $100/MWh" }
     ];
 
     let allPassed = true;
