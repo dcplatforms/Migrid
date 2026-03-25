@@ -39,10 +39,19 @@ class BiddingOptimizer {
         const regionalCapacityRaw = await this.redisClient.get('vpp:capacity:regional');
         if (regionalCapacityRaw) {
           const regionalCapacity = JSON.parse(regionalCapacityRaw);
-          const isoKey = iso.toUpperCase();
+          const isoKey = iso.toUpperCase().replace(/-/g, '');
           if (regionalCapacity[isoKey] !== undefined) {
-            console.log(`[BiddingOptimizer] Using regional capacity for ${isoKey}: ${regionalCapacity[isoKey]} kWh`);
-            return new Decimal(regionalCapacity[isoKey]);
+            const data = regionalCapacity[isoKey];
+            const capValue = typeof data === 'object' ? data.capacity : data;
+            const isHighFidelity = typeof data === 'object' ? data.is_high_fidelity : true;
+
+            console.log(`[BiddingOptimizer] Using regional capacity for ${isoKey}: ${capValue} kWh (HighFidelity: ${isHighFidelity})`);
+
+            if (!isHighFidelity) {
+              console.warn(`⚠️ [BiddingOptimizer] Warning: Bidding for ${isoKey} using STANDARD fidelity capacity.`);
+            }
+
+            return new Decimal(capValue);
           }
         }
       } catch (err) {
@@ -88,7 +97,7 @@ class BiddingOptimizer {
         const lockContext = await this.redisClient.get('l1:safety:lock:context');
         const details = lockContext ? JSON.parse(lockContext) : null;
 
-        console.warn(`🚨 [L4 Market Gateway v3.5.0] Bidding halted: L1 safety lock is active for ${iso}`);
+        console.warn(`🚨 [L4 Market Gateway v3.6.0] Bidding halted: L1 safety lock is active for ${iso}`);
         if (details) {
           console.warn(`[L4 Safety Context] Reason: ${details.event_type}, Severity: ${details.severity}, Score: ${details.physics_score || 'N/A'}, Site: ${details.site_id || 'N/A'}, Region: ${details.iso_region || 'N/A'}, VPPActive: ${details.vpp_active}, V2GActive: ${details.v2g_active}`);
 
@@ -99,9 +108,9 @@ class BiddingOptimizer {
       }
 
       if (locks.l4) {
-        const regionalLockActive = await this.redisClient.get(`l4:grid:lock:${iso.toUpperCase()}`);
+        const regionalLockActive = await this.redisClient.get(`l4:grid:lock:${iso.toUpperCase().replace(/-/g, '')}`);
         const scope = (regionalLockActive === 'true' || regionalLockActive === '1') ? `Regional (${iso})` : 'Global';
-        console.warn(`⚠️ [L4 Market Gateway v3.5.0] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
+        console.warn(`⚠️ [L4 Market Gateway v3.6.0] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
       }
 
       return [];

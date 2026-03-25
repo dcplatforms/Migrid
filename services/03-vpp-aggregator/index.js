@@ -77,7 +77,7 @@ const authenticateToken = (req, res, next) => {
 app.get('/health', (req, res) => {
   res.json({
     service: 'vpp-aggregator',
-    version: '3.2.0',
+    version: '3.3.0',
     status: 'healthy',
     layer: 'L3'
   });
@@ -280,7 +280,14 @@ const updateGlobalCapacity = async () => {
     result.rows.forEach(row => {
       const deratedCapacity = parseFloat(row.raw_capacity_kwh || 0) * physicsMultiplier;
       totalCapacity += deratedCapacity;
-      regionalCapacity[row.region] = deratedCapacity;
+
+      // Normalize region (ENTSO-E -> ENTSOE) and include high-fidelity metadata
+      const normalizedRegion = row.region.toUpperCase().replace(/-/g, '');
+      regionalCapacity[normalizedRegion] = {
+        capacity: deratedCapacity,
+        is_high_fidelity: physicsMultiplier > 0.95,
+        last_updated_at: new Date().toISOString()
+      };
     });
 
     await redisClient.set('vpp:capacity:available', totalCapacity.toString());

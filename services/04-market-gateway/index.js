@@ -136,6 +136,7 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
       profitability_index: profitabilityIndex.toDecimalPlaces(2).toNumber(),
       degradation_cost_mwh: degradationCostMwh.toNumber(),
       physics_score: physicsScore,
+      fidelity_status: physicsScore > 0.95 ? 'HIGH_FIDELITY' : 'STANDARD',
       timestamp: new Date().toISOString()
     };
 
@@ -189,7 +190,7 @@ async function startGridSignalConsumer() {
  * Proactive background loop to poll market prices and notify other layers (L9)
  */
 async function startPriceBroadcaster() {
-  console.log(`[Market Gateway v3.5.0] Initializing proactive price broadcaster for: ${SUPPORTED_ISOS.join(', ')}`);
+  console.log(`[Market Gateway v3.6.0] Initializing proactive price broadcaster for: ${SUPPORTED_ISOS.join(', ')}`);
 
   const simulationEnabled = process.env.ENABLE_MARKET_SIMULATION === 'true' || process.env.NODE_ENV === 'test';
 
@@ -284,7 +285,7 @@ app.get('/health', async (req, res) => {
 
   res.json({
     service: 'market-gateway',
-    version: '3.5.0',
+    version: '3.6.0',
     status: 'healthy',
     layer: 'L4',
     markets: SUPPORTED_ISOS,
