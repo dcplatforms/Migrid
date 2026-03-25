@@ -42,18 +42,34 @@ class MarketPricingService {
    * @returns {Promise<Array>} List of historical price records
    */
   async getHistoricalPrices(iso, days = 7) {
+    const isoFilter = iso ? iso.toUpperCase() : null;
     const result = await this.pool.query(`
       SELECT iso, location, price_per_mwh, timestamp
       FROM lmp_prices
       WHERE ($1::text IS NULL OR iso = $1)
         AND timestamp > NOW() - (make_interval(days => $2))
       ORDER BY timestamp ASC
-    `, [iso ? iso.toUpperCase() : null, days]);
+    `, [isoFilter, days]);
 
     return result.rows.map(row => ({
       ...row,
       price_per_mwh: new Decimal(row.price_per_mwh)
     }));
+  }
+
+  /**
+   * Ingests a new LMP price into the database.
+   * @param {string} iso - The ISO name
+   * @param {string} location - Pricing node location
+   * @param {number|Decimal} price_per_mwh - Price in $/MWh
+   * @param {Date} timestamp - Price timestamp
+   */
+  async ingestPrice(iso, location, price_per_mwh, timestamp = new Date()) {
+    const price = new Decimal(price_per_mwh);
+    await this.pool.query(`
+      INSERT INTO lmp_prices (iso, location, price_per_mwh, timestamp)
+      VALUES ($1, $2, $3, $4)
+    `, [iso.toUpperCase(), location, price.toString(), timestamp]);
   }
 
   /**
