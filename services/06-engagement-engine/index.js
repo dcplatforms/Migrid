@@ -118,7 +118,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.4.0', // Weekly Product Update: Grid Impact Achievement & Scarcity Alignment
+    version: '5.5.0', // Weekly Product Update: L11 AI Readiness & High-Fidelity Data Guardians
     status: 'healthy',
     layer: 'L6'
   });
@@ -329,9 +329,11 @@ async function processChargingEvent(event) {
       const sessionData = await pool.query('SELECT variance_percentage FROM charging_sessions WHERE id = $1', [sessionId]);
       const variance = parseFloat(sessionData.rows[0]?.variance_percentage || '100');
       const isLowVariance = variance < 5.0;
+      const physicsScore = Math.max(0, Math.min(1, 1 - (variance / 15.0)));
+      const isHighFidelity = physicsScore > 0.95;
 
       await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
-        [driverId, 'session_completed', JSON.stringify({ sessionId, energyDispensedKwh: event.energyDispensedKwh, isLowVariance })]);
+        [driverId, 'session_completed', JSON.stringify({ sessionId, energyDispensedKwh: event.energyDispensedKwh, isLowVariance, physicsScore, isHighFidelity })]);
 
       await checkFirstSessionAchievement(driverId);
       await updateStreaks(driverId);
@@ -341,9 +343,10 @@ async function processChargingEvent(event) {
 
       // Phase 6 AI Readiness: Check for ML Contributor (High-fidelity data)
       if (isLowVariance) {
-        await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'low_variance_session', JSON.stringify({ sessionId, variance })]);
+        await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'low_variance_session', JSON.stringify({ sessionId, variance, physicsScore })]);
         await checkMLContributorAchievement(driverId);
         await checkEnergyArchitectAchievement(driverId);
+        await checkL11DataGuardianAchievement(driverId);
         await updateChallengeProgress(driverId, 'low_variance_charging');
       }
     }
@@ -354,9 +357,9 @@ async function processChargingEvent(event) {
       try {
         const profitabilityStr = await redisClient.hGet('market:profitability', iso);
         const profitability = parseFloat(profitabilityStr || '0');
-        if (profitability > 50) {
+        if (profitability > 30) {
           pointsMultiplier = 1.5;
-          console.log(`[L6] Grid Alignment Bonus applied for ${iso}: 1.5x multiplier.`);
+          console.log(`[L6] Grid Alignment Bonus applied for ${iso}: 1.5x multiplier (L10 Surplus Alignment).`);
         }
       } catch (err) {
         console.error('[L6] Error fetching market profitability for bonus:', err.message);
@@ -371,7 +374,12 @@ async function processChargingEvent(event) {
         type: 'points_earned',
         title: 'Points Earned! ⚡',
         body: `You just earned ${points} points for your charging session.`,
-        data: { session_id: sessionId, points }
+        data: {
+          session_id: sessionId,
+          points,
+          physics_score: physicsScore.toFixed(4),
+          fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD'
+        }
       };
 
       // Notify L10 Token Engine for points fulfillment
@@ -657,6 +665,32 @@ async function checkFirstSessionAchievement(driver_id) {
 
   if (parseInt(count.rows[0].count) === 1) {
     const achievement = await pool.query('SELECT id FROM achievements WHERE name = \'Early Adopter\'');
+    if (achievement.rows.length > 0) {
+      await awardAchievement(driver_id, achievement.rows[0].id);
+    }
+  }
+}
+
+async function checkL11DataGuardianAchievement(driver_id) {
+  // Requirement: 15 consecutive high-fidelity sessions (Physics Score > 0.95)
+  // We check the last 15 'session_completed' actions and ensure they all have isHighFidelity = true in metadata.
+  const result = await pool.query(`
+    WITH recent_sessions AS (
+      SELECT (metadata->>'isHighFidelity')::boolean as is_high_fidelity
+      FROM driver_actions
+      WHERE driver_id = $1 AND action_type = 'session_completed'
+      ORDER BY created_at DESC
+      LIMIT 15
+    )
+    SELECT COUNT(*) as total,
+           COUNT(*) FILTER (WHERE is_high_fidelity = true) as high_fidelity_count
+    FROM recent_sessions
+  `, [driver_id]);
+
+  const { total, high_fidelity_count } = result.rows[0];
+
+  if (parseInt(total) >= 15 && parseInt(high_fidelity_count) === 15) {
+    const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'L11 Data Guardian'");
     if (achievement.rows.length > 0) {
       await awardAchievement(driver_id, achievement.rows[0].id);
     }
