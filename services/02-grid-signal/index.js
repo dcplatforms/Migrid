@@ -92,7 +92,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.4.0',
+    version: '2.4.1',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -260,7 +260,8 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
 
     // 1.1 Check L4 Grid Lock (Global and Regional) - Phase 5 Forward Engineering
     const gridLock = await redisClient.get('l4:grid:lock');
-    const isoRegion = (event.targets?.find(t => t.type === 'region')?.value || '').toUpperCase();
+    const rawRegion = (event.targets?.find(t => t.type === 'region')?.value || '');
+    const isoRegion = rawRegion.toUpperCase().replace(/-/g, ''); // L2 v2.4.1: ISO Normalization (e.g., 'ENTSO-E' to 'ENTSOE')
     const regionalLock = isoRegion ? await redisClient.get(`l4:grid:lock:${isoRegion}`) : null;
 
     // Fetch regional market metadata for broadcast enrichment
@@ -334,10 +335,11 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
             site_status: siteStatus || 'OPERATIONAL',
             v2g_requested: v2gRequested,
             iso_region: isoRegion,
-            market_price_at_session: event.metadata?.market_price_at_session ?? marketMetadata.price_per_mwh,
+            market_price_at_session: event.metadata?.market_price_at_session ?? (marketMetadata.price_per_mwh ?? 0), // L2 v2.4.1: Nullish coalescing for 0-price preservation
             profitability_index: marketMetadata.profitability_index,
             degradation_cost_mwh: marketMetadata.degradation_cost_mwh,
             physics_score: safetyContext.physics_score || '1.0000',
+            metadata: event.metadata || {}, // L2 v2.4.1: Full metadata preservation (OpenADR 3.1.0)
             billing_mode: event.metadata?.billing_mode,
             intervals: event.intervals || [],
             targets: event.targets || [],
@@ -453,10 +455,11 @@ async function startSafetyConsumer() {
           }));
         }
       } else if (topic === 'MARKET_PRICE_UPDATED') {
-        console.log(`[L2] Received market update for ${payload.iso}: $${payload.price_per_mwh}/MWh`);
+        const iso = payload.iso.toUpperCase().replace(/-/g, ''); // L2 v2.4.1: ISO Normalization
+        console.log(`[L2] Received market update for ${iso}: $${payload.price_per_mwh}/MWh`);
 
         const marketContext = JSON.stringify({
-          iso: payload.iso,
+          iso,
           price_per_mwh: payload.price_per_mwh,
           profitability_index: payload.profitability_index,
           degradation_cost_mwh: payload.degradation_cost_mwh,
@@ -467,7 +470,7 @@ async function startSafetyConsumer() {
         await redisClient.setEx('market:latest:context', 600, marketContext);
 
         // Phase 5 Enhancement: Store ISO-specific context for regional visibility
-        await redisClient.setEx(`market:context:${payload.iso.toUpperCase()}`, 600, marketContext);
+        await redisClient.setEx(`market:context:${iso}`, 600, marketContext);
       }
     }
   });

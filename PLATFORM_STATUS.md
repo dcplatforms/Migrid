@@ -266,7 +266,7 @@ Sell: LMP > $100/MWh (grid services revenue)
 High-velocity engineering updates across the stack:
 
 - [✓] **L10 Token Engine (v4.2.0)**: Deployed **Dynamic Multipliers** (1.5x Grid Surplus / 2.0x V2G Scarcity) and consolidated regional price updates.
-- [✓] **L2 Grid Signal (v2.4.0)**: Hardened **Regional Market Context** tracking and AI Data Readiness for historical event export.
+- [✓] **L2 Grid Signal (v2.4.1)**: Hardened **Regional Market Context** tracking and AI Data Readiness for historical event export.
 - [✓] **L1 Physics Engine (v10.1.0)**: Finalized **High-Fidelity Reconciliation** preserving regional metadata and contextual safety locks.
 - [✓] **L3 VPP Aggregator (v3.2.0)**: Completed **Fuse Rule 2.0** and high-frequency **Redis Capacity Cache** for L4 bidding optimization.
 - [✓] **L4 Market Gateway (v3.4.1)**: Activated **Nord Pool & ERCOT** adapters and implemented robust **Regional Grid Lock** scanning.
@@ -793,7 +793,7 @@ done
 | Layer | Service | Version | Status |
 | :--- | :--- | :--- | :--- |
 | **L1** | Physics Engine | `10.1.0` | ✅ Operational |
-| **L2** | Grid Signal | `2.4.0` | ✅ Operational |
+| **L2** | Grid Signal | `2.4.1` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.2.0` | ✅ Operational |
 | **L4** | Market Gateway | `3.4.1` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
@@ -809,7 +809,7 @@ done
 ## Latest Release Wins (March 2026)
 
 - **L10 Token Engine (v4.2.0)**: Deployed **Dynamic Multipliers** (1.5x Grid Surplus / 2.0x V2G Scarcity) and consolidated regional price updates.
-- **L2 Grid Signal (v2.4.0)**: Hardened **Regional Market Context** tracking and AI Data Readiness for historical event export.
+- **L2 Grid Signal (v2.4.1)**: Hardened **Regional Market Context** tracking and AI Data Readiness for historical event export.
 - **L1 Physics Engine (v10.1.0)**: Finalized **High-Fidelity Reconciliation** preserving regional metadata and contextual safety locks.
 - **L3 VPP Aggregator (v3.2.0)**: Completed **Fuse Rule 2.0** and high-frequency **Redis Capacity Cache** for L4 bidding optimization.
 - **L4 Market Gateway (v3.4.1)**: Activated **Nord Pool & ERCOT** adapters and implemented robust **Regional Grid Lock** scanning.
