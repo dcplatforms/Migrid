@@ -77,7 +77,7 @@ const authenticateToken = (req, res, next) => {
 app.get('/health', (req, res) => {
   res.json({
     service: 'vpp-aggregator',
-    version: '3.2.0',
+    version: '3.3.0',
     status: 'healthy',
     layer: 'L3'
   });
@@ -279,8 +279,13 @@ const updateGlobalCapacity = async () => {
 
     result.rows.forEach(row => {
       const deratedCapacity = parseFloat(row.raw_capacity_kwh || 0) * physicsMultiplier;
+      const normalizedRegion = row.region.toUpperCase().replace(/-/g, '');
       totalCapacity += deratedCapacity;
-      regionalCapacity[row.region] = deratedCapacity;
+      regionalCapacity[normalizedRegion] = {
+        capacity: deratedCapacity,
+        is_high_fidelity: physicsMultiplier > 0.95,
+        last_updated_at: new Date().toISOString()
+      };
     });
 
     await redisClient.set('vpp:capacity:available', totalCapacity.toString());
@@ -288,8 +293,8 @@ const updateGlobalCapacity = async () => {
 
     // Save historical state for L11 ML Engine Training
     await pool.query(
-      'INSERT INTO vpp_capacity_history (total_capacity_kwh, regional_data, physics_multiplier, timestamp) VALUES ($1, $2, $3, NOW())',
-      [totalCapacity, JSON.stringify(regionalCapacity), physicsMultiplier]
+      'INSERT INTO vpp_capacity_history (total_capacity_kwh, regional_data, physics_multiplier, is_high_fidelity, timestamp) VALUES ($1, $2, $3, $4, NOW())',
+      [totalCapacity, JSON.stringify(regionalCapacity), physicsMultiplier, physicsMultiplier > 0.95]
     ).catch(e => console.error('[VPP Aggregator] Failed to log history for L11:', e.message));
 
     console.log(`[VPP Aggregator] Global Capacity Updated: ${totalCapacity.toFixed(2)} kWh (Multiplier: ${physicsMultiplier})`);
