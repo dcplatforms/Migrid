@@ -82,6 +82,9 @@ async function handlePhysicsAlert(msg) {
     physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
   }
 
+  // Cross-Layer ISO Normalization (e.g., ENTSO-E -> ENTSOE)
+  const isoRegion = payload.iso_region ? payload.iso_region.toUpperCase().replace(/-/g, '') : 'CAISO';
+
   // 1. Verify the Physics: Set Safety Lock in Redis for critical violations
   if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
     try {
@@ -100,7 +103,7 @@ async function handlePhysicsAlert(msg) {
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
         v2g_active: payload.v2g_active,
-        iso_region: payload.iso_region,
+        iso_region: isoRegion,
         market_price_at_session: payload.market_price_at_session,
         locked_at: new Date().toISOString()
       };
@@ -136,7 +139,7 @@ async function handlePhysicsAlert(msg) {
       billing_mode: payload.billing_mode,
       vpp_active: payload.vpp_active,
       v2g_active: payload.v2g_active,
-      iso_region: payload.iso_region,
+      iso_region: isoRegion,
       market_price_at_session: payload.market_price_at_session,
       timestamp: payload.timestamp || new Date().toISOString(),
       source_layer: 'L1',
@@ -221,7 +224,7 @@ async function reconcileLogs() {
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
         v2g_active: payload.v2g_active,
-        iso_region: payload.iso_region || 'CAISO',
+        iso_region: payload.iso_region ? payload.iso_region.toUpperCase().replace(/-/g, '') : 'CAISO',
         market_price_at_session: payload.market_price_at_session || 0.0,
         timestamp: payload.timestamp || new Date().toISOString(),
         source_layer: 'L1',
@@ -269,7 +272,7 @@ async function reconcileLogs() {
         payload.billing_mode,
         payload.vpp_active,
         payload.v2g_active,
-        payload.iso_region || 'CAISO',
+        payload.iso_region ? payload.iso_region.toUpperCase().replace(/-/g, '') : 'CAISO',
         payload.market_price_at_session || 0.0
       ]);
 
