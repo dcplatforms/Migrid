@@ -268,7 +268,7 @@ High-velocity engineering updates across the stack:
 - [✓] **L10 Token Engine (v4.2.0)**: Deployed **Dynamic Multipliers** (1.5x Grid Surplus / 2.0x V2G Scarcity) and consolidated regional price updates.
 - [✓] **L2 Grid Signal (v2.4.0)**: Hardened **Regional Market Context** tracking and AI Data Readiness for historical event export.
 - [✓] **L1 Physics Engine (v10.1.0)**: Finalized **High-Fidelity Reconciliation** preserving regional metadata and contextual safety locks.
-- [✓] **L3 VPP Aggregator (v3.2.0)**: Completed **Fuse Rule 2.0** and high-frequency **Redis Capacity Cache** for L4 bidding optimization.
+- [✓] **L3 VPP Aggregator (v3.3.0)**: Implemented **ISO Normalization** and **High-Fidelity Tracking** to unblock L11 ML Engine training.
 - [✓] **L4 Market Gateway (v3.4.1)**: Activated **Nord Pool & ERCOT** adapters and implemented robust **Regional Grid Lock** scanning.
 - [✓] **L6 Engagement Engine (v5.3.2)**: Deployed **ENTSO-E Pioneer** and **Sustainability Refinement**; regional challenges reached 90% completion.
 - [✓] **L7 Device Gateway**: Native **OCPP 2.1 V2X** support active; ISO 15118 Certificate Exchange reached 75% completion.
@@ -794,7 +794,7 @@ done
 | :--- | :--- | :--- | :--- |
 | **L1** | Physics Engine | `10.1.0` | ✅ Operational |
 | **L2** | Grid Signal | `2.4.0` | ✅ Operational |
-| **L3** | VPP Aggregator | `3.2.0` | ✅ Operational |
+| **L3** | VPP Aggregator | `3.3.0` | ✅ Operational |
 | **L4** | Market Gateway | `3.4.1` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
 | **L6** | Engagement Engine | `5.3.2` | ✅ Operational |
@@ -811,7 +811,7 @@ done
 - **L10 Token Engine (v4.2.0)**: Deployed **Dynamic Multipliers** (1.5x Grid Surplus / 2.0x V2G Scarcity) and consolidated regional price updates.
 - **L2 Grid Signal (v2.4.0)**: Hardened **Regional Market Context** tracking and AI Data Readiness for historical event export.
 - **L1 Physics Engine (v10.1.0)**: Finalized **High-Fidelity Reconciliation** preserving regional metadata and contextual safety locks.
-- **L3 VPP Aggregator (v3.2.0)**: Completed **Fuse Rule 2.0** and high-frequency **Redis Capacity Cache** for L4 bidding optimization.
+- **L3 VPP Aggregator (v3.3.0)**: Implemented **ISO Normalization** and **High-Fidelity Tracking** to unblock L11 ML Engine training.
 - **L4 Market Gateway (v3.4.1)**: Activated **Nord Pool & ERCOT** adapters and implemented robust **Regional Grid Lock** scanning.
 - **L6 Engagement Engine (v5.3.2)**: Deployed **ENTSO-E Pioneer** and **Sustainability Refinement** (optimized CTE for grid response); regional challenges reached 90% completion.
 - **L7 Device Gateway**: Native **OCPP 2.1 V2X** support active; ISO 15118 Certificate Exchange reached 75% completion.

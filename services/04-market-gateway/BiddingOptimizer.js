@@ -39,10 +39,15 @@ class BiddingOptimizer {
         const regionalCapacityRaw = await this.redisClient.get('vpp:capacity:regional');
         if (regionalCapacityRaw) {
           const regionalCapacity = JSON.parse(regionalCapacityRaw);
-          const isoKey = iso.toUpperCase();
-          if (regionalCapacity[isoKey] !== undefined) {
-            console.log(`[BiddingOptimizer] Using regional capacity for ${isoKey}: ${regionalCapacity[isoKey]} kWh`);
-            return new Decimal(regionalCapacity[isoKey]);
+          // ISO Normalization: Uppercase and remove hyphens (consistent with L3 v3.3.0)
+          const isoKey = iso.toUpperCase().replace(/-/g, '');
+          const data = regionalCapacity[isoKey];
+
+          if (data !== undefined) {
+            // Support both flat value (legacy) and nested object (v3.3.0+)
+            const capacityValue = (typeof data === 'object' && data !== null) ? data.capacity : data;
+            console.log(`[BiddingOptimizer] Using regional capacity for ${isoKey}: ${capacityValue} kWh (Fidelity: ${data.is_high_fidelity || 'STANDARD'})`);
+            return new Decimal(capacityValue || '0');
           }
         }
       } catch (err) {

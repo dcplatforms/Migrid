@@ -33,7 +33,7 @@
 | **L11 ML Engine** | High-Fidelity Logs | **L1 Physics (v10.1.0)** | ML training data lacks regional context | ✅ Active |
 | **L5 Driver DX** | PnC Auth Status | **L7 Device Gateway** | Driver cannot use Plug & Charge sessions | 🚧 75% |
 | **L9 Commerce** | Billing Reconciliation | **L1 Physics / L4 Market** | Inaccurate split-billing or tariff logic | ✅ Active |
-| **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.2.0 Active |
+| **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.0 Active |
 | **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine** | Rewards fail for 'ISO Explorer' challenges | ✅ v5.3.0 Sync |
 | **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway** | VTN cannot see market-aware grid signals | ✅ v2.4.0 Sync |
 
@@ -46,9 +46,11 @@
 - [✓] **Contextual Safety Locks**: metadata-enriched `l1:safety:lock:context` in Redis.
 - [✓] **High-Fidelity Reconcile**: Preservation of regional metadata in audit logs.
 
-### Layer 3: VPP Aggregator (v3.2.0)
+### Layer 3: VPP Aggregator (v3.3.0)
 - [✓] **Redis Capacity Cache**: Sub-50ms reporting for L4 bidding.
 - [✓] **Fuse Rule 2.0**: 20% SoC hard floor integrated into capacity formula.
+- [✓] **ISO Normalization**: Consistent region identifiers (no-hyphen, uppercase) for L4/L10 sync.
+- [✓] **L11 AI Readiness**: High-fidelity data tracking (is_high_fidelity) for ML training.
 - [~] **BESS Integration**: Support for stationary storage assets (75%).
 
 ### Layer 4: Market Gateway (v3.4.1)
