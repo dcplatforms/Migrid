@@ -9,10 +9,13 @@ const redis = new Redis(redisUrl);
  * Also caches the charger's ISO region for regional grid lock checks.
  */
 async function registerConnection(chargePointId, instanceId, isoRegion = 'CAISO') {
+    // Normalize region: uppercase and remove hyphens (e.g., ENTSO-E -> ENTSOE)
+    const normalizedRegion = isoRegion.toUpperCase().replace(/-/g, '');
+
     // Set with a TTL (e.g., 5 minutes) that gets refreshed via heartbeat/ping
     await redis.set(`charger_route:${chargePointId}`, instanceId, 'EX', 300);
     // Cache the regional context for rapid grid-lock verification (L2/L4 sync)
-    await redis.set(`charger_region:${chargePointId}`, isoRegion, 'EX', 300);
+    await redis.set(`charger_region:${chargePointId}`, normalizedRegion, 'EX', 300);
 }
 
 async function removeConnection(chargePointId) {

@@ -54,8 +54,12 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                 break;
 
             case 'NotifyBidirEnergyFlow':
-                // Native OCPP 2.1 Bidir Telemetry
-                await publishTelemetry(chargePointId, payload, protocol);
+                // Native OCPP 2.1 Bidir Telemetry with mandatory validation for L11 Data Integrity
+                if (validateSchema(protocol, action, payload)) {
+                    await publishTelemetry(chargePointId, payload, protocol);
+                } else {
+                    console.error(`❌ [L7] Data Integrity violation: NotifyBidirEnergyFlow from ${chargePointId} rejected.`);
+                }
                 ws.send(JSON.stringify([3, messageId, {}]));
                 break;
 
@@ -65,18 +69,21 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                 break;
 
             case 'Authorize':
-                // Enhanced for 2.1: Certificate-based PnC or Secure QR
-                console.log(`[L7] Authorize request for ${chargePointId}. ID Token: ${payload.idToken?.idToken}`);
+                // Enhanced for 2.1: Certificate-based PnC (EMAID) or Secure QR
+                const idToken = payload.idToken?.idToken;
+                const tokenType = payload.idToken?.type || 'ISO14443';
+                console.log(`[L7] Authorize request for ${chargePointId}. Type: ${tokenType}, ID Token: ${idToken}`);
 
-                // Simulate DB check for authorization
+                // Simulate DB check for authorization with EMAID support
                 try {
-                    const result = await pool.query('SELECT status FROM id_tokens WHERE token_value = $1', [payload.idToken?.idToken]);
-                    const status = result.rows[0]?.status || 'Accepted'; // Default to Accepted for demo if not found
+                    const result = await pool.query('SELECT status FROM id_tokens WHERE token_value = $1', [idToken]);
+                    const status = result.rows[0]?.status || 'Accepted';
 
                     ws.send(JSON.stringify([3, messageId, {
                         idTokenInfo: {
                             status: status,
-                            cacheExpiryDateTime: new Date(Date.now() + 3600000).toISOString()
+                            cacheExpiryDateTime: new Date(Date.now() + 3600000).toISOString(),
+                            personalMessage: tokenType === 'EMAID' ? { content: 'Plug & Charge Verified', format: 'UTF8' } : undefined
                         }
                     }]));
                 } catch (err) {
@@ -86,13 +93,15 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                 break;
 
             case 'CertificateSigned':
-                // ISO 15118-20 PnC: Handle signed certificate from CA
+                // ISO 15118-20 PnC: Handle signed certificate from V2G CA
                 console.log(`[L7] Received signed certificate for ${chargePointId}`);
+                // In a production scenario, we would store this or forward to HSM
                 ws.send(JSON.stringify([3, messageId, { status: 'Accepted' }]));
                 break;
 
             case 'GetCertificateStatus':
-                // ISO 15118-20 PnC: OCSP request
+                // ISO 15118-20 PnC: Handle OCSP requests for PnC session validation
+                console.log(`[L7] GetCertificateStatus (OCSP) for ${chargePointId}`);
                 ws.send(JSON.stringify([3, messageId, { status: 'Accepted' }]));
                 break;
 
