@@ -33,7 +33,13 @@ const authenticateInternal = (req, res, next) => {
 // --- HTTP Endpoints ---
 
 app.get('/health', (req, res) => {
-  res.json({ service: 'Device Gateway', layer: 'L7', status: 'OK', podId: process.env.POD_ID || 'gateway-instance-1' });
+  res.json({
+    service: 'Device Gateway',
+    layer: 'L7',
+    status: 'OK',
+    version: '5.5.0',
+    podId: process.env.POD_ID || 'gateway-instance-1'
+  });
 });
 
 app.post('/iso15118/authenticate', async (req, res) => {

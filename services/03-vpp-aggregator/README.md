@@ -1,8 +1,8 @@
 # L3: VPP Aggregator Service
 
-**Version:** 3.2.0
-**Status:** ✅ Complete (Q3 2025)
-**Phase:** Market Access
+**Version:** 3.3.0
+**Status:** ✅ Complete (March 2026)
+**Phase:** Enterprise Scale
 
 ## Overview
 
@@ -89,7 +89,8 @@ REDIS_URL=redis://localhost:6379
 - [~] **OpenADR 3.0 Automated Dispatch**: Integrated Kafka `grid_signals` with `program_id` and `market_context` for touchless DR.
 - [x] **L8 Safe Mode Integration**: Site-level exclusion from aggregation during meter offline events.
 - [x] **Contextual Safety Locks**: Respects L1 `l1:safety:lock:context` for granular physics enforcement.
-- [ ] **Physics-Aware Forecasting**: Factor L1 variance data into capacity predictions.
+- [x] **Physics-Aware Forecasting**: Factor L1 variance data (physics_score) into capacity predictions and reporting.
+- [ ] **ML Demand Forecasting (Phase 6)**: Integration with L11 ML Engine for 24-72h ahead capacity predictions.
 
 ## Deployment
 

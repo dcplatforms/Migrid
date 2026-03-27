@@ -93,8 +93,8 @@ This section serves as the mathematical source of truth for platform completion 
 - [x] L6 Gamification Engine
 
 ### Phase 5: Enterprise Scale (In-Progress)
-- [~] L9 Commerce Engine (Billing & Tariffs) (60%)
-- [~] L7 ISO 15118 Plug & Charge Certification (75%)
+- [~] L9 Commerce Engine (Billing & Tariffs) (65%)
+- [~] L7 ISO 15118 Plug & Charge Certification (85%)
 - [x] L4 ERCOT Market Activation
 - [x] L4 Proactive Price Polling Loop
 - [x] L3 Redis-Based Capacity Cache
@@ -110,21 +110,22 @@ This section serves as the mathematical source of truth for platform completion 
 - [x] L6 Grid Warrior Achievement Logic
 - [x] L6 Nord Pool Pioneer Achievement
 - [x] L6 Energy Architect Achievement (AI Readiness)
-- [x] L6 Regional Team Challenges (100%)
+- [x] L6 Regional Team Challenges
 - [x] L8 Local Modbus Polling Priority
 - [x] L2 V2G Discharge Request Detection
 - [x] L4 Profitability Index Broadcasting
-- [~] L7 OCPI 2.2 Roaming Integration (50%)
+- [~] L7 OCPI 2.2 Roaming Integration (60%)
 - [x] L4 ENTSO-E Adapter (European Markets)
 - [x] L4 Nord Pool Adapter (Nordic Pricing)
 - [x] L10 Dynamic Multipliers (Grid Surplus/Scarcity)
 - [x] L2 AI Data Readiness (Historical Event Export)
 - [~] L8 Edge Runtime v2 (Multi-site Mesh)
 - [~] L1 Fraud Analytics Service
-- [~] L10 Grid Impact Achievement Logic
+- [x] L10 Grid Impact Achievement Logic
 - [~] L5 VPP Opt-In/Out Mechanics
 - [~] L3 OpenADR 3.0 Automated Dispatch
 - [~] L3 Physics-Aware Forecasting
+- [x] L6 Scarcity Savior Achievement
 
 ### Phase 6: AI & Optimization (Upcoming Q2 2026)
 - [x] L11 ML Engine Foundation
@@ -266,11 +267,14 @@ Sell: LMP > $100/MWh (grid services revenue)
 High-velocity engineering updates across the stack:
 
 - [✓] **L10 Token Engine (v4.2.0)**: Deployed **Dynamic Multipliers** (1.5x Grid Surplus / 2.0x V2G Scarcity) and consolidated regional price updates.
-- [✓] **L2 Grid Signal (v2.4.0)**: Hardened **Regional Market Context** tracking and AI Data Readiness for historical event export.
+- [✓] **L2 Grid Signal (v2.4.1)**: Hardened **Regional Market Context** tracking and AI Data Readiness for historical event export.
 - [✓] **L1 Physics Engine (v10.1.0)**: Finalized **High-Fidelity Reconciliation** preserving regional metadata and contextual safety locks.
-- [✓] **L3 VPP Aggregator (v3.2.0)**: Completed **Fuse Rule 2.0** and high-frequency **Redis Capacity Cache** for L4 bidding optimization.
+- [✓] **L3 VPP Aggregator (v3.3.0)**: Implemented **ISO Normalization** and **High-Fidelity Tracking** to unblock L11 ML Engine training.
 - [✓] **L4 Market Gateway (v3.4.1)**: Activated **Nord Pool & ERCOT** adapters and implemented robust **Regional Grid Lock** scanning.
-- [✓] **L6 Engagement Engine (v5.5.0)**: Deployed **Scarcity Savior** and **AI Readiness** refinements; regional challenges reached 100% completion.
+- [✓] **L6 Engagement Engine (v5.3.2)**: Deployed **ENTSO-E Pioneer** and **Sustainability Refinement**; regional challenges reached 90% completion.
+- [✓] **L3 VPP Aggregator (v3.3.0)**: Completed **Fuse Rule 2.0** and high-frequency **Redis Capacity Cache** for L4 bidding optimization.
+- [✓] **L4 Market Gateway (v3.6.0)**: Activated **Nord Pool & ERCOT** adapters and implemented robust **Regional Grid Lock** scanning.
+- [✓] **L6 Engagement Engine (v5.5.0)**: Deployed **ENTSO-E Pioneer**, **Sustainability Refinement**, and **Scarcity Savior**; regional challenges reached 100% completion.
 - [✓] **L7 Device Gateway**: Native **OCPP 2.1 V2X** support active; ISO 15118 Certificate Exchange reached 75% completion.
 
 </details>
@@ -456,11 +460,10 @@ Phase 8: Advanced Grid       ░░░░░░░░░░░░░░░░░
 - [x] **Commerce engine** — Flexible billing and tariffs (60%)
 - [x] **ISO 15118** — Plug & Charge certification (75%)
 - [x] **OCPI 2.2** — Roaming network integration (50%)
+- [x] **ENTSO-E adapter** — European markets (100%)
+- [x] **Nord Pool adapter** — Nordic zonal pricing (100%)
 
 **Planned for Q1 2026:**
-
-- [ ] ENTSO-E adapter for European markets
-- [ ] Nord Pool Nordic zonal pricing
 - [ ] Edge Runtime v2 for multi-site orchestration
 - [✓] Enhanced audit logging (L1 Physics)
 
@@ -522,9 +525,9 @@ Phase 8: Advanced Grid       ░░░░░░░░░░░░░░░░░
 
 **Priority Tasks:**
 
-1. [~] **ISO 15118** — Complete Plug & Charge (75% done)
-2. [~] **Commerce Engine** — Finish billing logic (60% done)
-3. [~] **OCPI 2.2** — Deploy roaming support (50% done)
+1. [~] **ISO 15118** — Complete Plug & Charge (85% done)
+2. [~] **Commerce Engine** — Finish billing logic (65% done)
+3. [~] **OCPI 2.2** — Deploy roaming support (60% done)
 4. [!] **Redis Capacity Cache** — Sub-50ms latency for L4 (In Progress)
 
 **Timeline:** January - March 2026
@@ -704,13 +707,13 @@ Standards Progress:    ███████████░░░░░░░░
 <tr>
 <td><b>ISO 15118</b></td>
 <td>Plug & Charge with PKI</td>
-<td align="center">75%</td>
+<td align="center">85%</td>
 <td align="center">Q1 2026</td>
 </tr>
 <tr>
 <td><b>OCPI 2.2</b></td>
 <td>Roaming network protocol</td>
-<td align="center">50%</td>
+<td align="center">60%</td>
 <td align="center">Q1 2026</td>
 </tr>
 <tr>
@@ -793,9 +796,9 @@ done
 | Layer | Service | Version | Status |
 | :--- | :--- | :--- | :--- |
 | **L1** | Physics Engine | `10.1.0` | ✅ Operational |
-| **L2** | Grid Signal | `2.4.0` | ✅ Operational |
-| **L3** | VPP Aggregator | `3.2.0` | ✅ Operational |
-| **L4** | Market Gateway | `3.4.1` | ✅ Operational |
+| **L2** | Grid Signal | `2.4.1` | ✅ Operational |
+| **L3** | VPP Aggregator | `3.3.0` | ✅ Operational |
+| **L4** | Market Gateway | `3.6.0` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
 | **L6** | Engagement Engine | `5.5.0` | ✅ Operational |
 | **L7** | Device Gateway | `5.1.0` | ✅ Operational |
@@ -808,12 +811,17 @@ done
 
 ## Latest Release Wins (March 2026)
 
+- **L4 Market Gateway (v3.6.0)**: Rollout of **AI Fidelity Tracking** and improved **Regional Grid Lock** observability unblocking L11 ML training.
+- **L6 Engagement Engine (v5.5.0)**: Launched **Sustainability Champion** CTE and **L11 Data Guardian** achievements; regional challenges 100% complete.
+- **L7 Device Gateway (v5.5.0)**: Hardened **ISO 15118-20 Certificate Exchange** (85%) and **EMAID** token handling for Plug & Charge.
+- **L2 Grid Signal (v2.4.1)**: Implemented **ISO Normalization** and **Historical Price Export** for high-fidelity data pipelines.
+- **L3 VPP Aggregator (v3.3.0)**: Deployed **High-Fidelity Regional Capacity** aggregation and integrated `is_high_fidelity` metadata.
 - **L10 Token Engine (v4.2.0)**: Deployed **Dynamic Multipliers** (1.5x Grid Surplus / 2.0x V2G Scarcity) and consolidated regional price updates.
-- **L2 Grid Signal (v2.4.0)**: Hardened **Regional Market Context** tracking and AI Data Readiness for historical event export.
+- **L2 Grid Signal (v2.4.1)**: Hardened **Regional Market Context** tracking and AI Data Readiness for historical event export.
 - **L1 Physics Engine (v10.1.0)**: Finalized **High-Fidelity Reconciliation** preserving regional metadata and contextual safety locks.
-- **L3 VPP Aggregator (v3.2.0)**: Completed **Fuse Rule 2.0** and high-frequency **Redis Capacity Cache** for L4 bidding optimization.
-- **L4 Market Gateway (v3.4.1)**: Activated **Nord Pool & ERCOT** adapters and implemented robust **Regional Grid Lock** scanning.
-- **L6 Engagement Engine (v5.5.0)**: Deployed **Scarcity Savior** and **AI Readiness** refinements; regional challenges reached 100% completion.
+- **L3 VPP Aggregator (v3.3.0)**: Completed **Fuse Rule 2.0** and high-frequency **Redis Capacity Cache** for L4 bidding optimization.
+- **L4 Market Gateway (v3.6.0)**: Activated **Nord Pool & ERCOT** adapters and implemented robust **Regional Grid Lock** scanning.
+- **L6 Engagement Engine (v5.5.0)**: Deployed **ENTSO-E Pioneer**, **Sustainability Refinement**, and **Scarcity Savior**; regional challenges reached 100% completion.
 - **L7 Device Gateway**: Native **OCPP 2.1 V2X** support active; ISO 15118 Certificate Exchange reached 75% completion.
 
 ---
