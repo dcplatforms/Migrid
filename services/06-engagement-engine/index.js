@@ -102,8 +102,9 @@ async function initKafka() {
           await handleGridSignal(payload);
         } else if (topic === 'MARKET_PRICE_UPDATED') {
           const { iso, price_per_mwh, profitability_index } = payload;
-          await redisClient.hSet('market:profitability', iso, profitability_index.toString());
-          console.log(`[Engagement] Updated Redis Market Profitability for ${iso}: $${profitability_index}/MWh`);
+          const normalizedIso = iso.toUpperCase().replace(/-/g, '');
+          await redisClient.hSet('market:profitability', normalizedIso, profitability_index.toString());
+          console.log(`[Engagement] Updated Redis Market Profitability for ${normalizedIso}: $${profitability_index}/MWh`);
         }
       } catch (error) {
         console.error('[Engagement] Error processing Kafka message:', error);
@@ -118,7 +119,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.5.0', // Weekly Product Update: L11 AI Readiness & High-Fidelity Data Guardians
+    version: '5.5.0', // Weekly Product Update: Scarcity Savior & AI Readiness
     status: 'healthy',
     layer: 'L6'
   });
@@ -310,7 +311,7 @@ async function processChargingEvent(event) {
 
   // Get regional context (ISO) for the driver
   const driverData = await pool.query('SELECT f.iso FROM drivers d JOIN fleets f ON d.fleet_id = f.id WHERE d.id = $1', [driverId]);
-  const iso = driverData.rows[0]?.iso || 'CAISO';
+  const iso = (driverData.rows[0]?.iso || 'CAISO').toUpperCase().replace(/-/g, '');
 
   // Verify Physics Integrity before awarding points
   let isValid = true;
@@ -325,12 +326,22 @@ async function processChargingEvent(event) {
   if ((type === 'SESSION_COMPLETED' || type === 'session_completed' || event.energyDispensedKwh) && isValid) {
     const isFinal = type === 'SESSION_COMPLETED' || type === 'session_completed';
 
+    // Calculate physicsScore and isHighFidelity if not already provided
+    let physicsScore = 1.0;
+    let isHighFidelity = true;
+    let isLowVariance = true;
+
+    // Use event-provided score if available
+    if (event.physicsScore !== undefined) physicsScore = parseFloat(event.physicsScore);
+    if (event.physics_score !== undefined) physicsScore = parseFloat(event.physics_score);
+    isHighFidelity = physicsScore > 0.95;
+
     if (isFinal) {
       const sessionData = await pool.query('SELECT variance_percentage FROM charging_sessions WHERE id = $1', [sessionId]);
       const variance = parseFloat(sessionData.rows[0]?.variance_percentage || '100');
-      const isLowVariance = variance < 5.0;
-      const physicsScore = Math.max(0, Math.min(1, 1 - (variance / 15.0)));
-      const isHighFidelity = physicsScore > 0.95;
+      isLowVariance = variance < 5.0;
+      physicsScore = Math.max(0, Math.min(1, 1 - (variance / 15.0)));
+      isHighFidelity = physicsScore > 0.95;
 
       await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
         [driverId, 'session_completed', JSON.stringify({ sessionId, energyDispensedKwh: event.energyDispensedKwh, isLowVariance, physicsScore, isHighFidelity })]);
@@ -357,7 +368,10 @@ async function processChargingEvent(event) {
       try {
         const profitabilityStr = await redisClient.hGet('market:profitability', iso);
         const profitability = parseFloat(profitabilityStr || '0');
-        if (profitability > 30) {
+        if (profitability > 100) {
+          pointsMultiplier = 2.0;
+          console.log(`[L6] High Scarcity Bonus applied for ${iso}: 2.0x multiplier (L10 Scarcity Alignment).`);
+        } else if (profitability > 30) {
           pointsMultiplier = 1.5;
           console.log(`[L6] Grid Alignment Bonus applied for ${iso}: 1.5x multiplier (L10 Surplus Alignment).`);
         }
@@ -421,7 +435,28 @@ async function processChargingEvent(event) {
   }
 
   if (event.type === 'v2g_discharge' && isValid) {
-    await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'v2g_discharge', JSON.stringify({ event, protocol: event.protocol })]);
+    let pointsMultiplier = 1.0;
+    let isHighScarcity = false;
+    try {
+      const profitabilityStr = await redisClient.hGet('market:profitability', iso);
+      const profitability = parseFloat(profitabilityStr || '0');
+      if (profitability > 100) {
+        pointsMultiplier = 2.0;
+        isHighScarcity = true;
+        console.log(`[L6] High Scarcity Bonus applied for ${iso}: 2.0x multiplier (L10 Scarcity Alignment).`);
+      }
+    } catch (err) {
+      console.error('[L6] Error fetching market profitability for V2G bonus:', err.message);
+    }
+
+    const energyDischargedKwh = parseFloat(event.energyDischargedKwh || 1.0);
+    const points = Math.floor(energyDischargedKwh * 25 * pointsMultiplier); // V2G earns base 25 points/kWh
+
+    await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
+      [driverId, 'v2g_discharge', JSON.stringify({ event, protocol: event.protocol, points, isHighScarcity })]);
+
+    // Award local points
+    await updateLeaderboardPoints(driverId, points);
 
     // Notify L10 Token Engine for V2G fulfillment
     await producer.send({
@@ -430,14 +465,14 @@ async function processChargingEvent(event) {
         value: JSON.stringify({
           driver_id: driverId,
           action_type: 'v2g_discharge',
-          source_value: parseFloat(event.energyDischargedKwh || 1.0),
+          source_value: energyDischargedKwh,
           event_id: sessionId,
           iso: iso
         })
       }]
     });
 
-    await checkV2GAchievements(driverId);
+    await checkV2GAchievements(driverId, iso);
     await updateChallengeProgress(driverId, 'v2g_participation');
     await updateChallengeProgress(driverId, 'vpp_participation');
 
@@ -456,7 +491,8 @@ async function processChargingEvent(event) {
 
 async function checkMarketMasterAchievement(driverId, iso, sessionId) {
   try {
-    const profitabilityStr = await redisClient.hGet('market:profitability', iso);
+    const normalizedIso = iso.toUpperCase().replace(/-/g, '');
+    const profitabilityStr = await redisClient.hGet('market:profitability', normalizedIso);
     const profitability = parseFloat(profitabilityStr || '0');
 
     // High Profitability Threshold: $100/MWh (Matching L10 Scarcity Boost)
@@ -480,6 +516,33 @@ async function checkMarketMasterAchievement(driverId, iso, sessionId) {
     }
   } catch (error) {
     console.error('[Engagement] Error checking Market Master achievement:', error);
+  }
+}
+
+async function checkScarcitySaviorAchievement(driverId, iso, sessionId) {
+  try {
+    const profitabilityStr = await redisClient.hGet('market:profitability', iso);
+    const profitability = parseFloat(profitabilityStr || '0');
+
+    // High Scarcity Threshold: $100/MWh
+    if (profitability > 100) {
+      console.log(`[L6] High scarcity V2G detected in ${iso} ($${profitability}/MWh) for session ${sessionId}.`);
+
+      const count = await pool.query(`
+        SELECT COUNT(*) FROM driver_actions
+        WHERE driver_id = $1 AND action_type = 'v2g_discharge'
+          AND (metadata->>'isHighScarcity')::boolean = true
+      `, [driverId]);
+
+      if (parseInt(count.rows[0].count) >= 3) {
+        const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Scarcity Savior'");
+        if (achievement.rows.length > 0) {
+          await awardAchievement(driverId, achievement.rows[0].id);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking Scarcity Savior achievement:', error);
   }
 }
 
@@ -676,14 +739,15 @@ async function checkL11DataGuardianAchievement(driver_id) {
   // We check the last 15 'session_completed' actions and ensure they all have isHighFidelity = true in metadata.
   const result = await pool.query(`
     WITH recent_sessions AS (
-      SELECT (metadata->>'isHighFidelity')::boolean as is_high_fidelity
+      SELECT (metadata->>'isHighFidelity')::boolean as is_high_fidelity,
+             (metadata->>'physicsScore')::float as physics_score
       FROM driver_actions
       WHERE driver_id = $1 AND action_type = 'session_completed'
       ORDER BY created_at DESC
       LIMIT 15
     )
     SELECT COUNT(*) as total,
-           COUNT(*) FILTER (WHERE is_high_fidelity = true) as high_fidelity_count
+           COUNT(*) FILTER (WHERE is_high_fidelity = true AND physics_score > 0.95) as high_fidelity_count
     FROM recent_sessions
   `, [driver_id]);
 
@@ -845,8 +909,28 @@ async function updateStreaks(driver_id) {
   }
 }
 
-async function checkV2GAchievements(driver_id) {
+async function checkScarcitySaviorAchievement(driverId, iso) {
   try {
+    const profitabilityStr = await redisClient.hGet('market:profitability', iso);
+    const profitability = parseFloat(profitabilityStr || '0');
+
+    if (profitability > 100) {
+      console.log(`[L6] High scarcity V2G discharge detected in ${iso} ($${profitability}/MWh).`);
+      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Scarcity Savior'");
+      if (achievement.rows.length > 0) {
+        await awardAchievement(driverId, achievement.rows[0].id);
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking Scarcity Savior achievement:', error);
+  }
+}
+
+async function checkV2GAchievements(driver_id, iso) {
+  try {
+    // Scarcity Savior check
+    if (iso) await checkScarcitySaviorAchievement(driver_id, iso);
+
     // 1. Grid Guardian (1 participation)
     const ggAchievement = await pool.query('SELECT id FROM achievements WHERE name = \'Grid Guardian\'');
     if (ggAchievement.rows.length > 0) {
@@ -901,14 +985,15 @@ async function checkMLContributorAchievement(driver_id) {
   // Requirement: 5 consecutive low-variance sessions (<5%)
   const result = await pool.query(`
     WITH recent_sessions AS (
-      SELECT (metadata->>'isLowVariance')::boolean as is_low_variance
+      SELECT (metadata->>'isLowVariance')::boolean as is_low_variance,
+             (metadata->>'physicsScore')::float as physics_score
       FROM driver_actions
       WHERE driver_id = $1 AND action_type = 'session_completed'
       ORDER BY created_at DESC
       LIMIT 5
     )
     SELECT COUNT(*) as total,
-           COUNT(*) FILTER (WHERE is_low_variance = true) as low_variance_count
+           COUNT(*) FILTER (WHERE is_low_variance = true AND physics_score > 0.66) as low_variance_count
     FROM recent_sessions
   `, [driver_id]);
 
@@ -927,14 +1012,15 @@ async function checkEnergyArchitectAchievement(driver_id) {
   // We check the last 10 'session_completed' actions and ensure they all have isLowVariance = true in metadata.
   const result = await pool.query(`
     WITH recent_sessions AS (
-      SELECT (metadata->>'isLowVariance')::boolean as is_low_variance
+      SELECT (metadata->>'isLowVariance')::boolean as is_low_variance,
+             (metadata->>'physicsScore')::float as physics_score
       FROM driver_actions
       WHERE driver_id = $1 AND action_type = 'session_completed'
       ORDER BY created_at DESC
       LIMIT 10
     )
     SELECT COUNT(*) as total,
-           COUNT(*) FILTER (WHERE is_low_variance = true) as low_variance_count
+           COUNT(*) FILTER (WHERE is_low_variance = true AND physics_score > 0.66) as low_variance_count
     FROM recent_sessions
   `, [driver_id]);
 

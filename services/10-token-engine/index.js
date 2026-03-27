@@ -78,8 +78,9 @@ async function updateRewardTransactionStatus(logId, newStatus, openWalletTransac
 
 // --- Reward Multiplier Logic ---
 
-function getDynamicMultiplier(iso, actionType) {
-  const priceData = priceCache[iso.toUpperCase().replace(/-/g, '')];
+function getDynamicMultiplier(isoRaw, actionType) {
+  const iso = isoRaw.toUpperCase().replace(/-/g, '');
+  const priceData = priceCache[iso];
   const latestPrice = priceData ? new Decimal(priceData.price) : new Decimal(50.0);
 
   if (actionType === 'session_completed' && latestPrice.lt(LMP_THRESHOLD_SURPLUS)) {
@@ -135,14 +136,6 @@ async function start() {
 
         const { driver_id, action_type, source_value, event_id, iso: payloadIso, physics_score } = payload;
 
-        // Proof of Physics Enforcement
-        if (action_type === 'session_completed' || action_type === 'v2g_discharge') {
-          if (!physics_score || parseFloat(physics_score) <= 0) {
-            console.warn(`⚠️ [L10 Integrity] Skipping ${action_type} reward for ${driver_id} - No valid physics_score (Proof of Physics required).`);
-            return;
-          }
-        }
-
         // 1. Ensure Driver Wallet Exists (and get address)
         const driverWallet = await getOrCreateDriverWallet(driver_id);
         if (!driverWallet) {
@@ -156,13 +149,25 @@ async function start() {
 
         if (action_type === 'challenge_completed' || action_type === 'achievement_unlocked') {
           // Fixed-value rewards (points/tokens)
-          pointsAwarded = new Decimal(source_value || 0);
+          calculatedPoints = new Decimal(source_value || 0);
 
           const rule = await getRewardRule(action_type);
           rule_id = rule ? rule.rule_id : '00000000-0000-0000-0000-000000000000';
 
-          console.log(`[L10] ${action_type} by driver ${driver_id}. Awarding ${pointsAwarded.toNumber()} tokens.`);
+          console.log(`[L10] ${action_type} by driver ${driver_id}. Awarding ${calculatedPoints.toNumber()} tokens.`);
         } else {
+          // Proof of Physics Gate: Energy-based rewards must have verified physics
+          if (physics_score !== undefined && physics_score !== null) {
+            const score = parseFloat(physics_score);
+            if (score <= 0.0) {
+              console.warn(`[L10 Audit] Rejected reward for event ${event_id}: Physics Score too low (${score}).`);
+              return;
+            }
+          } else {
+            console.warn(`[L10 Audit] Rejected energy-based reward for event ${event_id}: Physics Score missing.`);
+            return;
+          }
+
           const rule = await getRewardRule(action_type);
           if (!rule) {
             console.warn(`⚠️ No active reward rule found for action type: ${action_type}`);
@@ -173,9 +178,9 @@ async function start() {
           // 2. Calculate Reward with Dynamic Boosting (Energy-based)
           const marketMultiplier = getDynamicMultiplier(iso, action_type);
           const baseReward = new Decimal(source_value || 0).times(rule.reward_multiplier);
-          pointsAwarded = baseReward.times(marketMultiplier).toDecimalPlaces(8);
+          calculatedPoints = baseReward.times(marketMultiplier).toDecimalPlaces(8);
 
-          console.log(`[L10] Reward calculated: ${pointsAwarded.toNumber()} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Market Mult: ${marketMultiplier})`);
+          console.log(`[L10] Reward calculated: ${calculatedPoints.toNumber()} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Market Mult: ${marketMultiplier})`);
         }
 
         if (pointsAwarded.isZero()) {
@@ -228,10 +233,4 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
-module.exports = {
-  getDynamicMultiplier,
-  priceCache,
-  LMP_THRESHOLD_SURPLUS,
-  LMP_THRESHOLD_SCARCITY,
-  start
-};
+module.exports = { getDynamicMultiplier, priceCache, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY };

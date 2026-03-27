@@ -1,6 +1,11 @@
 const Decimal = require('decimal.js');
 const { getDynamicMultiplier, priceCache, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY } = require('../index');
 
+// Setup mock prices for testing
+priceCache.CAISO = { price: 20.0 }; // Surplus
+priceCache.PJM = { price: 120.0 }; // Scarcity
+priceCache.ERCOT = { price: 50.0 }; // Normal
+
 describe('L10 Token Engine - Reward Logic', () => {
   beforeEach(() => {
     // Reset priceCache for tests
@@ -25,14 +30,15 @@ describe('L10 Token Engine - Reward Logic', () => {
     expect(mult.toNumber()).toBe(1.0);
   });
 
-  test('ISO normalization (hyphens) should work', () => {
-    const mult = getDynamicMultiplier('ENTSO-E', 'session_completed');
-    expect(mult.toNumber()).toBe(1.5);
-  });
+  test('Multi-region support (ENTSOE, NORDPOOL) with normalization', () => {
+    priceCache.ENTSOE = { price: 10.0 };
+    priceCache.NORDPOOL = { price: 150.0 };
 
-  test('ISO normalization (lowercase) should work', () => {
-    const mult = getDynamicMultiplier('caiso', 'session_completed');
-    expect(mult.toNumber()).toBe(1.5);
+    const entsoeMult = getDynamicMultiplier('ENTSO-E', 'session_completed');
+    expect(entsoeMult.toNumber()).toBe(1.5);
+
+    const nordpoolMult = getDynamicMultiplier('NordPool', 'v2g_discharge');
+    expect(nordpoolMult.toNumber()).toBe(2.0);
   });
 
   test('Decimal precision check', () => {
