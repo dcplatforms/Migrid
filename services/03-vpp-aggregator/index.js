@@ -125,11 +125,13 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
 
     // L1 Physics Confidence Derating (Phase 5 Forward Engineering)
     let physicsMultiplier = 1.0;
+    let isHighFidelity = false;
     if (safetyContext && typeof safetyContext === 'string') {
       try {
         const context = JSON.parse(safetyContext);
         if (context.physics_score) {
           physicsMultiplier = parseFloat(context.physics_score);
+          isHighFidelity = physicsMultiplier > 0.95;
         }
       } catch (e) {}
     }
@@ -159,6 +161,7 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
       available_capacity_kwh: totalCapacityKwh,
       available_capacity_kw: totalCapacityKwh, // Assuming 1-hour discharge for kW estimate
       physics_multiplier: physicsMultiplier,
+      is_high_fidelity: isHighFidelity,
       resource_count: parseInt(capacity.vehicle_count || 0),
       timestamp: new Date().toISOString(),
       source: 'database'
@@ -286,11 +289,10 @@ const updateGlobalCapacity = async () => {
       const deratedCapacity = parseFloat(row.raw_capacity_kwh || 0) * physicsMultiplier;
 
       totalCapacity += deratedCapacity;
-      regionalCapacity[normalizedRegion] = {
-        capacity: deratedCapacity,
-        is_high_fidelity: isHighFidelity,
-        last_updated_at: new Date().toISOString()
-      };
+
+      // Normalize ISO naming to uppercase and hyphen-free for cross-layer consistency (L4/L10)
+      const normalizedRegion = row.region.toUpperCase().replace(/-/g, '');
+      regionalCapacity[normalizedRegion] = (normalizedRegion in regionalCapacity) ? regionalCapacity[normalizedRegion] + deratedCapacity : deratedCapacity;
     });
 
     await redisClient.set('vpp:capacity:available', totalCapacity.toString());
@@ -302,7 +304,7 @@ const updateGlobalCapacity = async () => {
       [totalCapacity, JSON.stringify(regionalCapacity), physicsMultiplier, isHighFidelity]
     ).catch(e => console.error('[VPP Aggregator] Failed to log history for L11:', e.message));
 
-    console.log(`[VPP Aggregator] Global Capacity Updated: ${totalCapacity.toFixed(2)} kWh (Multiplier: ${physicsMultiplier}, High-Fidelity: ${isHighFidelity})`);
+    console.log(`[VPP Aggregator] Global Capacity Updated: ${totalCapacity.toFixed(2)} kWh (Multiplier: ${physicsMultiplier}, Fidelity: ${isHighFidelity})`);
   } catch (error) {
     console.error('[VPP Aggregator] Global capacity update error:', error);
   }

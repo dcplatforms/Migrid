@@ -92,7 +92,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.4.0',
+    version: '2.4.1',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -133,7 +133,8 @@ app.get('/openadr/v3/reports', async (req, res) => {
     if (marketKeys.length > 0) {
       const marketValues = await redisClient.mGet(marketKeys);
       marketKeys.forEach((key, index) => {
-        const iso = key.split(':').pop();
+        // Normalize ISO: uppercase and remove hyphens (e.g., ENTSO-E -> ENTSOE)
+        const iso = key.split(':').pop().toUpperCase().replace(/-/g, '');
         const value = marketValues[index];
         if (value) {
           regionalMarkets[iso] = JSON.parse(value);
@@ -260,7 +261,8 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
 
     // 1.1 Check L4 Grid Lock (Global and Regional) - Phase 5 Forward Engineering
     const gridLock = await redisClient.get('l4:grid:lock');
-    const isoRegion = (event.targets?.find(t => t.type === 'region')?.value || '').toUpperCase();
+    // Normalize ISO Region: uppercase and remove hyphens for cross-layer consistency
+    const isoRegion = (event.targets?.find(t => t.type === 'region')?.value || '').toUpperCase().replace(/-/g, '');
     const regionalLock = isoRegion ? await redisClient.get(`l4:grid:lock:${isoRegion}`) : null;
 
     // Fetch regional market metadata for broadcast enrichment

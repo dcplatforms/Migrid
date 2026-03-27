@@ -1,11 +1,8 @@
--- Migration: L3 Alignment with Physics v10.1.0 and L11 Data Readiness
--- Layer: L3 (VPP Aggregator)
--- Version: 3.3.0
+-- MiGrid VPP Aggregator - Phase 5 Enterprise Scale (v3.3.0)
+-- 021_l3_v10_1_0_alignment.sql
 
--- Add high-fidelity flag to historical capacity table to unblock L11 ML training
+-- Add is_high_fidelity column to vpp_capacity_history
 ALTER TABLE vpp_capacity_history ADD COLUMN IF NOT EXISTS is_high_fidelity BOOLEAN DEFAULT FALSE;
 
--- Update existing records based on a 0.95 multiplier threshold (if data exists)
+-- Update existing records based on physics_multiplier
 UPDATE vpp_capacity_history SET is_high_fidelity = TRUE WHERE physics_multiplier > 0.95;
-
-COMMENT ON COLUMN vpp_capacity_history.is_high_fidelity IS 'Identifies records with physics_multiplier > 0.95, suitable for high-confidence ML training.';
