@@ -46,9 +46,10 @@
 - [✓] **Contextual Safety Locks**: metadata-enriched `l1:safety:lock:context` in Redis.
 - [✓] **High-Fidelity Reconcile**: Preservation of regional metadata in audit logs.
 
-### Layer 3: VPP Aggregator (v3.2.0)
+### Layer 3: VPP Aggregator (v3.3.0)
 - [✓] **Redis Capacity Cache**: Sub-50ms reporting for L4 bidding.
 - [✓] **Fuse Rule 2.0**: 20% SoC hard floor integrated into capacity formula.
+- [✓] **Physics-Aware Reporting**: Integration of `physics_score` and `is_high_fidelity` for L11.
 - [~] **BESS Integration**: Support for stationary storage assets (75%).
 
 ### Layer 4: Market Gateway (v3.4.1)
