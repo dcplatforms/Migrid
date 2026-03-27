@@ -125,11 +125,13 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
 
     // L1 Physics Confidence Derating (Phase 5 Forward Engineering)
     let physicsMultiplier = 1.0;
+    let isHighFidelity = false;
     if (safetyContext && typeof safetyContext === 'string') {
       try {
         const context = JSON.parse(safetyContext);
         if (context.physics_score) {
           physicsMultiplier = parseFloat(context.physics_score);
+          isHighFidelity = physicsMultiplier > 0.95;
         }
       } catch (e) {}
     }
@@ -159,6 +161,7 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
       available_capacity_kwh: totalCapacityKwh,
       available_capacity_kw: totalCapacityKwh, // Assuming 1-hour discharge for kW estimate
       physics_multiplier: physicsMultiplier,
+      is_high_fidelity: isHighFidelity,
       resource_count: parseInt(capacity.vehicle_count || 0),
       timestamp: new Date().toISOString(),
       source: 'database'
@@ -276,18 +279,20 @@ const updateGlobalCapacity = async () => {
 
     let totalCapacity = 0;
     const regionalCapacity = {};
+    const isHighFidelity = physicsMultiplier > 0.95;
 
     result.rows.forEach(row => {
+      // ISO Normalization: Uppercase and remove hyphens (e.g., 'ENTSO-E' to 'ENTSOE')
+      // Null safety added for row.region
+      const regionStr = row.region || 'SYSTEM_WIDE';
+      const normalizedRegion = regionStr.toUpperCase().replace(/-/g, '');
       const deratedCapacity = parseFloat(row.raw_capacity_kwh || 0) * physicsMultiplier;
+
       totalCapacity += deratedCapacity;
 
-      // Normalize region (ENTSO-E -> ENTSOE) and include high-fidelity metadata
+      // Normalize ISO naming to uppercase and hyphen-free for cross-layer consistency (L4/L10)
       const normalizedRegion = row.region.toUpperCase().replace(/-/g, '');
-      regionalCapacity[normalizedRegion] = {
-        capacity: deratedCapacity,
-        is_high_fidelity: physicsMultiplier > 0.95,
-        last_updated_at: new Date().toISOString()
-      };
+      regionalCapacity[normalizedRegion] = (normalizedRegion in regionalCapacity) ? regionalCapacity[normalizedRegion] + deratedCapacity : deratedCapacity;
     });
 
     await redisClient.set('vpp:capacity:available', totalCapacity.toString());
@@ -295,11 +300,11 @@ const updateGlobalCapacity = async () => {
 
     // Save historical state for L11 ML Engine Training
     await pool.query(
-      'INSERT INTO vpp_capacity_history (total_capacity_kwh, regional_data, physics_multiplier, timestamp) VALUES ($1, $2, $3, NOW())',
-      [totalCapacity, JSON.stringify(regionalCapacity), physicsMultiplier]
+      'INSERT INTO vpp_capacity_history (total_capacity_kwh, regional_data, physics_multiplier, is_high_fidelity, timestamp) VALUES ($1, $2, $3, $4, NOW())',
+      [totalCapacity, JSON.stringify(regionalCapacity), physicsMultiplier, isHighFidelity]
     ).catch(e => console.error('[VPP Aggregator] Failed to log history for L11:', e.message));
 
-    console.log(`[VPP Aggregator] Global Capacity Updated: ${totalCapacity.toFixed(2)} kWh (Multiplier: ${physicsMultiplier})`);
+    console.log(`[VPP Aggregator] Global Capacity Updated: ${totalCapacity.toFixed(2)} kWh (Multiplier: ${physicsMultiplier}, Fidelity: ${isHighFidelity})`);
   } catch (error) {
     console.error('[VPP Aggregator] Global capacity update error:', error);
   }

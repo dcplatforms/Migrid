@@ -39,19 +39,15 @@ class BiddingOptimizer {
         const regionalCapacityRaw = await this.redisClient.get('vpp:capacity:regional');
         if (regionalCapacityRaw) {
           const regionalCapacity = JSON.parse(regionalCapacityRaw);
+          // ISO Normalization: Uppercase and remove hyphens (consistent with L3 v3.3.0)
           const isoKey = iso.toUpperCase().replace(/-/g, '');
-          if (regionalCapacity[isoKey] !== undefined) {
-            const data = regionalCapacity[isoKey];
-            const capValue = typeof data === 'object' ? data.capacity : data;
-            const isHighFidelity = typeof data === 'object' ? data.is_high_fidelity : true;
+          const data = regionalCapacity[isoKey];
 
-            console.log(`[BiddingOptimizer] Using regional capacity for ${isoKey}: ${capValue} kWh (HighFidelity: ${isHighFidelity})`);
-
-            if (!isHighFidelity) {
-              console.warn(`⚠️ [BiddingOptimizer] Warning: Bidding for ${isoKey} using STANDARD fidelity capacity.`);
-            }
-
-            return new Decimal(capValue);
+          if (data !== undefined) {
+            // Support both flat value (legacy) and nested object (v3.3.0+)
+            const capacityValue = (typeof data === 'object' && data !== null) ? data.capacity : data;
+            console.log(`[BiddingOptimizer] Using regional capacity for ${isoKey}: ${capacityValue} kWh (Fidelity: ${data.is_high_fidelity || 'STANDARD'})`);
+            return new Decimal(capacityValue || '0');
           }
         }
       } catch (err) {

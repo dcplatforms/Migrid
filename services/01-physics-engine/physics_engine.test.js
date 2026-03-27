@@ -259,6 +259,21 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"iso_region":"CAISO"'));
   });
 
+  test('should normalize iso_region from ENTSO-E to ENTSOE in Kafka alert', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'PHYSICS_FRAUD',
+        session_id: 'session-entsoe-1',
+        iso_region: 'ENTSO-E'
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.iso_region).toBe('ENTSOE');
+  });
+
   test('should include market_price_at_session in Redis context and Kafka alert', async () => {
     const msg = {
       payload: JSON.stringify({
@@ -405,6 +420,30 @@ describe('L1 Physics Engine Reconciliation', () => {
     expect(global.mockPgQuery).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO audit_log'),
       expect.arrayContaining(['recon-session-1', 'PHYSICS_FRAUD', 'PJM', 95.0])
+    );
+  });
+
+  test('should normalize iso_region during reconciliation from ENTSO-E to ENTSOE', async () => {
+    const payload = {
+      session_id: 'recon-session-entsoe',
+      event_type: 'EFFICIENCY_ALERT',
+      iso_region: 'ENTSO-E'
+    };
+
+    global.mockRedisRPop
+      .mockResolvedValueOnce(JSON.stringify(payload))
+      .mockResolvedValueOnce(null);
+
+    await physicsEngine.reconcileLogs();
+
+    // Verify Kafka Alert dispatch during reconciliation has normalized ISO
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.iso_region).toBe('ENTSOE');
+
+    // Verify DB Insertion during reconciliation has normalized ISO
+    expect(global.mockPgQuery).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO audit_log'),
+      expect.arrayContaining(['recon-session-entsoe', 'EFFICIENCY_ALERT', 'ENTSOE', 0.0])
     );
   });
 });
