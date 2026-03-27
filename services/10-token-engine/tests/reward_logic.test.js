@@ -1,29 +1,15 @@
 const Decimal = require('decimal.js');
-
-// Mock data and constants
-const priceCache = {
-  CAISO: { price: 20.0 }, // Surplus
-  PJM: { price: 120.0 }, // Scarcity
-  ERCOT: { price: 50.0 } // Normal
-};
-
-const LMP_THRESHOLD_SURPLUS = new Decimal('30.0');
-const LMP_THRESHOLD_SCARCITY = new Decimal('100.0');
-
-function getDynamicMultiplier(iso, actionType) {
-  const priceData = priceCache[iso.toUpperCase()];
-  const latestPrice = priceData ? new Decimal(priceData.price) : new Decimal(50.0);
-
-  if (actionType === 'session_completed' && latestPrice.lt(LMP_THRESHOLD_SURPLUS)) {
-    return new Decimal(1.5);
-  } else if (actionType === 'v2g_discharge' && latestPrice.gt(LMP_THRESHOLD_SCARCITY)) {
-    return new Decimal(2.0);
-  }
-
-  return new Decimal(1.0);
-}
+const { getDynamicMultiplier, priceCache, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY } = require('../index');
 
 describe('L10 Token Engine - Reward Logic', () => {
+  beforeEach(() => {
+    // Reset priceCache for tests
+    priceCache['CAISO'] = { price: 20.0 }; // Surplus
+    priceCache['PJM'] = { price: 120.0 }; // Scarcity
+    priceCache['ERCOT'] = { price: 50.0 }; // Normal
+    priceCache['ENTSOE'] = { price: 25.0 }; // European Surplus
+  });
+
   test('Charging during surplus should receive 1.5x multiplier', () => {
     const mult = getDynamicMultiplier('CAISO', 'session_completed');
     expect(mult.toNumber()).toBe(1.5);
@@ -37,6 +23,16 @@ describe('L10 Token Engine - Reward Logic', () => {
   test('Standard charging should receive 1.0x multiplier', () => {
     const mult = getDynamicMultiplier('ERCOT', 'session_completed');
     expect(mult.toNumber()).toBe(1.0);
+  });
+
+  test('ISO normalization (hyphens) should work', () => {
+    const mult = getDynamicMultiplier('ENTSO-E', 'session_completed');
+    expect(mult.toNumber()).toBe(1.5);
+  });
+
+  test('ISO normalization (lowercase) should work', () => {
+    const mult = getDynamicMultiplier('caiso', 'session_completed');
+    expect(mult.toNumber()).toBe(1.5);
   });
 
   test('Decimal precision check', () => {

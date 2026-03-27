@@ -79,7 +79,7 @@ async function updateRewardTransactionStatus(logId, newStatus, openWalletTransac
 // --- Reward Multiplier Logic ---
 
 function getDynamicMultiplier(iso, actionType) {
-  const priceData = priceCache[iso.toUpperCase()];
+  const priceData = priceCache[iso.toUpperCase().replace(/-/g, '')];
   const latestPrice = priceData ? new Decimal(priceData.price) : new Decimal(50.0);
 
   if (actionType === 'session_completed' && latestPrice.lt(LMP_THRESHOLD_SURPLUS)) {
@@ -122,9 +122,9 @@ async function start() {
         const payload = JSON.parse(message.value.toString());
 
         if (topic === 'MARKET_PRICE_UPDATED') {
-          console.log(`[L10 Market Watch] Received price update for ${payload.iso}: $${payload.price_per_mwh}/MWh`);
-          currentMarketPrices[payload.iso] = payload.price_per_mwh;
-          priceCache[payload.iso] = {
+          const iso = payload.iso.toUpperCase().replace(/-/g, '');
+          console.log(`[L10 Market Watch] Received price update for ${iso}: $${payload.price_per_mwh}/MWh`);
+          priceCache[iso] = {
             price: payload.price_per_mwh,
             timestamp: new Date(payload.timestamp || Date.now())
           };
@@ -133,7 +133,15 @@ async function start() {
 
         console.log(`⚡ Received message from ${topic}:`, payload);
 
-        const { driver_id, action_type, source_value, event_id, iso: payloadIso } = payload;
+        const { driver_id, action_type, source_value, event_id, iso: payloadIso, physics_score } = payload;
+
+        // Proof of Physics Enforcement
+        if (action_type === 'session_completed' || action_type === 'v2g_discharge') {
+          if (!physics_score || parseFloat(physics_score) <= 0) {
+            console.warn(`⚠️ [L10 Integrity] Skipping ${action_type} reward for ${driver_id} - No valid physics_score (Proof of Physics required).`);
+            return;
+          }
+        }
 
         // 1. Ensure Driver Wallet Exists (and get address)
         const driverWallet = await getOrCreateDriverWallet(driver_id);
@@ -141,19 +149,19 @@ async function start() {
           console.error(`❌ Failed to get or create wallet for driver: ${driver_id}`);
           return;
         }
-        const iso = payloadIso || driverWallet.iso || 'CAISO';
+        const iso = (payloadIso || driverWallet.iso || 'CAISO').toUpperCase().replace(/-/g, '');
 
-        let calculatedPoints;
+        let pointsAwarded = new Decimal(0);
         let rule_id;
 
         if (action_type === 'challenge_completed' || action_type === 'achievement_unlocked') {
           // Fixed-value rewards (points/tokens)
-          pointsAwarded = new Decimal(source_value || 0).toNumber();
+          pointsAwarded = new Decimal(source_value || 0);
 
           const rule = await getRewardRule(action_type);
           rule_id = rule ? rule.rule_id : '00000000-0000-0000-0000-000000000000';
 
-          console.log(`[L10] ${action_type} by driver ${driver_id}. Awarding ${pointsAwarded} tokens.`);
+          console.log(`[L10] ${action_type} by driver ${driver_id}. Awarding ${pointsAwarded.toNumber()} tokens.`);
         } else {
           const rule = await getRewardRule(action_type);
           if (!rule) {
@@ -163,14 +171,14 @@ async function start() {
           rule_id = rule.rule_id;
 
           // 2. Calculate Reward with Dynamic Boosting (Energy-based)
-          const marketMultiplier = getDynamicMultiplier(iso);
+          const marketMultiplier = getDynamicMultiplier(iso, action_type);
           const baseReward = new Decimal(source_value || 0).times(rule.reward_multiplier);
-          pointsAwarded = baseReward.times(marketMultiplier).toDecimalPlaces(8).toNumber();
+          pointsAwarded = baseReward.times(marketMultiplier).toDecimalPlaces(8);
 
-          console.log(`[L10] Reward calculated: ${calculatedPoints} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Market Mult: ${marketMultiplier})`);
+          console.log(`[L10] Reward calculated: ${pointsAwarded.toNumber()} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Market Mult: ${marketMultiplier})`);
         }
 
-        if (calculatedPoints.isZero()) {
+        if (pointsAwarded.isZero()) {
           console.log(`[L10] Reward is zero for event ${event_id}, skipping.`);
           return;
         }
@@ -181,16 +189,16 @@ async function start() {
           rule_id,
           event_id,
           source_value || 0,
-          calculatedPoints.toNumber(),
+          pointsAwarded.toNumber(),
           'pending',
-          regionalIso
+          iso
         );
 
         // 4. Execute Open-Wallet Transaction
         try {
           const openWalletResponse = await axios.post(`${process.env.OPEN_WALLET_API_URL}/transactions`, {
             walletAddress: driverWallet.open_wallet_address,
-            amount: calculatedPoints.toNumber(),
+            amount: pointsAwarded.toNumber(),
             currency: 'MiGridPoints',
             referenceId: rewardLog.log_id
           });
@@ -209,7 +217,9 @@ async function start() {
   }
 }
 
-start();
+if (require.main === module) {
+  start();
+}
 
 process.on('SIGINT', async () => {
   console.log('👋 [L10 Token Engine] Shutting down...');
@@ -217,3 +227,11 @@ process.on('SIGINT', async () => {
   await pgClient.end();
   process.exit(0);
 });
+
+module.exports = {
+  getDynamicMultiplier,
+  priceCache,
+  LMP_THRESHOLD_SURPLUS,
+  LMP_THRESHOLD_SCARCITY,
+  start
+};
