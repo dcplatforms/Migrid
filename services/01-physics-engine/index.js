@@ -24,9 +24,13 @@ const SAFETY_LOCK_CONTEXT_KEY = 'l1:safety:lock:context';
 const SAFETY_LOCK_TTL = 900; // 15 minutes
 const HEARTBEAT_INTERVAL = 5000;
 const MAX_MISSED_HEARTBEATS = 3;
-const DIGITAL_TWIN_SYNC_INTERVAL = 30000; // 30 seconds
+const DIGITAL_TWIN_SYNC_INTERVAL_DEFAULT = 30000; // 30 seconds
+const DIGITAL_TWIN_SYNC_INTERVAL_SCARCITY = 10000; // 10 seconds (Scarcity Mode)
+const SCARCITY_PRICE_THRESHOLD = 100.0;
 
 let missedHeartbeats = 0;
+let lastMarketPrice = 0.0;
+let syncIntervalId = null;
 let isOffline = false;
 
 // 1. Database Connection
@@ -84,6 +88,12 @@ async function handlePhysicsAlert(msg) {
 
   // Cross-Layer ISO Normalization (e.g., ENTSO-E -> ENTSOE)
   const isoRegion = payload.iso_region ? payload.iso_region.toUpperCase().replace(/-/g, '') : 'CAISO';
+
+  // Update last known market price for Scarcity Mode detection
+  if (payload.market_price_at_session !== undefined) {
+    lastMarketPrice = parseFloat(payload.market_price_at_session);
+    checkScarcityMode();
+  }
 
   // 1. Verify the Physics: Set Safety Lock in Redis for critical violations
   if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
@@ -287,27 +297,55 @@ async function reconcileLogs() {
  * Digital Twin Sync: Periodically cache vehicle state in Redis
  * Ensures sub-50ms capacity lookups for L3/L4 and edge resilience.
  * Scalability: Filtered by FLEET_ID to avoid massive full-table scans.
+ * [L1-107] Enhancement: Regional namespaces (e.g., l1:CAISO:vehicle:ID)
  */
 async function syncDigitalTwin() {
   const fleetId = process.env.FLEET_ID;
   if (isOffline || !fleetId) return;
 
   try {
+    // JOIN with fleets to get the ISO region for regional keying
     const result = await pgClient.query(
-      'SELECT id, fleet_id, battery_capacity_kwh, current_soc, is_plugged_in, v2g_enabled FROM vehicles WHERE fleet_id = $1',
+      `SELECT v.id, v.fleet_id, v.battery_capacity_kwh, v.current_soc, v.is_plugged_in, v.v2g_enabled, f.iso
+       FROM vehicles v
+       JOIN fleets f ON v.fleet_id = f.id
+       WHERE v.fleet_id = $1`,
       [fleetId]
     );
 
     for (const vehicle of result.rows) {
-      const key = `l1:digital_twin:vehicle:${vehicle.id}`;
+      const iso = vehicle.iso ? vehicle.iso.toUpperCase().replace(/-/g, '') : 'CAISO';
+      const key = `l1:${iso}:vehicle:${vehicle.id}`;
       await redisClient.setEx(key, 60, JSON.stringify({
         ...vehicle,
         last_sync: new Date().toISOString()
       }));
     }
-    console.log(`📡 [L1 Physics] Digital Twin synced ${result.rows.length} vehicles to Redis.`);
+    console.log(`📡 [L1 Physics] Digital Twin synced ${result.rows.length} vehicles to Regional Redis (Last Price: $${lastMarketPrice}).`);
   } catch (err) {
     console.error('❌ [L1 Physics] Digital Twin sync error:', err.message);
+  }
+}
+
+/**
+ * [L1-108] Scarcity Mode: Increase polling frequency when prices > $100
+ */
+function checkScarcityMode() {
+  const currentInterval = (lastMarketPrice > SCARCITY_PRICE_THRESHOLD)
+    ? DIGITAL_TWIN_SYNC_INTERVAL_SCARCITY
+    : DIGITAL_TWIN_SYNC_INTERVAL_DEFAULT;
+
+  // We only reset the interval if it's different from the current one
+  if (syncIntervalId) {
+    const isCurrentlyScarcity = syncIntervalId._idleTimeout === DIGITAL_TWIN_SYNC_INTERVAL_SCARCITY;
+    const shouldBeScarcity = lastMarketPrice > SCARCITY_PRICE_THRESHOLD;
+
+    if (isCurrentlyScarcity !== shouldBeScarcity) {
+      console.log(`🚀 [L1 Physics] Switching Scarcity Mode: ${shouldBeScarcity ? 'ON' : 'OFF'} (Interval: ${currentInterval}ms)`);
+      clearInterval(syncIntervalId);
+      syncIntervalId = setInterval(syncDigitalTwin, currentInterval);
+      syncIntervalId._idleTimeout = currentInterval; // Manual sync for test environments
+    }
   }
 }
 
@@ -316,7 +354,8 @@ async function start() {
   startHeartbeat();
 
   // Start Digital Twin Sync
-  setInterval(syncDigitalTwin, DIGITAL_TWIN_SYNC_INTERVAL);
+  syncIntervalId = setInterval(syncDigitalTwin, DIGITAL_TWIN_SYNC_INTERVAL_DEFAULT);
+  syncIntervalId._idleTimeout = DIGITAL_TWIN_SYNC_INTERVAL_DEFAULT; // Manual sync for test environments
   syncDigitalTwin(); // Initial sync
 }
 
@@ -324,7 +363,16 @@ if (require.main === module) {
   start();
 }
 
-module.exports = { handlePhysicsAlert, producer, connectServices, syncDigitalTwin, reconcileLogs };
+module.exports = {
+  handlePhysicsAlert,
+  producer,
+  connectServices,
+  syncDigitalTwin,
+  reconcileLogs,
+  start,
+  getSyncIntervalId: () => syncIntervalId,
+  getLastMarketPrice: () => lastMarketPrice
+};
 
 process.on('SIGTERM', async () => {
   await pgClient.end();
