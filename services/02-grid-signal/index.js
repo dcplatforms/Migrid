@@ -336,10 +336,11 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
             site_status: siteStatus || 'OPERATIONAL',
             v2g_requested: v2gRequested,
             iso_region: isoRegion,
-            market_price_at_session: event.metadata?.market_price_at_session ?? marketMetadata.price_per_mwh,
+            market_price_at_session: event.metadata?.market_price_at_session ?? (marketMetadata.price_per_mwh ?? 0), // L2 v2.4.1: Nullish coalescing for 0-price preservation
             profitability_index: marketMetadata.profitability_index,
             degradation_cost_mwh: marketMetadata.degradation_cost_mwh,
             physics_score: safetyContext.physics_score || '1.0000',
+            metadata: event.metadata || {}, // L2 v2.4.1: Full metadata preservation (OpenADR 3.1.0)
             billing_mode: event.metadata?.billing_mode,
             intervals: event.intervals || [],
             targets: event.targets || [],
@@ -455,10 +456,11 @@ async function startSafetyConsumer() {
           }));
         }
       } else if (topic === 'MARKET_PRICE_UPDATED') {
-        console.log(`[L2] Received market update for ${payload.iso}: $${payload.price_per_mwh}/MWh`);
+        const iso = payload.iso.toUpperCase().replace(/-/g, ''); // L2 v2.4.1: ISO Normalization
+        console.log(`[L2] Received market update for ${iso}: $${payload.price_per_mwh}/MWh`);
 
         const marketContext = JSON.stringify({
-          iso: payload.iso,
+          iso,
           price_per_mwh: payload.price_per_mwh,
           profitability_index: payload.profitability_index,
           degradation_cost_mwh: payload.degradation_cost_mwh,

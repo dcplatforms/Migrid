@@ -1,4 +1,9 @@
-### 🌐 L2 Grid Signal: Weekly Sync & Update (March 2026)
+### 🌐 L2 Grid Signal: Weekly Sync & Update (v2.4.1)
+*   **Cross-Layer Delta:**
+    *   **L1 (Physics Engine):** Confirmed alignment with v10.1.0; ensuring `<15% variance threshold` and `physics_score` (0.0-1.0) propagation in all grid event broadcasts.
+    *   **L3 (VPP Aggregator):** Integrated regional capacity metadata from Redis for enhanced reporting.
+    *   **L4 (Market Gateway):** Synchronized ISO normalization (uppercase, no hyphens) for 'ENTSOE' and other regional identifiers to ensure cross-layer consistency in grid locks and price signals.
+    *   **L8 (Energy Manager):** Hardened site-level status tracking (OPERATIONAL, SAFE_MODE, METER_OFFLINE) to prevent dispatch to disconnected assets.
 
 * **Cross-Layer Delta:**
   - **L1 (Physics Engine v10.1.0):** Confirmed high-fidelity `physics_score` integration and verified context-aware safety locks.

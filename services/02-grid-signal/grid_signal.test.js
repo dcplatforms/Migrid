@@ -158,6 +158,31 @@ describe('L2 Grid Signal Service', () => {
     expect(sentValue.physics_score).toBe('0.9850');
   });
 
+  test('POST /openadr/v3/events should preserve zero price per MWh (Nullish Coalescing L2 v2.4.1)', async () => {
+    const mockMarketContext = {
+      price_per_mwh: 0,
+      profitability_index: 0
+    };
+
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'market:context:CAISO') return Promise.resolve(JSON.stringify(mockMarketContext));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-zero-price',
+        type: 'demand-response',
+        targets: [{ type: 'region', value: 'caiso' }]
+      });
+
+    expect(response.status).toBe(202);
+    const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
+    expect(sentValue.market_price_at_session).toBe(0); // Should be exactly 0, not defaulted
+  });
+
   test('POST /openadr/v3/events should support program_id (3.1.0 Alignment)', async () => {
     redisClient.get.mockResolvedValue(null);
 
@@ -429,14 +454,14 @@ describe('L2 Grid Signal Service', () => {
     );
   });
 
-  test('startSafetyConsumer should cache market price updates with degradation cost', async () => {
+  test('startSafetyConsumer should cache market price updates with degradation cost and ISO Normalization (v2.4.1)', async () => {
     const { consumer, startSafetyConsumer } = require('./index');
     await startSafetyConsumer();
 
     const eachMessage = consumer.run.mock.calls[0][0].eachMessage;
 
     const marketUpdate = {
-      iso: 'ERCOT',
+      iso: 'ENTSO-E',
       price_per_mwh: 120.0,
       profitability_index: 100.0,
       degradation_cost_mwh: 20.0,
@@ -451,7 +476,7 @@ describe('L2 Grid Signal Service', () => {
     expect(redisClient.setEx).toHaveBeenCalledWith(
       'market:latest:context',
       600,
-      expect.stringContaining('"iso":"ERCOT"')
+      expect.stringContaining('"iso":"ENTSOE"')
     );
     expect(redisClient.setEx).toHaveBeenCalledWith(
       'market:latest:context',
@@ -459,9 +484,9 @@ describe('L2 Grid Signal Service', () => {
       expect.stringContaining('"degradation_cost_mwh":20')
     );
     expect(redisClient.setEx).toHaveBeenCalledWith(
-      'market:context:ERCOT',
+      'market:context:ENTSOE',
       600,
-      expect.stringContaining('"iso":"ERCOT"')
+      expect.stringContaining('"iso":"ENTSOE"')
     );
   });
 
@@ -484,9 +509,9 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body.region).toBe('GLOBAL');
   });
 
-  test('POST /openadr/v3/events should reject when regional L4 grid lock is active (Case-Insensitive Hardening)', async () => {
+  test('POST /openadr/v3/events should reject when regional L4 grid lock is active (ISO Normalization L2 v2.4.1)', async () => {
     redisClient.get.mockImplementation((key) => {
-      if (key === 'l4:grid:lock:CAISO') return Promise.resolve('1');
+      if (key === 'l4:grid:lock:ENTSOE') return Promise.resolve('1');
       return Promise.resolve(null);
     });
 
@@ -494,14 +519,14 @@ describe('L2 Grid Signal Service', () => {
       .post('/openadr/v3/events')
       .set('Authorization', `Bearer ${mockToken}`)
       .send({
-        id: 'evt-lock-regional-case',
+        id: 'evt-lock-entsoe',
         type: 'demand-response',
-        targets: [{ type: 'region', value: 'caiso' }] // Lowercase region
+        targets: [{ type: 'region', value: 'ENTSO-E' }] // Hyphenated region
       });
 
     expect(response.status).toBe(503);
     expect(response.body.reason).toBe('GRID_LOCK_ACTIVE');
-    expect(response.body.region).toBe('CAISO'); // Should be normalized to uppercase
+    expect(response.body.region).toBe('ENTSOE'); // Normalized: Uppercase, no hyphens
   });
 
   test('POST /openadr/v3/events should reject when site is in L8 Safe Mode', async () => {
