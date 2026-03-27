@@ -11,8 +11,8 @@
 | Priority | Feature / Task | Primary Layer | Blocking Dependencies | Target Phase |
 |:---:|:---|:---:|:---|:---:|
 | **P0** | **ML Demand Forecasting** | L11 (ML Engine) | 🚧 L11 Foundation v0.1.0 Active | Phase 6 |
-| **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | ✅ L5 (Driver API) v4.1.0 payload schema update | Phase 5 |
-| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 (Market) v3.4.1 ERCOT/Nord Pool feeds | Phase 5 |
+| **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | ✅ L7 v5.5.0 Hardened Certificate Exchange | Phase 5 |
+| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 (Market) v3.6.0 AI Fidelity Feeds | Phase 5 |
 | **P3** | **OCPI 2.2 Roaming** | L7 (Device) | L9 (Commerce) v5.1.0 settlement engine sync | Phase 5 |
 | **P4** | **AI Anomaly Detection** | L8 (Energy) | L11 (ML Engine) Foundation active | Phase 6 |
 
@@ -54,10 +54,10 @@
 - [✓] **Physics-Aware Reporting**: Integration of `physics_score` and `is_high_fidelity` for L11.
 - [~] **BESS Integration**: Support for stationary storage assets (75%).
 
-### Layer 4: Market Gateway (v3.4.1)
+### Layer 4: Market Gateway (v3.6.0)
+- [✓] **AI Fidelity Tracking**: High-precision numeric ingestion for L11 training.
+- [✓] **Regional Grid Lock**: Improved observability and specific ISO lock logging.
 - [✓] **ERCOT & Nord Pool**: Full activation of Texas and Nordic market adapters.
-- [✓] **Profitability Index**: Real-time $/MWh broadcasting enriched with degradation costs.
-- [✓] **Regional Locks**: ISO-specific bidding halts via Redis SCAN/MGET logic.
 
 ### Layer 6: Engagement Engine (v5.5.0)
 - [✓] **ENTSO-E Pioneer**: European regional grid response achievement.
@@ -67,9 +67,9 @@
 - [✓] **Grid-Aware Gamification**: Regional challenges using L2 Kafka signals.
 - [✓] **Scarcity Savior**: Achievement for high-scarcity V2G discharge response.
 
-### Layer 7: Device Gateway
+### Layer 7: Device Gateway (v5.5.0)
+- [✓] **ISO 15118-20**: Hardened Certificate Exchange and EMAID handling (85%).
 - [✓] **OCPP 2.1 V2X**: Native bidirectional profile support.
-- [~] **ISO 15118-20**: Certificate exchange and PKI (75%).
 
 ---
 

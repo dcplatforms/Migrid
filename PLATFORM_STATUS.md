@@ -8,7 +8,7 @@
 [![Progress](https://img.shields.io/badge/Progress-65%25_Complete-blue.svg)](PLATFORM_STATUS.md)
 [![Services](https://img.shields.io/badge/Services-11%2F11_Architecture-orange.svg)](PLATFORM_STATUS.md)
 [![Services](https://img.shields.io/badge/Services-11%2F11_Complete-green.svg)](PLATFORM_STATUS.md)
-[![Features](https://img.shields.io/badge/Features-53%2F87-brightgreen.svg)](PLATFORM_STATUS.md)
+[![Features](https://img.shields.io/badge/Features-56%2F87-brightgreen.svg)](PLATFORM_STATUS.md)
 
 [Architecture](#service-architecture-status) • [Progress](#roadmap-progress) • [Features](#key-accomplishments) • [Risks](#risk-management)
 
@@ -93,8 +93,8 @@ This section serves as the mathematical source of truth for platform completion 
 - [x] L6 Gamification Engine
 
 ### Phase 5: Enterprise Scale (In-Progress)
-- [~] L9 Commerce Engine (Billing & Tariffs) (60%)
-- [~] L7 ISO 15118 Plug & Charge Certification (75%)
+- [~] L9 Commerce Engine (Billing & Tariffs) (65%)
+- [~] L7 ISO 15118 Plug & Charge Certification (85%)
 - [x] L4 ERCOT Market Activation
 - [x] L4 Proactive Price Polling Loop
 - [x] L3 Redis-Based Capacity Cache
@@ -114,7 +114,7 @@ This section serves as the mathematical source of truth for platform completion 
 - [x] L8 Local Modbus Polling Priority
 - [x] L2 V2G Discharge Request Detection
 - [x] L4 Profitability Index Broadcasting
-- [~] L7 OCPI 2.2 Roaming Integration (50%)
+- [~] L7 OCPI 2.2 Roaming Integration (60%)
 - [x] L4 ENTSO-E Adapter (European Markets)
 - [x] L4 Nord Pool Adapter (Nordic Pricing)
 - [x] L10 Dynamic Multipliers (Grid Surplus/Scarcity)
@@ -525,9 +525,9 @@ Phase 8: Advanced Grid       ░░░░░░░░░░░░░░░░░
 
 **Priority Tasks:**
 
-1. [~] **ISO 15118** — Complete Plug & Charge (75% done)
-2. [~] **Commerce Engine** — Finish billing logic (60% done)
-3. [~] **OCPI 2.2** — Deploy roaming support (50% done)
+1. [~] **ISO 15118** — Complete Plug & Charge (85% done)
+2. [~] **Commerce Engine** — Finish billing logic (65% done)
+3. [~] **OCPI 2.2** — Deploy roaming support (60% done)
 4. [!] **Redis Capacity Cache** — Sub-50ms latency for L4 (In Progress)
 
 **Timeline:** January - March 2026
@@ -707,13 +707,13 @@ Standards Progress:    ███████████░░░░░░░░
 <tr>
 <td><b>ISO 15118</b></td>
 <td>Plug & Charge with PKI</td>
-<td align="center">75%</td>
+<td align="center">85%</td>
 <td align="center">Q1 2026</td>
 </tr>
 <tr>
 <td><b>OCPI 2.2</b></td>
 <td>Roaming network protocol</td>
-<td align="center">50%</td>
+<td align="center">60%</td>
 <td align="center">Q1 2026</td>
 </tr>
 <tr>
@@ -811,6 +811,11 @@ done
 
 ## Latest Release Wins (March 2026)
 
+- **L4 Market Gateway (v3.6.0)**: Rollout of **AI Fidelity Tracking** and improved **Regional Grid Lock** observability unblocking L11 ML training.
+- **L6 Engagement Engine (v5.5.0)**: Launched **Sustainability Champion** CTE and **L11 Data Guardian** achievements; regional challenges 100% complete.
+- **L7 Device Gateway (v5.5.0)**: Hardened **ISO 15118-20 Certificate Exchange** (85%) and **EMAID** token handling for Plug & Charge.
+- **L2 Grid Signal (v2.4.1)**: Implemented **ISO Normalization** and **Historical Price Export** for high-fidelity data pipelines.
+- **L3 VPP Aggregator (v3.3.0)**: Deployed **High-Fidelity Regional Capacity** aggregation and integrated `is_high_fidelity` metadata.
 - **L10 Token Engine (v4.2.0)**: Deployed **Dynamic Multipliers** (1.5x Grid Surplus / 2.0x V2G Scarcity) and consolidated regional price updates.
 - **L2 Grid Signal (v2.4.1)**: Hardened **Regional Market Context** tracking and AI Data Readiness for historical event export.
 - **L1 Physics Engine (v10.1.0)**: Finalized **High-Fidelity Reconciliation** preserving regional metadata and contextual safety locks.
