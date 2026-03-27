@@ -130,7 +130,7 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
     }
 
     const payload = {
-      iso: iso.toUpperCase(),
+      iso: iso.toUpperCase().replace(/-/g, ''),
       location: location || 'SYSTEM_WIDE',
       price_per_mwh: price.toNumber(),
       profitability_index: profitabilityIndex.toDecimalPlaces(2).toNumber(),
@@ -174,7 +174,7 @@ async function startGridSignalConsumer() {
         // Regional locking: if signal targets a specific ISO/Region
         const targetRegion = signal.targets?.find(t => t.type === 'region')?.value;
         if (targetRegion) {
-          const iso = targetRegion.toUpperCase();
+          const iso = targetRegion.toUpperCase().replace(/-/g, '');
           const regionLockKey = `l4:grid:lock:${iso}`;
           await redisClient.setEx(regionLockKey, lockDuration, 'true');
           console.warn(`[Market Gateway] L4 Regional Grid Lock ACTIVATED for ${iso} for ${lockDuration}s due to signal ${signal.event_id}`);

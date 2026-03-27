@@ -70,7 +70,8 @@ class BiddingOptimizer {
     let l4RegionalLock = 'false';
 
     if (iso) {
-      l4RegionalLock = await this.redisClient.get(`l4:grid:lock:${iso.toUpperCase()}`);
+      const isoKey = iso.toUpperCase().replace(/-/g, '');
+      l4RegionalLock = await this.redisClient.get(`l4:grid:lock:${isoKey}`);
     }
 
     return {

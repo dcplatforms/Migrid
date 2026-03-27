@@ -210,6 +210,7 @@ describe('BiddingOptimizer', () => {
   test('should return no bids when regional L4 grid lock is active for specific ISO', async () => {
     mockRedisClient.get.mockImplementation((key) => {
       if (key === 'l4:grid:lock:ERCOT') return Promise.resolve('true');
+      if (key === 'l4:grid:lock:ENTSOE') return Promise.resolve('true');
       if (key === 'l4:grid:lock') return Promise.resolve('false');
       if (key === 'l1:safety:lock') return Promise.resolve('false');
       if (key === 'vpp:capacity:available') return Promise.resolve('500');
@@ -226,7 +227,12 @@ describe('BiddingOptimizer', () => {
     expect(bids).toHaveLength(0);
     expect(mockRedisClient.get).toHaveBeenCalledWith('l4:grid:lock:ERCOT');
 
-    // Should NOT be locked for CAISO if only ERCOT is locked
+    // Test hyphenated ISO normalization
+    const entsoeBids = await optimizer.generateDayAheadBids('ENTSO-E');
+    expect(entsoeBids).toHaveLength(0);
+    expect(mockRedisClient.get).toHaveBeenCalledWith('l4:grid:lock:ENTSOE');
+
+    // Should NOT be locked for CAISO if only ERCOT and ENTSOE are locked
     const caisoBids = await optimizer.generateDayAheadBids('CAISO');
     expect(caisoBids).toHaveLength(1);
   });
@@ -234,8 +240,8 @@ describe('BiddingOptimizer', () => {
   test('should prioritize regional capacity from Redis when available', async () => {
     const globalCapacity = '500'; // 0.5 MW
     const regionalData = JSON.stringify({
-      'ERCOT': '1200', // 1.2 MW
-      'CAISO': '800'   // 0.8 MW
+      'ERCOT': { capacity: 1200, is_high_fidelity: true }, // 1.2 MW
+      'CAISO': { capacity: 800, is_high_fidelity: false }   // 0.8 MW
     });
 
     mockRedisClient.get.mockImplementation((key) => {
