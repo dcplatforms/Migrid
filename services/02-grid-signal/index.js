@@ -194,7 +194,7 @@ app.get('/openadr/v3/reports', async (req, res) => {
     if (lockKeys.length > 0) {
       const lockValues = await redisClient.mGet(lockKeys);
       lockKeys.forEach((key, index) => {
-        const region = key.split(':').pop();
+        const region = key.split(':').pop().toUpperCase().replace(/-/g, '');
         const value = lockValues[index];
         if (value === '1' || value === 'true') {
           regionalLocks[region] = true;
@@ -471,7 +471,7 @@ async function startSafetyConsumer() {
         await redisClient.setEx('market:latest:context', 600, marketContext);
 
         // Phase 5 Enhancement: Store ISO-specific context for regional visibility
-        await redisClient.setEx(`market:context:${iso}`, 600, marketContext);
+        await redisClient.setEx(`market:context:${payload.iso.toUpperCase().replace(/-/g, '')}`, 600, marketContext);
       }
     }
   });

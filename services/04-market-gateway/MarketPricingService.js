@@ -42,14 +42,17 @@ class MarketPricingService {
    * @returns {Promise<Array>} List of historical price records
    */
   async getHistoricalPrices(iso, days = 7) {
-    const isoFilter = iso ? iso.toUpperCase() : null;
+    // Phase 5 Enhancement: Handle nullish ISO filters and optimize for L11 training
+    const isoFilter = (iso && iso !== 'ALL') ? iso.toUpperCase().replace(/-/g, '') : null;
+    const intervalDays = parseInt(days) || 7;
+
     const result = await this.pool.query(`
       SELECT iso, location, price_per_mwh, timestamp
       FROM lmp_prices
       WHERE ($1::text IS NULL OR iso = $1)
         AND timestamp > NOW() - (make_interval(days => $2))
       ORDER BY timestamp ASC
-    `, [isoFilter, days]);
+    `, [isoFilter, intervalDays]);
 
     return result.rows.map(row => ({
       ...row,

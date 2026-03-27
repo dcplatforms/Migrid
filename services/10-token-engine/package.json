@@ -9,6 +9,9 @@
     "kafkajs": "^2.2.4",
     "pg": "^8.11.0"
   },
+  "scripts": {
+    "test": "jest"
+  },
   "devDependencies": {
     "jest": "^29.7.0"
   }
