@@ -284,7 +284,7 @@ app.get('/health', async (req, res) => {
 
   res.json({
     service: 'market-gateway',
-    version: '3.5.0',
+    version: '3.6.0',
     status: 'healthy',
     layer: 'L4',
     markets: SUPPORTED_ISOS,
