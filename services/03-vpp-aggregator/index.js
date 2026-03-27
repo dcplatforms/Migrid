@@ -282,7 +282,12 @@ const updateGlobalCapacity = async () => {
     const isHighFidelity = physicsMultiplier > 0.95;
 
     result.rows.forEach(row => {
+      // ISO Normalization: Uppercase and remove hyphens (e.g., 'ENTSO-E' to 'ENTSOE')
+      // Null safety added for row.region
+      const regionStr = row.region || 'SYSTEM_WIDE';
+      const normalizedRegion = regionStr.toUpperCase().replace(/-/g, '');
       const deratedCapacity = parseFloat(row.raw_capacity_kwh || 0) * physicsMultiplier;
+
       totalCapacity += deratedCapacity;
 
       // Normalize ISO naming to uppercase and hyphen-free for cross-layer consistency (L4/L10)
