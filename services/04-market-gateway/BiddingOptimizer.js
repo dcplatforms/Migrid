@@ -39,12 +39,15 @@ class BiddingOptimizer {
         const regionalCapacityRaw = await this.redisClient.get('vpp:capacity:regional');
         if (regionalCapacityRaw) {
           const regionalCapacity = JSON.parse(regionalCapacityRaw);
+          // ISO Normalization: Uppercase and remove hyphens (consistent with L3 v3.3.0)
           const isoKey = iso.toUpperCase().replace(/-/g, '');
-          if (regionalCapacity[isoKey] !== undefined) {
-            const entry = regionalCapacity[isoKey];
-            const capacityVal = typeof entry === 'object' ? entry.capacity : entry;
-            console.log(`[BiddingOptimizer] Using regional capacity for ${isoKey}: ${capacityVal} kWh (High Fidelity: ${entry.is_high_fidelity})`);
-            return new Decimal(capacityVal);
+          const data = regionalCapacity[isoKey];
+
+          if (data !== undefined) {
+            // Support both flat value (legacy) and nested object (v3.3.0+)
+            const capacityValue = (typeof data === 'object' && data !== null) ? data.capacity : data;
+            console.log(`[BiddingOptimizer] Using regional capacity for ${isoKey}: ${capacityValue} kWh (Fidelity: ${data.is_high_fidelity || 'STANDARD'})`);
+            return new Decimal(capacityValue || '0');
           }
         }
       } catch (err) {
@@ -102,7 +105,7 @@ class BiddingOptimizer {
       }
 
       if (locks.l4) {
-        const regionalLockActive = await this.redisClient.get(`l4:grid:lock:${iso.toUpperCase()}`);
+        const regionalLockActive = await this.redisClient.get(`l4:grid:lock:${iso.toUpperCase().replace(/-/g, '')}`);
         const scope = (regionalLockActive === 'true' || regionalLockActive === '1') ? `Regional (${iso})` : 'Global';
         console.warn(`⚠️ [L4 Market Gateway v3.6.0] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
       }
