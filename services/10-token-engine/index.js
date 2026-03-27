@@ -144,7 +144,7 @@ async function start() {
         }
         const iso = (payloadIso || driverWallet.iso || 'CAISO').toUpperCase().replace(/-/g, '');
 
-        let calculatedPoints;
+        let pointsAwarded = new Decimal(0);
         let rule_id;
 
         if (action_type === 'challenge_completed' || action_type === 'achievement_unlocked') {
@@ -183,7 +183,7 @@ async function start() {
           console.log(`[L10] Reward calculated: ${calculatedPoints.toNumber()} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Market Mult: ${marketMultiplier})`);
         }
 
-        if (calculatedPoints.isZero()) {
+        if (pointsAwarded.isZero()) {
           console.log(`[L10] Reward is zero for event ${event_id}, skipping.`);
           return;
         }
@@ -194,7 +194,7 @@ async function start() {
           rule_id,
           event_id,
           source_value || 0,
-          calculatedPoints.toNumber(),
+          pointsAwarded.toNumber(),
           'pending',
           iso
         );
@@ -203,7 +203,7 @@ async function start() {
         try {
           const openWalletResponse = await axios.post(`${process.env.OPEN_WALLET_API_URL}/transactions`, {
             walletAddress: driverWallet.open_wallet_address,
-            amount: calculatedPoints.toNumber(),
+            amount: pointsAwarded.toNumber(),
             currency: 'MiGridPoints',
             referenceId: rewardLog.log_id
           });

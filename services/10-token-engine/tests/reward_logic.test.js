@@ -7,6 +7,14 @@ priceCache.PJM = { price: 120.0 }; // Scarcity
 priceCache.ERCOT = { price: 50.0 }; // Normal
 
 describe('L10 Token Engine - Reward Logic', () => {
+  beforeEach(() => {
+    // Reset priceCache for tests
+    priceCache['CAISO'] = { price: 20.0 }; // Surplus
+    priceCache['PJM'] = { price: 120.0 }; // Scarcity
+    priceCache['ERCOT'] = { price: 50.0 }; // Normal
+    priceCache['ENTSOE'] = { price: 25.0 }; // European Surplus
+  });
+
   test('Charging during surplus should receive 1.5x multiplier', () => {
     const mult = getDynamicMultiplier('CAISO', 'session_completed');
     expect(mult.toNumber()).toBe(1.5);
