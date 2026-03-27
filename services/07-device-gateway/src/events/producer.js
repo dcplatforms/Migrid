@@ -24,7 +24,25 @@ async function connectProducer() {
  */
 async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
     let event;
-    const isoRegion = await redis.get(`charger_region:${chargePointId}`) || 'CAISO';
+    const rawRegion = await redis.get(`charger_region:${chargePointId}`) || 'CAISO';
+    const isoRegion = rawRegion.toUpperCase().replace(/-/g, '');
+
+    // Physics Engine Contextual Data for L11 AI Readiness
+    const safetyContextRaw = await redis.get('l1:safety:lock:context');
+    let physicsScore = 1.0;
+    let fidelityStatus = 'HIGH_FIDELITY';
+
+    if (safetyContextRaw) {
+        try {
+            const context = JSON.parse(safetyContextRaw);
+            if (context.physics_score !== undefined) {
+                physicsScore = parseFloat(context.physics_score);
+                fidelityStatus = physicsScore > 0.95 ? 'HIGH_FIDELITY' : 'STANDARD';
+            }
+        } catch (e) {
+            console.error('[L7] Failed to parse safety context for telemetry:', e.message);
+        }
+    }
 
     if (protocol === 'ocpp2.1' && payload.bidirEnergyFlowData) {
         // Native 2.1 NotifyBidirEnergyFlow
@@ -36,7 +54,9 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
             powerActiveImport: extractBidirValue(payload.bidirEnergyFlowData, 'Power.Active.Import'),
             powerActiveExport: extractBidirValue(payload.bidirEnergyFlowData, 'Power.Active.Export'),
             protocol: 'ocpp2.1',
-            iso_region: isoRegion
+            iso_region: isoRegion,
+            physics_score: physicsScore,
+            fidelity_status: fidelityStatus
         };
     } else {
         // Up-convert legacy MeterValues to 2.1 schema
@@ -53,7 +73,9 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
             powerActiveImport: importPower,
             powerActiveExport: exportPower,
             protocol: 'ocpp2.0.1_upconverted',
-            iso_region: isoRegion
+            iso_region: isoRegion,
+            physics_score: physicsScore,
+            fidelity_status: fidelityStatus
         };
     }
 
@@ -71,7 +93,8 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
  */
 async function publishSessionEvent(type, payload) {
     const chargePointId = payload.chargePointId || payload.evseId;
-    const isoRegion = payload.iso_region || (chargePointId ? await redis.get(`charger_region:${chargePointId}`) : 'CAISO') || 'CAISO';
+    const rawRegion = payload.iso_region || (chargePointId ? await redis.get(`charger_region:${chargePointId}`) : 'CAISO') || 'CAISO';
+    const isoRegion = rawRegion.toUpperCase().replace(/-/g, '');
 
     const enrichedPayload = {
         ...payload,
