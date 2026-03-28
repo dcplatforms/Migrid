@@ -155,7 +155,28 @@ describe('L2 Grid Signal Service', () => {
 
     expect(response.status).toBe(202);
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
-    expect(sentValue.physics_score).toBe('0.9850');
+    expect(sentValue.physics_score).toBe(0.9850);
+    expect(sentValue.fidelity_status).toBe('HIGH_FIDELITY');
+  });
+
+  test('POST /openadr/v3/events should include STANDARD fidelity_status when score <= 0.95', async () => {
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({ physics_score: '0.8500' }));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-standard-fidelity',
+        type: 'demand-response'
+      });
+
+    expect(response.status).toBe(202);
+    const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
+    expect(sentValue.physics_score).toBe(0.8500);
+    expect(sentValue.fidelity_status).toBe('STANDARD');
   });
 
   test('POST /openadr/v3/events should preserve zero price per MWh (Nullish Coalescing L2 v2.4.1)', async () => {
