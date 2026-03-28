@@ -29,7 +29,7 @@ class BiddingOptimizer {
    * Fetches real-time aggregated capacity from Redis.
    * Supports regional aggregation (Phase 5 Forward Engineering).
    * @param {string} iso - Optional ISO for regional capacity lookup
-   * @returns {Promise<Decimal>} Capacity in kW
+   * @returns {Promise<Object>} { capacity: Decimal, fidelity: string }
    */
   async getAggregatedCapacity(iso = null) {
     await this.connect();
@@ -45,9 +45,15 @@ class BiddingOptimizer {
 
           if (data !== undefined) {
             // Support both flat value (legacy) and nested object (v3.3.0+)
-            const capacityValue = (typeof data === 'object' && data !== null) ? data.capacity : data;
-            console.log(`[BiddingOptimizer] Using regional capacity for ${isoKey}: ${capacityValue} kWh (Fidelity: ${data.is_high_fidelity || 'STANDARD'})`);
-            return new Decimal(capacityValue || '0');
+            const isObject = (typeof data === 'object' && data !== null);
+            const capacityValue = isObject ? data.capacity : data;
+            const fidelity = isObject ? (data.is_high_fidelity ? 'HIGH_FIDELITY' : 'STANDARD') : 'STANDARD';
+
+            console.log(`[BiddingOptimizer] Using regional capacity for ${isoKey}: ${capacityValue} kWh (Fidelity: ${fidelity})`);
+            return {
+              capacity: new Decimal(capacityValue || '0'),
+              fidelity: fidelity
+            };
           }
         }
       } catch (err) {
@@ -56,7 +62,10 @@ class BiddingOptimizer {
     }
 
     const capacity = await this.redisClient.get('vpp:capacity:available');
-    return new Decimal(capacity || '0');
+    return {
+      capacity: new Decimal(capacity || '0'),
+      fidelity: 'STANDARD'
+    };
   }
 
   /**
@@ -83,38 +92,53 @@ class BiddingOptimizer {
   /**
    * Run optimization and generate FIX messages for Day-Ahead market.
    * @param {string} iso - The ISO name (e.g., 'CAISO')
-   * @returns {Promise<Array<string>>} List of FIX messages
+   * @returns {Promise<Object>} { bids: Array<string>, audit: Object }
    */
   async generateDayAheadBids(iso) {
     // Verify the Physics & Grid signals: Check for safety locks before bidding
     const locks = await this.getSafetyLockStatus(iso);
 
+    let physicsScore = 1.0;
+    let auditContext = {};
+
+    try {
+      const lockContext = await this.redisClient.get('l1:safety:lock:context');
+      if (lockContext) {
+        auditContext = JSON.parse(lockContext);
+        if (auditContext.physics_score !== undefined) {
+          physicsScore = parseFloat(auditContext.physics_score);
+        }
+      }
+    } catch (err) {
+      console.warn('[BiddingOptimizer] Failed to parse physics context:', err.message);
+    }
+
     if (locks.l1 || locks.l4) {
       if (locks.l1) {
-        const lockContext = await this.redisClient.get('l1:safety:lock:context');
-        const details = lockContext ? JSON.parse(lockContext) : null;
-
-        console.warn(`🚨 [L4 Market Gateway v3.6.0] Bidding halted: L1 safety lock is active for ${iso}`);
-        if (details) {
-          console.warn(`[L4 Safety Context] Reason: ${details.event_type}, Severity: ${details.severity}, Score: ${details.physics_score || 'N/A'}, Site: ${details.site_id || 'N/A'}, Region: ${details.iso_region || 'N/A'}, VPPActive: ${details.vpp_active}, V2GActive: ${details.v2g_active}`);
-
-          if (details.iso_region && details.iso_region.toUpperCase() === iso.toUpperCase()) {
-            console.warn(`[L4 Safety Alert] High-risk: Physics violation DETECTED IN THIS REGION (${iso}).`);
-          }
+        console.warn(`🚨 [L4 Market Gateway v3.7.0] Bidding halted: L1 safety lock is active for ${iso}`);
+        if (auditContext) {
+          console.warn(`[L4 Safety Context] Reason: ${auditContext.event_type}, Severity: ${auditContext.severity}, Score: ${auditContext.physics_score || 'N/A'}, Region: ${auditContext.iso_region || 'N/A'}`);
         }
       }
 
       if (locks.l4) {
         const regionalLockActive = await this.redisClient.get(`l4:grid:lock:${iso.toUpperCase().replace(/-/g, '')}`);
         const scope = (regionalLockActive === 'true' || regionalLockActive === '1') ? `Regional (${iso})` : 'Global';
-        console.warn(`⚠️ [L4 Market Gateway v3.6.0] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
+        console.warn(`⚠️ [L4 Market Gateway v3.7.0] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
       }
 
-      return [];
+      return {
+        bids: [],
+        audit: {
+          physics_score: physicsScore,
+          capacity_fidelity: 'HALTED',
+          audit_context: auditContext
+        }
+      };
     }
 
     const forecasts = await this.pricingService.getDayAheadForecast(iso);
-    const pVppKw = await this.getAggregatedCapacity(iso);
+    const { capacity: pVppKw, fidelity } = await this.getAggregatedCapacity(iso);
     const pVppMw = pVppKw.dividedBy(1000);
 
     const degradationCostKwh = new Decimal(process.env.DEGRADATION_COST_KWH || '0.02');
@@ -128,20 +152,22 @@ class BiddingOptimizer {
       let pBidMw = new Decimal(0);
 
       // Optimization Invariant: maximize (Pbid * LMP - Cdeg(Pbid))
-      // Profit = Pbid * (LMP - 20)
-      // If LMP > 20, maximize Pbid (set to Pvpp)
-      // If LMP <= 20, Pbid should be 0
       if (lmpMwh.gt(degradationCostMwh)) {
         pBidMw = pVppMw;
       }
 
-      // Format as FIX message
-      // Use degradation cost as the limit price to ensure we only clear when profitable
       const fixMsg = this.formatFixBid(iso, forecast.timestamp, pBidMw, degradationCostMwh, seqNum++);
       bids.push(fixMsg);
     }
 
-    return bids;
+    return {
+      bids,
+      audit: {
+        physics_score: physicsScore,
+        capacity_fidelity: fidelity,
+        audit_context: auditContext
+      }
+    };
   }
 
   /**
