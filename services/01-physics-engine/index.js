@@ -305,8 +305,9 @@ async function syncDigitalTwin() {
 
   try {
     // JOIN with fleets to get the ISO region for regional keying
+    // [L1-107] Enhancement: Fetch physics_score and is_high_fidelity for L2 reporting
     const result = await pgClient.query(
-      `SELECT v.id, v.fleet_id, v.battery_capacity_kwh, v.current_soc, v.is_plugged_in, v.v2g_enabled, f.iso
+      `SELECT v.id, v.fleet_id, v.battery_capacity_kwh, v.current_soc, v.is_plugged_in, v.v2g_enabled, v.physics_score, v.is_high_fidelity, f.iso
        FROM vehicles v
        JOIN fleets f ON v.fleet_id = f.id
        WHERE v.fleet_id = $1`,
@@ -318,6 +319,7 @@ async function syncDigitalTwin() {
       const key = `l1:${iso}:vehicle:${vehicle.id}`;
       await redisClient.setEx(key, 60, JSON.stringify({
         ...vehicle,
+        physics_score: parseFloat(vehicle.physics_score || 1.0),
         last_sync: new Date().toISOString()
       }));
     }
