@@ -155,7 +155,7 @@ describe('L2 Grid Signal Service', () => {
 
     expect(response.status).toBe(202);
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
-    expect(sentValue.physics_score).toBe('0.9850');
+    expect(sentValue.physics_score).toBe(0.985);
   });
 
   test('POST /openadr/v3/events should preserve zero price per MWh (Nullish Coalescing L2 v2.4.1)', async () => {
@@ -547,6 +547,25 @@ describe('L2 Grid Signal Service', () => {
     expect(response.status).toBe(503);
     expect(response.body.reason).toBe('SITE_IN_SAFE_MODE');
     expect(response.body.site_id).toBe('SITE-456');
+  });
+
+  test('GET /openadr/v3/reports should return cached regional stats (v2.4.2)', async () => {
+    const mockStats = {
+      CAISO: { vehicle_count: 1, high_fidelity_count: 1 },
+      ERCOT: { vehicle_count: 1, high_fidelity_count: 0 }
+    };
+
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l2:regional:stats') return Promise.resolve(JSON.stringify(mockStats));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app).get('/openadr/v3/reports');
+    expect(response.status).toBe(200);
+    expect(response.body.regional_stats.CAISO.vehicle_count).toBe(1);
+    expect(response.body.regional_stats.CAISO.high_fidelity_count).toBe(1);
+    expect(response.body.regional_stats.ERCOT.vehicle_count).toBe(1);
+    expect(response.body.regional_stats.ERCOT.high_fidelity_count).toBe(0);
   });
 
   test('GET /openadr/v3/reports should return L8 site statuses (Optimized with SMEMBERS)', async () => {

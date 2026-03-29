@@ -82,23 +82,32 @@ class BiddingOptimizer {
 
   /**
    * Run optimization and generate FIX messages for Day-Ahead market.
+   * [L4 v3.7.0] Enhancement: Returns { bids, audit } for high-fidelity ground truth.
    * @param {string} iso - The ISO name (e.g., 'CAISO')
-   * @returns {Promise<Array<string>>} List of FIX messages
+   * @returns {Promise<Object>} Object containing bids array and audit context
    */
   async generateDayAheadBids(iso) {
     // Verify the Physics & Grid signals: Check for safety locks before bidding
     const locks = await this.getSafetyLockStatus(iso);
 
+    // AI Readiness: Capture physics score and fidelity status
+    let physicsScore = 1.0;
+    let capacityFidelity = 'STANDARD';
+    const lockContextRaw = await this.redisClient.get('l1:safety:lock:context');
+    const lockContext = lockContextRaw ? JSON.parse(lockContextRaw) : null;
+
+    if (lockContext && lockContext.physics_score !== undefined) {
+      physicsScore = parseFloat(lockContext.physics_score);
+      capacityFidelity = physicsScore > 0.95 ? 'HIGH_FIDELITY' : 'STANDARD';
+    }
+
     if (locks.l1 || locks.l4) {
       if (locks.l1) {
-        const lockContext = await this.redisClient.get('l1:safety:lock:context');
-        const details = lockContext ? JSON.parse(lockContext) : null;
+        console.warn(`🚨 [L4 Market Gateway v3.7.0] Bidding halted: L1 safety lock is active for ${iso}`);
+        if (lockContext) {
+          console.warn(`[L4 Safety Context] Reason: ${lockContext.event_type}, Severity: ${lockContext.severity}, Score: ${lockContext.physics_score || 'N/A'}, Site: ${lockContext.site_id || 'N/A'}, Region: ${lockContext.iso_region || 'N/A'}, VPPActive: ${lockContext.vpp_active}, V2GActive: ${lockContext.v2g_active}`);
 
-        console.warn(`🚨 [L4 Market Gateway v3.6.0] Bidding halted: L1 safety lock is active for ${iso}`);
-        if (details) {
-          console.warn(`[L4 Safety Context] Reason: ${details.event_type}, Severity: ${details.severity}, Score: ${details.physics_score || 'N/A'}, Site: ${details.site_id || 'N/A'}, Region: ${details.iso_region || 'N/A'}, VPPActive: ${details.vpp_active}, V2GActive: ${details.v2g_active}`);
-
-          if (details.iso_region && details.iso_region.toUpperCase() === iso.toUpperCase()) {
+          if (lockContext.iso_region && lockContext.iso_region.toUpperCase() === iso.toUpperCase()) {
             console.warn(`[L4 Safety Alert] High-risk: Physics violation DETECTED IN THIS REGION (${iso}).`);
           }
         }
@@ -107,10 +116,10 @@ class BiddingOptimizer {
       if (locks.l4) {
         const regionalLockActive = await this.redisClient.get(`l4:grid:lock:${iso.toUpperCase().replace(/-/g, '')}`);
         const scope = (regionalLockActive === 'true' || regionalLockActive === '1') ? `Regional (${iso})` : 'Global';
-        console.warn(`⚠️ [L4 Market Gateway v3.6.0] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
+        console.warn(`⚠️ [L4 Market Gateway v3.7.0] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
       }
 
-      return [];
+      return { bids: [], audit: { physicsScore, capacityFidelity, status: 'REJECTED_BY_LOCK', lockContext } };
     }
 
     const forecasts = await this.pricingService.getDayAheadForecast(iso);
@@ -141,7 +150,17 @@ class BiddingOptimizer {
       bids.push(fixMsg);
     }
 
-    return bids;
+    return {
+      bids,
+      audit: {
+        physicsScore,
+        capacityFidelity,
+        status: 'SUBMITTED',
+        capacityMw: pVppMw.toNumber(),
+        degradationCostMwh: degradationCostMwh.toNumber(),
+        timestamp: new Date().toISOString()
+      }
+    };
   }
 
   /**

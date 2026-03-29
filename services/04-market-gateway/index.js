@@ -190,7 +190,7 @@ async function startGridSignalConsumer() {
  * Proactive background loop to poll market prices and notify other layers (L9)
  */
 async function startPriceBroadcaster() {
-  console.log(`[Market Gateway v3.6.0] Initializing proactive price broadcaster for: ${SUPPORTED_ISOS.join(', ')}`);
+  console.log(`[Market Gateway v3.7.0] Initializing proactive price broadcaster for: ${SUPPORTED_ISOS.join(', ')}`);
 
   const simulationEnabled = process.env.ENABLE_MARKET_SIMULATION === 'true' || process.env.NODE_ENV === 'test';
 
@@ -285,7 +285,7 @@ app.get('/health', async (req, res) => {
 
   res.json({
     service: 'market-gateway',
-    version: '3.6.0',
+    version: '3.7.0',
     status: 'healthy',
     layer: 'L4',
     markets: SUPPORTED_ISOS,
@@ -335,17 +335,44 @@ app.post('/bids/optimize', authenticateToken, async (req, res) => {
 
   try {
     const optimizer = new BiddingOptimizer(pool, process.env.REDIS_URL || 'redis://localhost:6379');
-    const bids = await optimizer.generateDayAheadBids(iso);
+    const { bids, audit } = await optimizer.generateDayAheadBids(iso);
+
+    // [L4 v3.7.0] Persist Bidding Audit Context for L11 ML Engine Ground Truth
+    if (bids && bids.length > 0) {
+      for (const bid of bids) {
+        const quantity_kw = parseFloat(audit.capacityMw || 0) * 1000;
+        const price_per_mwh = audit.degradationCostMwh || 20.0;
+
+        await pool.query(`
+          INSERT INTO market_bids (
+            iso, market_type, quantity_kw, price_per_mwh,
+            total_value_usd, delivery_hour, status, submitted_at,
+            physics_score, capacity_fidelity, audit_context
+          )
+          VALUES ($1, 'day-ahead', $2, $3, $4, $5, 'submitted', NOW(), $6, $7, $8)
+        `, [
+          iso.toUpperCase(),
+          quantity_kw,
+          price_per_mwh,
+          (quantity_kw / 1000 * price_per_mwh).toFixed(2),
+          new Date().getHours(), // Simplified delivery hour
+          audit.physicsScore,
+          audit.capacityFidelity,
+          JSON.stringify(audit)
+        ]);
+      }
+    }
 
     // In a real scenario, we would send these FIX messages to CAISO
     // For now, we'll return them and log them
-    console.log(`[Market Gateway] Generated ${bids.length} optimized bids for ${iso}`);
+    console.log(`[Market Gateway] Generated ${bids ? bids.length : 0} optimized bids for ${iso} (Fidelity: ${audit.capacityFidelity})`);
 
     res.json({
       success: true,
       iso,
-      bid_count: bids.length,
-      bids: bids // Returning FIX messages for verification
+      bid_count: bids ? bids.length : 0,
+      bids,
+      audit
     });
   } catch (error) {
     console.error('[Market Gateway Optimization Error]', error);
