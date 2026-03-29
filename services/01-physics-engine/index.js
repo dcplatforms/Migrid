@@ -80,11 +80,15 @@ async function handlePhysicsAlert(msg) {
   // Higher score (closer to 1.0) means more trustworthy data.
   // Lower score (closer to 0.0) indicates high variance and potential fraud.
   let physicsScore = 1.0;
-  if (payload.variance_pct !== undefined) {
+  if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
+    physicsScore = 0.0;
+  } else if (payload.variance_pct !== undefined) {
     physicsScore = Math.max(0, Math.min(1, 1 - (payload.variance_pct / 15.0)));
   } else if (payload.efficiency_pct !== undefined) {
     physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
   }
+
+  const isHighFidelity = physicsScore > 0.95;
 
   // Cross-Layer ISO Normalization (e.g., ENTSO-E -> ENTSOE)
   const isoRegion = payload.iso_region ? payload.iso_region.toUpperCase().replace(/-/g, '') : 'CAISO';
@@ -109,6 +113,7 @@ async function handlePhysicsAlert(msg) {
         vin: payload.vin,
         variance_pct: payload.variance_pct,
         physics_score: physicsScore.toFixed(4),
+        is_high_fidelity: isHighFidelity,
         current_soc: payload.current_soc,
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
@@ -146,6 +151,7 @@ async function handlePhysicsAlert(msg) {
       expected: payload.expected,
       actual: payload.actual,
       physics_score: physicsScore.toFixed(4),
+      is_high_fidelity: isHighFidelity,
       billing_mode: payload.billing_mode,
       vpp_active: payload.vpp_active,
       v2g_active: payload.v2g_active,
@@ -218,6 +224,18 @@ async function reconcileLogs() {
       // Map severity correctly
       const severity = (payload.event_type === 'PHYSICS_FRAUD') ? 'FRAUD' : (payload.event_type === 'CAPACITY_VIOLATION' ? 'CRITICAL' : 'WARNING');
 
+      // L1-103 Enhancement: Confidence Score (Physics Score)
+      let physicsScore = 1.0;
+      if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
+        physicsScore = 0.0;
+      } else if (payload.variance_pct !== undefined) {
+        physicsScore = Math.max(0, Math.min(1, 1 - (payload.variance_pct / 15.0)));
+      } else if (payload.efficiency_pct !== undefined) {
+        physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
+      }
+
+      const isHighFidelity = physicsScore > 0.95;
+
       // Re-publish missed alerts to Kafka
       const alert = {
         event_type: payload.event_type || 'EFFICIENCY_ALERT',
@@ -233,6 +251,8 @@ async function reconcileLogs() {
         actual: payload.actual,
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
+        physics_score: physicsScore.toFixed(4),
+        is_high_fidelity: isHighFidelity,
         v2g_active: payload.v2g_active,
         iso_region: payload.iso_region ? payload.iso_region.toUpperCase().replace(/-/g, '') : 'CAISO',
         market_price_at_session: payload.market_price_at_session || 0.0,
@@ -260,8 +280,8 @@ async function reconcileLogs() {
       }
 
       await pgClient.query(`
-        INSERT INTO audit_log (session_id, violation_type, expected_value, actual_value, severity, metadata, billing_mode, vpp_active, v2g_active, iso_region, market_price_at_session)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        INSERT INTO audit_log (session_id, violation_type, expected_value, actual_value, severity, metadata, billing_mode, vpp_active, v2g_active, iso_region, market_price_at_session, physics_score, is_high_fidelity)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         ON CONFLICT DO NOTHING
       `, [
         payload.session_id,
@@ -277,13 +297,17 @@ async function reconcileLogs() {
           v2g_active: payload.v2g_active,
           current_soc: payload.current_soc,
           variance_pct: payload.variance_pct,
-          efficiency_pct: payload.efficiency_pct
+          efficiency_pct: payload.efficiency_pct,
+          physics_score: physicsScore.toFixed(4),
+          is_high_fidelity: isHighFidelity
         }),
         payload.billing_mode,
         payload.vpp_active,
         payload.v2g_active,
         payload.iso_region ? payload.iso_region.toUpperCase().replace(/-/g, '') : 'CAISO',
-        payload.market_price_at_session || 0.0
+        payload.market_price_at_session || 0.0,
+        physicsScore.toFixed(4),
+        isHighFidelity
       ]);
 
       console.log(`✅ [L1 Physics] Reconciled high-fidelity log for session: ${payload.session_id || 'CAPACITY_VIOLATION'}`);

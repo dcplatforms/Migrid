@@ -77,13 +77,14 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.event_type).toBe('PHYSICS_FRAUD');
     expect(alertValue.severity).toBe('FRAUD');
     expect(alertValue.variance_pct).toBe(18.5);
-    expect(alertValue.physics_score).toBe("0.0000"); // 1 - (18.5/15) = -0.23 -> clamp to 0
+    expect(alertValue.physics_score).toBe("0.0000"); // Forced 0.0 for FRAUD
+    expect(alertValue.is_high_fidelity).toBe(false);
   });
 
-  test('should calculate physics_score correctly for moderate variance', async () => {
+  test('should calculate physics_score and is_high_fidelity correctly for moderate variance', async () => {
     const msg = {
       payload: JSON.stringify({
-        event_type: 'PHYSICS_FRAUD',
+        event_type: 'EFFICIENCY_ALERT',
         variance_pct: 7.5
       })
     };
@@ -92,6 +93,7 @@ describe('L1 Physics Engine Alert Handling', () => {
 
     const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
     expect(alertValue.physics_score).toBe("0.5000"); // 1 - (7.5/15) = 0.5
+    expect(alertValue.is_high_fidelity).toBe(false);
   });
 
   test('should dispatch CAPACITY_VIOLATION alert to Kafka', async () => {
@@ -116,6 +118,7 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.event_type).toBe('CAPACITY_VIOLATION');
     expect(alertValue.severity).toBe('CRITICAL');
     expect(alertValue.current_soc).toBe(19.5);
+    expect(alertValue.physics_score).toBe("0.0000"); // Forced 0.0 for CAPACITY_VIOLATION
   });
 
   test('should dispatch CAPACITY_VIOLATION with VPP status', async () => {
@@ -322,6 +325,21 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.vin).toBe('TEXAS-BATT-001');
   });
 
+  test('should include is_high_fidelity in Kafka alert for high efficiency', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'EFFICIENCY_ALERT',
+        efficiency_pct: 99.0
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.is_high_fidelity).toBe(true);
+    expect(alertValue.physics_score).toBe("0.9900");
+  });
+
   test('should handle ERCOT capacity violation during scarcity event (LMP > 100)', async () => {
     const msg = {
       payload: JSON.stringify({
@@ -494,11 +512,37 @@ describe('L1 Physics Engine Reconciliation', () => {
     expect(alertValue.market_price_at_session).toBe(95.0);
     expect(alertValue.v2g_active).toBe(true);
     expect(alertValue.reconciled).toBe(true);
+    expect(alertValue.physics_score).toBe("0.0000"); // Forced 0.0 for PHYSICS_FRAUD
+    expect(alertValue.is_high_fidelity).toBe(false);
 
     // Verify DB Insertion during reconciliation
     expect(global.mockPgQuery).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO audit_log'),
-      expect.arrayContaining(['recon-session-1', 'PHYSICS_FRAUD', 'PJM', 95.0])
+      expect.arrayContaining(['recon-session-1', 'PHYSICS_FRAUD', 'PJM', 95.0, "0.0000", false])
+    );
+  });
+
+  test('should reconcile high-fidelity EFFICIENCY_ALERT with correct scoring', async () => {
+    const payload = {
+      session_id: 'recon-session-hf',
+      event_type: 'EFFICIENCY_ALERT',
+      efficiency_pct: 98.0,
+      iso_region: 'CAISO'
+    };
+
+    global.mockRedisRPop
+      .mockResolvedValueOnce(JSON.stringify(payload))
+      .mockResolvedValueOnce(null);
+
+    await physicsEngine.reconcileLogs();
+
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.physics_score).toBe("0.9800");
+    expect(alertValue.is_high_fidelity).toBe(true);
+
+    expect(global.mockPgQuery).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO audit_log'),
+      expect.arrayContaining(["0.9800", true])
     );
   });
 
