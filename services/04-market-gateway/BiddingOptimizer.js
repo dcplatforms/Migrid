@@ -82,19 +82,36 @@ class BiddingOptimizer {
 
   /**
    * Run optimization and generate FIX messages for Day-Ahead market.
+   * Returns a structured object with bids and audit metadata for L11 ML Engine.
    * @param {string} iso - The ISO name (e.g., 'CAISO')
-   * @returns {Promise<Array<string>>} List of FIX messages
+   * @returns {Promise<Object>} Object containing { bids, audit }
    */
   async generateDayAheadBids(iso) {
     // Verify the Physics & Grid signals: Check for safety locks before bidding
     const locks = await this.getSafetyLockStatus(iso);
 
+    // Audit context for L11 ML Engine readiness
+    let physicsScore = 1.0;
+    let capacityFidelity = 'STANDARD';
+    let auditContext = null;
+
+    try {
+      const lockContext = await this.redisClient.get('l1:safety:lock:context');
+      if (lockContext) {
+        auditContext = JSON.parse(lockContext);
+        if (auditContext.physics_score !== undefined) {
+          physicsScore = parseFloat(auditContext.physics_score);
+        }
+      }
+    } catch (err) {
+      console.warn('[BiddingOptimizer] Failed to fetch safety lock context for audit:', err.message);
+    }
+
     if (locks.l1 || locks.l4) {
       if (locks.l1) {
-        const lockContext = await this.redisClient.get('l1:safety:lock:context');
-        const details = lockContext ? JSON.parse(lockContext) : null;
+        const details = auditContext;
 
-        console.warn(`🚨 [L4 Market Gateway v3.6.0] Bidding halted: L1 safety lock is active for ${iso}`);
+        console.warn(`🚨 [L4 Market Gateway v3.7.0] Bidding halted: L1 safety lock is active for ${iso}`);
         if (details) {
           console.warn(`[L4 Safety Context] Reason: ${details.event_type}, Severity: ${details.severity}, Score: ${details.physics_score || 'N/A'}, Site: ${details.site_id || 'N/A'}, Region: ${details.iso_region || 'N/A'}, VPPActive: ${details.vpp_active}, V2GActive: ${details.v2g_active}`);
 
@@ -107,14 +124,44 @@ class BiddingOptimizer {
       if (locks.l4) {
         const regionalLockActive = await this.redisClient.get(`l4:grid:lock:${iso.toUpperCase().replace(/-/g, '')}`);
         const scope = (regionalLockActive === 'true' || regionalLockActive === '1') ? `Regional (${iso})` : 'Global';
-        console.warn(`⚠️ [L4 Market Gateway v3.6.0] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
+        console.warn(`⚠️ [L4 Market Gateway v3.7.0] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
       }
 
-      return [];
+      return { bids: [], audit: { physics_score: physicsScore, capacity_fidelity: 'STANDARD', audit_context: auditContext } };
     }
 
     const forecasts = await this.pricingService.getDayAheadForecast(iso);
-    const pVppKw = await this.getAggregatedCapacity(iso);
+
+    // Fetch capacity and determine fidelity
+    let pVppKw = new Decimal(0);
+    try {
+      const regionalCapacityRaw = await this.redisClient.get('vpp:capacity:regional');
+      if (regionalCapacityRaw) {
+        const regionalCapacity = JSON.parse(regionalCapacityRaw);
+        const isoKey = iso.toUpperCase().replace(/-/g, '');
+        const data = regionalCapacity[isoKey];
+
+        if (data !== undefined) {
+          if (typeof data === 'object' && data !== null) {
+            pVppKw = new Decimal(data.capacity || '0');
+            capacityFidelity = data.is_high_fidelity ? 'HIGH_FIDELITY' : 'STANDARD';
+          } else {
+            pVppKw = new Decimal(data || '0');
+          }
+        } else {
+          const capacity = await this.redisClient.get('vpp:capacity:available');
+          pVppKw = new Decimal(capacity || '0');
+        }
+      } else {
+        const capacity = await this.redisClient.get('vpp:capacity:available');
+        pVppKw = new Decimal(capacity || '0');
+      }
+    } catch (err) {
+      console.error(`[BiddingOptimizer] Failed to parse regional capacity for ${iso}:`, err.message);
+      const capacity = await this.redisClient.get('vpp:capacity:available');
+      pVppKw = new Decimal(capacity || '0');
+    }
+
     const pVppMw = pVppKw.dividedBy(1000);
 
     const degradationCostKwh = new Decimal(process.env.DEGRADATION_COST_KWH || '0.02');
@@ -141,7 +188,14 @@ class BiddingOptimizer {
       bids.push(fixMsg);
     }
 
-    return bids;
+    return {
+      bids,
+      audit: {
+        physics_score: physicsScore,
+        capacity_fidelity: capacityFidelity,
+        audit_context: auditContext
+      }
+    };
   }
 
   /**

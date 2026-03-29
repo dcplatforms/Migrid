@@ -1,52 +1,22 @@
-# L4 Market Gateway: Weekly Engineering Report (March 2026)
+# L4 Market Gateway: Weekly Product Update (March 2026)
+**Version:** 3.7.0
+**Status:** Operational - AI Readiness Phase
 
-## 📊 L4 Health & Dependency Report
+## 1. Cross-Layer Impact Analysis
+- **L1 (Physics Engine) [v10.1.0]:** Successfully integrated `l1:safety:lock:context` for high-fidelity auditing. All bids now carry a `physics_score` snapshot (0.0 to 1.0).
+- **L3 (VPP Aggregator) [v3.3.0]:** Aligned regional capacity ingestion with the new nested object format. L4 now distinguishes between `HIGH_FIDELITY` and `STANDARD` capacity when generating bids.
+- **L10 (Token Engine) [v4.2.0]:** Confirmed regional multiplier consistency; L4 bidding thresholds ($30/MWh buy, $100/MWh sell) remain aligned with L10 scarcity multipliers.
 
-**Service Version:** 3.6.0
-**Status:** Healthy ✅
-**Layer:** L4 (Market Gateway)
+## 2. Product Owner Strategy & Backlog Updates
+- **New Feature: Bidding Auditability (FIX-PROT-AUDIT):** L4 now persists granular audit metadata (physics score, capacity fidelity, safety reasons) into the `market_bids` table. This provides "Ground Truth" for L11 ML Engine training.
+- **Risk Assessment:** No new risks identified; regional locking successfully mitigates grid signal latency.
 
-### Cross-Layer Impact Analysis
-- **L1 (Physics Engine):** Confirmed high-fidelity safety lock context (v10.1.0) is correctly ingested by L4 for bidding halts. "Verify the Physics" remains the core invariant.
-- **L2 (Grid Signal):** OpenADR 3.0 signal normalization synchronized in L2 (v2.4.1) ensures regional grid locks are properly propagated to L4 using normalized 'ENTSOE' identifiers.
-- **L3 (VPP Aggregator):** Capacity aggregation synchronized in L3 (v3.3.0) now provides high-fidelity metadata. L4 BiddingOptimizer utilizes the new regional capacity object structure (capacity, is_high_fidelity).
-- **L9 (Commerce Engine):** L9 v5.1.0 dependency on L4 price feeds for automated billing and tariff calculation is satisfied via the proactively broadcasted market prices in L4 v3.6.0.
-- **L10 (Token Engine):** Standardized ISO naming (normalization of `ENTSOE`) ensures L10 dynamic multipliers correctly align with L4 market broadcasts.
-- **L11 (ML Engine):** L4 v3.6.0 introduces `fidelity_status` to price broadcasts, unblocking L11 high-fidelity data requirements for Phase 6.
-
----
-
-## 📋 Backlog Updates (Product Owner Strategy)
-
-| Priority | Task ID | Description | Status |
-|:---:|:---:|:---|:---:|
-| **P0** | **AI-HIGH-FIDELITY-SYNC** | Synchronize L4 broadcasts with L11 high-fidelity requirements (>0.95 physics score). | ✅ COMPLETED |
-| **P1** | **REGIONAL-NORM-SYNC** | Ensure cross-layer normalization for 'ENTSOE' across L2, L3, and L4. | ✅ COMPLETED |
-| **P2** | **BESS-Bidding-RL** | Research Reinforcement Learning models for BESS bidding optimization (Phase 6). | 📅 PLANNED |
-| **P3** | **FIX-PROT-AUDIT** | Implement FIX message auditing for CAISO/PJM Day-Ahead market submissions. | 📅 PLANNED |
-| **P4** | **AEMO-ADAPTER** | Research and draft adapter for Australian Energy Market Operator (Phase 7). | 📅 PLANNED |
+## 3. Engineering Execution
+- **Bumped Version to 3.7.0:** Updated across `package.json`, `index.js`, and health check.
+- **BiddingOptimizer.js Refactor:** `generateDayAheadBids` now returns `{ bids, audit }`.
+- **Database Migration 022:** Added `physics_score`, `capacity_fidelity`, and `audit_context` columns to `market_bids`.
+- **Persistence Layer:** Updated `/bids/submit` and `/bids/optimize` endpoints in `index.js` to handle and store audit metadata.
+- **Verification:** Unit tests updated and passing (11/11).
 
 ---
-
-## 🛠️ Engineering Execution
-
-### Key Modifications in v3.6.0:
-
-1. **AI High-Fidelity Readiness:**
-   - Enhanced `broadcastMarketPrice` in `index.js` to include `fidelity_status` ('HIGH_FIDELITY' vs 'STANDARD') based on the `physics_score` threshold of 0.95.
-   - This provides real-time feedback for L11 ML Engine training data quality.
-
-2. **Cross-Layer Normalization & Synchronization:**
-   - Hardened `ENTSOE` normalization across L2, L3, and L4 to ensure consistent regional grid locking and capacity management.
-   - Synchronized L2 to v2.4.1 and L3 to v3.3.0 to support these normalization and metadata requirements.
-
-3. **Enhanced Bidding Strategy:**
-   - Updated `BiddingOptimizer.js` to handle the new L3 regional capacity object structure, which now includes `is_high_fidelity` and `last_updated_at`.
-   - Implemented warning logs when bidding is attempted with non-high-fidelity capacity.
-
-4. **Safety & Security:**
-   - Maintained sub-50ms Redis scanning for regional grid locks.
-   - Enforced `Decimal.js` for all financial calculations (Profitability Index, Bid Totals).
-
----
-*“Single Source of Truth: Market Gateway v3.5.0 is now synchronized with the Migrid 11-layer stack.”*
+*Verified by Jules - Lead PO / Forward Engineer (L4)*

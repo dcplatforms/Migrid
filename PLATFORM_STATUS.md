@@ -798,7 +798,7 @@ done
 | **L1** | Physics Engine | `10.1.0` | ✅ Operational |
 | **L2** | Grid Signal | `2.4.1` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.0` | ✅ Operational |
-| **L4** | Market Gateway | `3.6.0` | ✅ Operational |
+| **L4** | Market Gateway | `3.7.0` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
 | **L6** | Engagement Engine | `5.5.0` | ✅ Operational |
 | **L7** | Device Gateway | `5.5.0` | ✅ Operational |
@@ -811,7 +811,7 @@ done
 
 ## Latest Release Wins (March 2026)
 
-- **L4 Market Gateway (v3.6.0)**: Activated **Nord Pool & ERCOT** adapters, **AI Fidelity Tracking**, and **Regional Grid Lock** observability.
+- **L4 Market Gateway (v3.7.0)**: Activated **Bidding Auditability** (FIX-PROT-AUDIT) for L11 ML Engine; implemented regional high-fidelity capacity tracking and safety lock context persistence.
 - **L6 Engagement Engine (v5.5.0)**: Deployed **Sustainability Champion**, **L11 Data Guardian**, and **Scarcity Savior**; regional challenges 100% complete.
 - **L7 Device Gateway (v5.5.0)**: Hardened **ISO 15118-20 Certificate Exchange** (85%), **EMAID** token handling, and native **OCPP 2.1 V2X** support.
 - **L10 Token Engine (v4.2.0)**: Deployed **Dynamic Multipliers** (1.5x Grid Surplus / 2.0x V2G Scarcity) and consolidated regional price updates.
