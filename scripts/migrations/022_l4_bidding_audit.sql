@@ -1,12 +1,13 @@
--- L4: Market Gateway Bidding Auditability
--- Supports L11 ML Engine Ground Truth data extraction
+-- MiGrid L4: Bidding Auditability
+-- Layer 4: Market Gateway
+-- Requirement: FIX-PROT-AUDIT (Auditability for FIX message bidding)
 
--- Add audit columns to market_bids table
-ALTER TABLE market_bids ADD COLUMN IF NOT EXISTS physics_score NUMERIC(4,3);
-ALTER TABLE market_bids ADD COLUMN IF NOT EXISTS capacity_fidelity VARCHAR(20);
-ALTER TABLE market_bids ADD COLUMN IF NOT EXISTS audit_context JSONB;
+ALTER TABLE market_bids
+ADD COLUMN IF NOT EXISTS physics_score DECIMAL(5,4),
+ADD COLUMN IF NOT EXISTS capacity_fidelity VARCHAR(20),
+ADD COLUMN IF NOT EXISTS audit_context JSONB;
 
--- Comment on columns for clarity
-COMMENT ON COLUMN market_bids.physics_score IS 'Snapshot of L1 Physics Score at the time of bidding (0.0 to 1.0)';
-COMMENT ON COLUMN market_bids.capacity_fidelity IS 'The fidelity status of the aggregated capacity (HIGH_FIDELITY or STANDARD)';
-COMMENT ON COLUMN market_bids.audit_context IS 'Raw safety lock and regional context metadata for post-bid auditing';
+-- Comment for engineering clarity
+COMMENT ON COLUMN market_bids.physics_score IS 'L1 Physics Engine confidence score at time of bid generation (0.0 - 1.0)';
+COMMENT ON COLUMN market_bids.capacity_fidelity IS 'Fidelity status of L3 aggregated capacity (HIGH_FIDELITY or STANDARD)';
+COMMENT ON COLUMN market_bids.audit_context IS 'Metadata containing L1 safety lock context and regional grid lock status at time of bid';

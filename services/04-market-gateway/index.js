@@ -1,5 +1,5 @@
 /**
- * L4: Market Gateway Service
+ * L4: Market Gateway Service (v3.7.0)
  * Wholesale energy market integration (CAISO, PJM, ERCOT)
  */
 
@@ -116,13 +116,20 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
     const profitabilityIndex = price.minus(degradationCostMwh);
 
     // AI Readiness: Include physics score from L1 safety context if available
+    // Phase 5 Enhancement: Match global safety lock to the current ISO region
     let physicsScore = 1.0;
     try {
       const lockContext = await redisClient.get('l1:safety:lock:context');
       if (lockContext) {
         const details = JSON.parse(lockContext);
-        if (details.physics_score !== undefined) {
-          physicsScore = parseFloat(details.physics_score);
+        const lockIso = details.iso_region ? details.iso_region.toUpperCase().replace(/-/g, '') : null;
+        const currentIso = iso.toUpperCase().replace(/-/g, '');
+
+        // If the lock is global or specifically for this ISO, use its score
+        if (!lockIso || lockIso === currentIso || lockIso === 'SYSTEM_WIDE') {
+          if (details.physics_score !== undefined) {
+            physicsScore = parseFloat(details.physics_score);
+          }
         }
       }
     } catch (err) {
@@ -339,14 +346,14 @@ app.post('/bids/optimize', authenticateToken, async (req, res) => {
 
     // In a real scenario, we would send these FIX messages to CAISO
     // For now, we'll return them and log them
-    console.log(`[Market Gateway] Generated ${bids.length} optimized bids for ${iso} (Fidelity: ${audit.capacity_fidelity})`);
+    console.log(`[Market Gateway] Generated ${bids.length} optimized bids for ${iso} (Physics Score: ${audit.physics_score})`);
 
     res.json({
       success: true,
       iso,
       bid_count: bids.length,
       bids: bids, // Returning FIX messages for verification
-      audit: audit // Audit metadata for L11/L9
+      audit: audit // FIX-PROT-AUDIT requirements
     });
   } catch (error) {
     console.error('[Market Gateway Optimization Error]', error);
@@ -357,10 +364,7 @@ app.post('/bids/optimize', authenticateToken, async (req, res) => {
 // Submit energy bid
 // Phase 5 Enhancement: Persist audit metadata for L11 ML Engine (FIX-PROT-AUDIT)
 app.post('/bids/submit', authenticateToken, async (req, res) => {
-  const {
-    iso, market_type, quantity_kw, price_per_mwh, delivery_hour,
-    physics_score, capacity_fidelity, audit_context
-  } = req.body;
+  const { iso, market_type, quantity_kw, price_per_mwh, delivery_hour, physics_score, capacity_fidelity, audit_context } = req.body;
 
   // Validate bid size
   if (quantity_kw < 100) {
@@ -374,7 +378,7 @@ app.post('/bids/submit', authenticateToken, async (req, res) => {
     const quantity_mwh = new Decimal(quantity_kw).dividedBy(1000);
     const total_value = quantity_mwh.times(price_per_mwh);
 
-    // Insert bid record with audit metadata
+    // Insert bid record with auditing columns (v3.7.0)
     const result = await pool.query(`
       INSERT INTO market_bids (
         iso, market_type, quantity_kw, price_per_mwh,
@@ -392,7 +396,7 @@ app.post('/bids/submit', authenticateToken, async (req, res) => {
       delivery_hour,
       physics_score || 1.0,
       capacity_fidelity || 'STANDARD',
-      audit_context ? JSON.stringify(audit_context) : null
+      JSON.stringify(audit_context || {})
     ]);
 
     res.json({
