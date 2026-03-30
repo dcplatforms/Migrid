@@ -177,11 +177,9 @@ describe('L2 Grid Signal Service', () => {
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
     expect(sentValue.physics_score).toBe(0.8500);
     expect(sentValue.fidelity_status).toBe('STANDARD');
-    expect(sentValue.physics_score).toBe('0.9850');
-    expect(sentValue.fidelity_status).toBe('HIGH_FIDELITY');
   });
 
-  test('POST /openadr/v3/events should preserve zero price per MWh (Nullish Coalescing L2 v2.4.1)', async () => {
+  test('POST /openadr/v3/events should preserve zero price per MWh (Nullish Coalescing L2 v2.4.2)', async () => {
     const mockMarketContext = {
       price_per_mwh: 0,
       profitability_index: 0
@@ -505,7 +503,7 @@ describe('L2 Grid Signal Service', () => {
     );
   });
 
-  test('startSafetyConsumer should cache market price updates with degradation cost and ISO Normalization (v2.4.1)', async () => {
+  test('startSafetyConsumer should cache market price updates with degradation cost and ISO Normalization (v2.4.2)', async () => {
     const { consumer, startSafetyConsumer } = require('./index');
     await startSafetyConsumer();
 
@@ -560,7 +558,7 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body.region).toBe('GLOBAL');
   });
 
-  test('POST /openadr/v3/events should reject when regional L4 grid lock is active (ISO Normalization L2 v2.4.1)', async () => {
+  test('POST /openadr/v3/events should reject when regional L4 grid lock is active (ISO Normalization L2 v2.4.2)', async () => {
     redisClient.get.mockImplementation((key) => {
       if (key === 'l4:grid:lock:ENTSOE') return Promise.resolve('1');
       return Promise.resolve(null);
@@ -697,5 +695,23 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body.status).toBe('READY_FOR_L11');
     expect(response.body.record_count).toBe(1);
     expect(response.body.data[0].event_id).toBe('evt-1');
+  });
+
+  test('POST /openadr/v3/events should normalize ISO region (e.g., ENTSO-E to ENTSOE)', async () => {
+    redisClient.get.mockResolvedValue(null);
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-iso-norm',
+        type: 'demand-response',
+        targets: [{ type: 'region', value: 'ENTSO-E' }]
+      });
+
+    expect(response.status).toBe(202);
+    const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
+    expect(sentValue.iso_region).toBe('ENTSOE');
+    expect(redisClient.get).toHaveBeenCalledWith('l4:grid:lock:ENTSOE');
   });
 });

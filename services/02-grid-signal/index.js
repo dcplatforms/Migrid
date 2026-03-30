@@ -157,7 +157,7 @@ app.get('/openadr/v3/reports', async (req, res) => {
         const values = await redisClient.mGet(result.keys);
         result.keys.forEach((key, index) => {
           const parts = key.split(':');
-          const iso = parts[1].toUpperCase();
+          const iso = parts[1].toUpperCase().replace(/-/g, '');
           const data = values[index] ? JSON.parse(values[index]) : null;
 
           if (!regionalDigitalTwin[iso]) {
@@ -374,10 +374,8 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
             market_price_at_session: event.metadata?.market_price_at_session ?? (marketMetadata.price_per_mwh ?? 0), // L2 v2.4.1: Nullish coalescing for 0-price preservation
             profitability_index: marketMetadata.profitability_index,
             degradation_cost_mwh: marketMetadata.degradation_cost_mwh,
-            physics_score: parseFloat(safetyContext.physics_score || '1.0000'),
-            fidelity_status: parseFloat(safetyContext.physics_score || '1.0000') > 0.95 ? 'HIGH_FIDELITY' : 'STANDARD',
-            physics_score: safetyContext.physics_score || '1.0000',
-            fidelity_status: (parseFloat(safetyContext.physics_score || 1.0) > 0.95) ? 'HIGH_FIDELITY' : 'STANDARD',
+            physics_score: physicsScore,
+            fidelity_status: fidelityStatus,
             metadata: event.metadata || {}, // L2 v2.4.1: Full metadata preservation (OpenADR 3.1.0)
             billing_mode: event.metadata?.billing_mode,
             intervals: event.intervals || [],
