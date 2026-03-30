@@ -290,10 +290,8 @@ const updateGlobalCapacity = async () => {
 
       totalCapacity += deratedCapacity;
 
-      // Update regional capacity map
-      regionalCapacity[normalizedRegion] = (normalizedRegion in regionalCapacity)
-        ? regionalCapacity[normalizedRegion] + deratedCapacity
-        : deratedCapacity;
+      // Normalize ISO naming to uppercase and hyphen-free for cross-layer consistency (L4/L10)
+      regionalCapacity[normalizedRegion] = (normalizedRegion in regionalCapacity) ? regionalCapacity[normalizedRegion] + deratedCapacity : deratedCapacity;
     });
 
     await redisClient.set('vpp:capacity:available', totalCapacity.toString());
