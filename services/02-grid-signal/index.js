@@ -365,6 +365,8 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
             market_price_at_session: event.metadata?.market_price_at_session ?? (marketMetadata.price_per_mwh ?? 0), // L2 v2.4.1: Nullish coalescing for 0-price preservation
             profitability_index: marketMetadata.profitability_index,
             degradation_cost_mwh: marketMetadata.degradation_cost_mwh,
+            physics_score: parseFloat(safetyContext.physics_score || '1.0000'),
+            fidelity_status: parseFloat(safetyContext.physics_score || '1.0000') > 0.95 ? 'HIGH_FIDELITY' : 'STANDARD',
             physics_score: safetyContext.physics_score || '1.0000',
             fidelity_status: (parseFloat(safetyContext.physics_score || 1.0) > 0.95) ? 'HIGH_FIDELITY' : 'STANDARD',
             metadata: event.metadata || {}, // L2 v2.4.1: Full metadata preservation (OpenADR 3.1.0)
