@@ -86,8 +86,12 @@ async function handlePhysicsAlert(msg) {
     physicsScore = Math.max(0, Math.min(1, 1 - (payload.variance_pct / 15.0)));
   } else if (payload.efficiency_pct !== undefined) {
     physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
+  } else if (payload.event_type === 'CAPACITY_VIOLATION' || payload.event_type === 'PHYSICS_FRAUD') {
+    physicsScore = 0.0;
   }
 
+  // L1-109 Enhancement: High-Fidelity Data Tracking for L11 ML Engine
+  // HIGH_FIDELITY if physics_score > 0.95 (Green Audit compliant)
   const isHighFidelity = physicsScore > 0.95;
 
   // Cross-Layer ISO Normalization (e.g., ENTSO-E -> ENTSOE)
@@ -224,16 +228,15 @@ async function reconcileLogs() {
       // Map severity correctly
       const severity = (payload.event_type === 'PHYSICS_FRAUD') ? 'FRAUD' : (payload.event_type === 'CAPACITY_VIOLATION' ? 'CRITICAL' : 'WARNING');
 
-      // L1-103 Enhancement: Confidence Score (Physics Score)
+      // Re-calculate physics score and fidelity for high-fidelity reconciliation
       let physicsScore = 1.0;
-      if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
-        physicsScore = 0.0;
-      } else if (payload.variance_pct !== undefined) {
+      if (payload.variance_pct !== undefined) {
         physicsScore = Math.max(0, Math.min(1, 1 - (payload.variance_pct / 15.0)));
       } else if (payload.efficiency_pct !== undefined) {
         physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
+      } else if (payload.event_type === 'CAPACITY_VIOLATION' || payload.event_type === 'PHYSICS_FRAUD') {
+        physicsScore = 0.0;
       }
-
       const isHighFidelity = physicsScore > 0.95;
 
       // Re-publish missed alerts to Kafka
@@ -249,6 +252,8 @@ async function reconcileLogs() {
         threshold: payload.threshold || (payload.event_type === 'EFFICIENCY_ALERT' ? 0.85 : (payload.event_type === 'CAPACITY_VIOLATION' ? 20.0 : null)),
         expected: payload.expected,
         actual: payload.actual,
+        physics_score: physicsScore.toFixed(4),
+        is_high_fidelity: isHighFidelity,
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
         physics_score: physicsScore.toFixed(4),

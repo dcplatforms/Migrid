@@ -1,18 +1,21 @@
--- MiGrid Physics Engine - v10.1.0 L11 ML Readiness Update
--- 022_physics_l11_readiness.sql
+-- Migration: 022_physics_l11_readiness.sql
+-- Description: Add physics_score and is_high_fidelity to audit_log for L11 ML Engine training.
 
--- 1. Add high-fidelity training columns to audit_log for L11 ML Engine Ground Truth
 ALTER TABLE audit_log
 ADD COLUMN IF NOT EXISTS physics_score NUMERIC(5,4),
 ADD COLUMN IF NOT EXISTS is_high_fidelity BOOLEAN DEFAULT FALSE;
 
--- 2. Create index on physics_score for high-fidelity data extraction (L11 training)
-CREATE INDEX IF NOT EXISTS idx_audit_log_physics_score ON audit_log (physics_score);
-CREATE INDEX IF NOT EXISTS idx_audit_log_high_fidelity ON audit_log (is_high_fidelity) WHERE is_high_fidelity = TRUE;
+-- Update existing records: sessions with <15% variance are considered high fidelity
+UPDATE audit_log
+SET physics_score = GREATEST(0, LEAST(1, 1 - (variance_pct / 15.0))),
+    is_high_fidelity = (1 - (variance_pct / 15.0) > 0.95)
+WHERE physics_score IS NULL AND variance_pct IS NOT NULL;
 
--- 3. Optimized GIN index for metadata enriched filtering (L11 ML Engine readiness)
-CREATE INDEX IF NOT EXISTS idx_audit_log_metadata_gin ON audit_log USING GIN (metadata);
+-- Default for others (where variance_pct might be missing but efficiency_pct exists)
+UPDATE audit_log
+SET physics_score = GREATEST(0, LEAST(1, actual_value / 100.0)),
+    is_high_fidelity = (actual_value / 100.0 > 0.95)
+WHERE physics_score IS NULL AND violation_type = 'EFFICIENCY_ALERT';
 
--- 4. Comment on table for data dictionary clarity
-COMMENT ON COLUMN audit_log.physics_score IS 'L1 Physics Engine confidence score (0.0 to 1.0). <15% variance mapping.';
-COMMENT ON COLUMN audit_log.is_high_fidelity IS 'TRUE if physics_score > 0.95, indicating gold-standard training data for L11.';
+-- Index for ML Engine data extraction
+CREATE INDEX IF NOT EXISTS idx_audit_log_fidelity ON audit_log (is_high_fidelity, physics_score);
