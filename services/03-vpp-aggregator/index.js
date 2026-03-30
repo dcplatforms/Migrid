@@ -289,7 +289,8 @@ const updateGlobalCapacity = async () => {
       const deratedCapacity = parseFloat(row.raw_capacity_kwh || 0) * physicsMultiplier;
 
       totalCapacity += deratedCapacity;
-      // [Fix] Correct variable usage for regional aggregation
+
+      // Normalize ISO naming to uppercase and hyphen-free for cross-layer consistency (L4/L10)
       regionalCapacity[normalizedRegion] = (normalizedRegion in regionalCapacity) ? regionalCapacity[normalizedRegion] + deratedCapacity : deratedCapacity;
     });
 
