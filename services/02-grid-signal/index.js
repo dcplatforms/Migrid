@@ -92,7 +92,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.4.1',
+    version: '2.4.2',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -146,6 +146,31 @@ app.get('/openadr/v3/reports', async (req, res) => {
     const safetyLock = await redisClient.get(SAFETY_LOCK_KEY);
     const safetyContextRaw = await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
     const safetyContext = safetyContextRaw ? JSON.parse(safetyContextRaw) : null;
+
+    // Phase 5 Enhancement: Aggregate Regional Digital Twin Statistics (from L1)
+    const regionalDigitalTwin = {};
+    let dtCursor = '0';
+    do {
+      const result = await redisClient.scan(dtCursor, { MATCH: 'l1:*:vehicle:*', COUNT: 100 });
+      dtCursor = result.cursor;
+      if (result.keys && result.keys.length > 0) {
+        const values = await redisClient.mGet(result.keys);
+        result.keys.forEach((key, index) => {
+          const parts = key.split(':');
+          const iso = parts[1].toUpperCase();
+          const data = values[index] ? JSON.parse(values[index]) : null;
+
+          if (!regionalDigitalTwin[iso]) {
+            regionalDigitalTwin[iso] = { vehicle_count: 0, high_fidelity_count: 0 };
+          }
+          regionalDigitalTwin[iso].vehicle_count++;
+          // High Fidelity check: based on physics_score or presence of metadata
+          if (data && data.physics_score > 0.95) {
+            regionalDigitalTwin[iso].high_fidelity_count++;
+          }
+        });
+      }
+    } while (dtCursor !== 0 && dtCursor !== '0');
 
     // Fetch grid lock status (provided by L4)
     const gridLock = await redisClient.get('l4:grid:lock');
@@ -215,6 +240,7 @@ app.get('/openadr/v3/reports', async (req, res) => {
         active: gridLock === '1' || gridLock === 'true',
         regional: regionalLocks
       },
+      digital_twin: regionalDigitalTwin,
       site_statuses: siteStatuses,
       timestamp: new Date().toISOString()
     });
@@ -340,6 +366,7 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
             profitability_index: marketMetadata.profitability_index,
             degradation_cost_mwh: marketMetadata.degradation_cost_mwh,
             physics_score: safetyContext.physics_score || '1.0000',
+            fidelity_status: (parseFloat(safetyContext.physics_score || 1.0) > 0.95) ? 'HIGH_FIDELITY' : 'STANDARD',
             metadata: event.metadata || {}, // L2 v2.4.1: Full metadata preservation (OpenADR 3.1.0)
             billing_mode: event.metadata?.billing_mode,
             intervals: event.intervals || [],
