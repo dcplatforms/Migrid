@@ -62,7 +62,9 @@ async function exportPhysicsData() {
         iso_region,
         market_price_at_session,
         vpp_active,
-        v2g_active
+        v2g_active,
+        physics_score,
+        is_high_fidelity
       FROM audit_log
       WHERE created_at > NOW() - INTERVAL '${DAYS_TO_EXPORT} days'
       ORDER BY created_at DESC;
