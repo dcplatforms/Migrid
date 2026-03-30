@@ -22,8 +22,8 @@
 |:---:|:---:|:---|:---:|
 | **P0** | **AI-HIGH-FIDELITY-SYNC** | Synchronize L4 broadcasts with L11 high-fidelity requirements (>0.95 physics score). | ✅ COMPLETED |
 | **P1** | **REGIONAL-NORM-SYNC** | Ensure cross-layer normalization for 'ENTSOE' across L2, L3, and L4. | ✅ COMPLETED |
-| **P2** | **BESS-Bidding-RL** | Research Reinforcement Learning models for BESS bidding optimization (Phase 6). | 📅 PLANNED |
-| **P3** | **FIX-PROT-AUDIT** | Implement FIX message auditing for CAISO/PJM Day-Ahead market submissions. | ✅ COMPLETED |
+| **P2** | **FIX-PROT-AUDIT** | Implement FIX message auditing for CAISO/PJM Day-Ahead market submissions. | ✅ COMPLETED |
+| **P3** | **BESS-Bidding-RL** | Research Reinforcement Learning models for BESS bidding optimization (Phase 6). | 📅 PLANNED |
 | **P4** | **AEMO-ADAPTER** | Research and draft adapter for Australian Energy Market Operator (Phase 7). | 📅 PLANNED |
 
 ---
@@ -32,17 +32,17 @@
 
 ### Key Modifications in v3.7.0:
 
-1. **Bidding Auditability & ML Readiness (FIX-PROT-AUDIT):**
-   - Implemented `022_l4_bidding_audit.sql` to add high-fidelity audit columns (`physics_score`, `capacity_fidelity`, `audit_context`) to the `market_bids` table.
-   - Updated `BiddingOptimizer.js` and `index.js` to persist the physical context of every bid, providing "Ground Truth" data for L11 ML Engine training.
+1. **Bidding Auditability (FIX-PROT-AUDIT):**
+   - Implemented `022_l4_bidding_audit.sql` to add `physics_score`, `capacity_fidelity`, and `audit_context` to the `market_bids` table.
+   - Updated `BiddingOptimizer.js` and `index.js` to capture and store these audit trails during bid generation and submission.
+   - This ensures full traceability of "Proof of Physics" for every wholesale market action.
 
-2. **AI High-Fidelity Readiness:**
-   - Enhanced `broadcastMarketPrice` in `index.js` to include `fidelity_status` ('HIGH_FIDELITY' vs 'STANDARD') based on the `physics_score` threshold of 0.95.
-   - This provides real-time feedback for L11 ML Engine training data quality.
+2. **Refined Regional Physics Ingestion:**
+   - Enhanced `broadcastMarketPrice` in `index.js` to selectively ingest regional physics scores from the global safety lock context if the region matches.
+   - This improves the precision of `fidelity_status` reporting for L11 ML Engine training pipelines.
 
-3. **Enhanced Bidding Strategy:**
-   - Updated `BiddingOptimizer.js` to handle the new L3 regional capacity object structure, which now includes `is_high_fidelity` and `last_updated_at`.
-   - Implemented structured audit returns to ensure transparency in bid generation.
+3. **AI High-Fidelity Readiness:**
+   - L4 v3.7.0 now explicitly links bidding authorization to high-fidelity capacity checks (>0.95 physics score) in the `BiddingOptimizer`.
 
 4. **Safety & Security:**
    - Maintained sub-50ms Redis scanning for regional grid locks.

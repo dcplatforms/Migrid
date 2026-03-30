@@ -42,7 +42,10 @@ describe('BiddingOptimizer', () => {
     expect(bids).toHaveLength(1);
     const fixMsg = bids[0];
 
+    // FIX-PROT-AUDIT: Check audit metadata
+    expect(audit.physics_score).toBe(1.0);
     expect(audit.capacity_fidelity).toBe('STANDARD');
+
     // FIX tag 38 is OrderQty
     expect(fixMsg).toContain('38=0.00');
     // FIX tag 44 is Price, should be degradation cost ($20.00/MWh)
@@ -60,7 +63,7 @@ describe('BiddingOptimizer', () => {
       { location: 'SLAP_PGP2-APND', price_per_mwh: highLmp, timestamp: new Date() }
     ]);
 
-    const { bids, audit } = await optimizer.generateDayAheadBids('CAISO');
+    const { bids } = await optimizer.generateDayAheadBids('CAISO');
 
     expect(bids).toHaveLength(1);
     const fixMsg = bids[0];
@@ -85,7 +88,7 @@ describe('BiddingOptimizer', () => {
     ];
     mockPricingService.getDayAheadForecast.mockResolvedValue(forecast);
 
-    const { bids, audit } = await optimizer.generateDayAheadBids('CAISO');
+    const { bids } = await optimizer.generateDayAheadBids('CAISO');
 
     expect(bids).toHaveLength(2);
     expect(bids[0]).toContain('38=0.00');
@@ -105,7 +108,7 @@ describe('BiddingOptimizer', () => {
     ];
     mockPricingService.getDayAheadForecast.mockResolvedValue(forecasts);
 
-    const { bids, audit } = await optimizer.generateDayAheadBids('CAISO');
+    const { bids } = await optimizer.generateDayAheadBids('CAISO');
 
     expect(bids).toHaveLength(0);
     expect(audit.capacity_fidelity).toBe('HALTED');
@@ -188,9 +191,9 @@ describe('BiddingOptimizer', () => {
       { location: 'LOC1', price_per_mwh: 60.00, timestamp: new Date() }
     ]);
 
-    const result = await optimizer.generateDayAheadBids('CAISO');
-    expect(result.bids[0]).toContain('38=0.50'); // Should bid
-    expect(result.bids[0]).toContain('44=50.00');
+    const { bids: activeBids } = await optimizer.generateDayAheadBids('CAISO');
+    expect(activeBids[0]).toContain('38=0.50'); // Should bid
+    expect(activeBids[0]).toContain('44=50.00');
   });
 
   test('should return no bids when L4 grid lock is active', async () => {
@@ -206,7 +209,7 @@ describe('BiddingOptimizer', () => {
     ];
     mockPricingService.getDayAheadForecast.mockResolvedValue(forecasts);
 
-    const { bids, audit } = await optimizer.generateDayAheadBids('CAISO');
+    const { bids } = await optimizer.generateDayAheadBids('CAISO');
 
     expect(bids).toHaveLength(0);
     expect(audit.capacity_fidelity).toBe('HALTED');
@@ -228,18 +231,19 @@ describe('BiddingOptimizer', () => {
     ];
     mockPricingService.getDayAheadForecast.mockResolvedValue(forecasts);
 
-    const ercotResult = await optimizer.generateDayAheadBids('ERCOT');
-    expect(ercotResult.bids).toHaveLength(0);
+    const { bids } = await optimizer.generateDayAheadBids('ERCOT');
+
+    expect(bids).toHaveLength(0);
     expect(mockRedisClient.get).toHaveBeenCalledWith('l4:grid:lock:ERCOT');
 
     // Test hyphenated ISO normalization
-    const entsoeResult = await optimizer.generateDayAheadBids('ENTSO-E');
-    expect(entsoeResult.bids).toHaveLength(0);
+    const { bids: entsoeBids } = await optimizer.generateDayAheadBids('ENTSO-E');
+    expect(entsoeBids).toHaveLength(0);
     expect(mockRedisClient.get).toHaveBeenCalledWith('l4:grid:lock:ENTSOE');
 
     // Should NOT be locked for CAISO if only ERCOT and ENTSOE are locked
-    const caisoResult = await optimizer.generateDayAheadBids('CAISO');
-    expect(caisoResult.bids).toHaveLength(1);
+    const { bids: caisoBids } = await optimizer.generateDayAheadBids('CAISO');
+    expect(caisoBids).toHaveLength(1);
   });
 
   test('should prioritize regional capacity from Redis when available', async () => {
@@ -260,19 +264,18 @@ describe('BiddingOptimizer', () => {
     ]);
 
     // Test ERCOT specific capacity
-    const ercotResult = await optimizer.generateDayAheadBids('ERCOT');
-    expect(ercotResult.bids[0]).toContain('38=1.20');
-    expect(ercotResult.audit.capacity_fidelity).toBe('HIGH_FIDELITY');
+    const { bids: ercotBids, audit: ercotAudit } = await optimizer.generateDayAheadBids('ERCOT');
+    expect(ercotBids[0]).toContain('38=1.20');
+    expect(ercotAudit.capacity_fidelity).toBe('HIGH_FIDELITY');
 
     // Test CAISO specific capacity
-    const caisoResult = await optimizer.generateDayAheadBids('CAISO');
-    expect(caisoResult.bids[0]).toContain('38=0.80');
-    expect(caisoResult.audit.capacity_fidelity).toBe('STANDARD');
+    const { bids: caisoBids, audit: caisoAudit } = await optimizer.generateDayAheadBids('CAISO');
+    expect(caisoBids[0]).toContain('38=0.80');
+    expect(caisoAudit.capacity_fidelity).toBe('STANDARD');
 
     // Test PJM (not in regional data) should fall back to global
-    const pjmResult = await optimizer.generateDayAheadBids('PJM');
-    expect(pjmResult.bids[0]).toContain('38=0.50');
-    expect(pjmResult.audit.capacity_fidelity).toBe('STANDARD');
+    const { bids: pjmBids } = await optimizer.generateDayAheadBids('PJM');
+    expect(pjmBids[0]).toContain('38=0.50');
   });
 
   test('should fall back to global capacity if regional data is malformed', async () => {
@@ -289,7 +292,7 @@ describe('BiddingOptimizer', () => {
 
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
-    const { bids, audit } = await optimizer.generateDayAheadBids('CAISO');
+    const { bids } = await optimizer.generateDayAheadBids('CAISO');
     expect(bids[0]).toContain('38=0.50');
     expect(audit.capacity_fidelity).toBe('STANDARD');
     expect(consoleSpy).toHaveBeenCalledWith(

@@ -78,6 +78,7 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.severity).toBe('FRAUD');
     expect(alertValue.variance_pct).toBe(18.5);
     expect(alertValue.physics_score).toBe("0.0000"); // 1 - (18.5/15) = -0.23 -> clamp to 0
+    expect(alertValue.is_high_fidelity).toBe(false);
   });
 
   test('should calculate physics_score correctly for moderate variance', async () => {
@@ -176,6 +177,7 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"site_id":"SITE-001"'));
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"billing_mode":"FLEET"'));
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"physics_score":"0.0000"'));
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"is_high_fidelity":false'));
   });
 
   test('should set safety lock and context in Redis for CAPACITY_VIOLATION', async () => {
@@ -346,6 +348,21 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.market_price_at_session).toBe(120.0);
     expect(alertValue.severity).toBe('CRITICAL');
   });
+
+  test('should flag high-fidelity charging session (variance < 0.75%)', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'EFFICIENCY_ALERT',
+        variance_pct: 0.5
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.physics_score).toBe("0.9667"); // 1 - (0.5/15) = 0.96666...
+    expect(alertValue.is_high_fidelity).toBe(true);
+  });
 });
 
 describe('L1 Physics Engine Digital Twin Sync', () => {
@@ -472,7 +489,7 @@ describe('L1 Physics Engine Reconciliation', () => {
     const payload = {
       session_id: 'recon-session-1',
       event_type: 'PHYSICS_FRAUD',
-      efficiency_pct: 0.70,
+      efficiency_pct: 70.0,
       billing_mode: 'FLEET',
       vpp_active: true,
       v2g_active: true,
@@ -494,11 +511,13 @@ describe('L1 Physics Engine Reconciliation', () => {
     expect(alertValue.market_price_at_session).toBe(95.0);
     expect(alertValue.v2g_active).toBe(true);
     expect(alertValue.reconciled).toBe(true);
+    expect(alertValue.physics_score).toBe("0.7000");
+    expect(alertValue.is_high_fidelity).toBe(false);
 
     // Verify DB Insertion during reconciliation
     expect(global.mockPgQuery).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO audit_log'),
-      expect.arrayContaining(['recon-session-1', 'PHYSICS_FRAUD', 'PJM', 95.0])
+      expect.arrayContaining(['recon-session-1', 'PHYSICS_FRAUD', 'PJM', 95.0, '0.7000', false])
     );
   });
 
