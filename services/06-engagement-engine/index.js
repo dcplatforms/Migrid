@@ -119,7 +119,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.5.0', // Weekly Product Update: Scarcity Savior & AI Readiness
+    version: '5.6.0', // Weekly Product Update: Market Synchronizer & Proof of Physics
     status: 'healthy',
     layer: 'L6'
   });
@@ -311,6 +311,7 @@ async function processChargingEvent(event) {
 
   // Get regional context (ISO) for the driver
   const driverData = await pool.query('SELECT f.iso FROM drivers d JOIN fleets f ON d.fleet_id = f.id WHERE d.id = $1', [driverId]);
+  // L10/L4 Standard: ISO normalization (uppercase, no hyphens) for Redis lookups
   const iso = (driverData.rows[0]?.iso || 'CAISO').toUpperCase().replace(/-/g, '');
 
   // Verify Physics Integrity before awarding points
@@ -349,8 +350,10 @@ async function processChargingEvent(event) {
       await checkFirstSessionAchievement(driverId);
       await updateStreaks(driverId);
       await checkSustainabilityChampion(driverId);
+
       // Market Master is awarded only on session completion to ensure it's session-based
       await checkMarketMasterAchievement(driverId, iso, sessionId);
+      await checkMarketSynchronizerAchievement(driverId, iso, sessionId);
 
       // Phase 6 AI Readiness: Check for ML Contributor (High-fidelity data)
       if (isLowVariance) {
@@ -365,14 +368,18 @@ async function processChargingEvent(event) {
     // Award Green Driver Score points (Example: 10 points per kWh if valid)
     if (event.energyDispensedKwh) {
       let pointsMultiplier = 1.0;
+      let isSurplus = false;
+      let isScarcity = false;
       try {
         const profitabilityStr = await redisClient.hGet('market:profitability', iso);
         const profitability = parseFloat(profitabilityStr || '0');
         if (profitability > 100) {
           pointsMultiplier = 2.0;
+          isScarcity = true;
           console.log(`[L6] High Scarcity Bonus applied for ${iso}: 2.0x multiplier (L10 Scarcity Alignment).`);
-        } else if (profitability > 30) {
+        } else if (profitability < 30 && profitability !== 0) {
           pointsMultiplier = 1.5;
+          isSurplus = true;
           console.log(`[L6] Grid Alignment Bonus applied for ${iso}: 1.5x multiplier (L10 Surplus Alignment).`);
         }
       } catch (err) {
@@ -381,6 +388,11 @@ async function processChargingEvent(event) {
 
       const points = Math.floor(parseFloat(event.energyDispensedKwh) * 10 * pointsMultiplier);
       await updateLeaderboardPoints(driverId, points);
+
+      if (isSurplus && isFinal) {
+        await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
+          [driverId, 'surplus_charge', JSON.stringify({ iso, sessionId, physicsScore, isHighFidelity })]);
+      }
 
       // Notify of points earned
       const notification = {
@@ -396,7 +408,7 @@ async function processChargingEvent(event) {
         }
       };
 
-      // Notify L10 Token Engine for points fulfillment
+      // Notify L10 Token Engine for points fulfillment (Proof of Physics included)
       await producer.send({
         topic: 'driver_actions',
         messages: [{
@@ -405,7 +417,9 @@ async function processChargingEvent(event) {
             action_type: 'green_charging',
             source_value: parseFloat(event.energyDispensedKwh),
             event_id: sessionId,
-            iso: iso
+            iso: iso,
+            physics_score: physicsScore,
+            is_high_fidelity: isHighFidelity
           })
         }]
       });
@@ -418,19 +432,23 @@ async function processChargingEvent(event) {
       // WebSocket Real-time Push
       io.to(`driver:${driverId}`).emit('notification', notification);
 
-      // Emit to driver_actions for L10 Token Engine (Proof of Physics)
-      await producer.send({
-        topic: 'driver_actions',
-        messages: [{
-          value: JSON.stringify({
-            driver_id: driverId,
-            action_type: 'session_completed',
-            source_value: parseFloat(event.energyDispensedKwh),
-            event_id: sessionId,
-            iso: iso
-          })
-        }]
-      });
+      // Emit session completion to driver_actions for L10 Token Engine (Proof of Physics)
+      if (isFinal) {
+        await producer.send({
+          topic: 'driver_actions',
+          messages: [{
+            value: JSON.stringify({
+              driver_id: driverId,
+              action_type: 'session_completed',
+              source_value: parseFloat(event.energyDispensedKwh),
+              event_id: sessionId,
+              iso: iso,
+              physics_score: physicsScore,
+              is_high_fidelity: isHighFidelity
+            })
+          }]
+        });
+      }
     }
   }
 
@@ -458,7 +476,7 @@ async function processChargingEvent(event) {
     // Award local points
     await updateLeaderboardPoints(driverId, points);
 
-    // Notify L10 Token Engine for V2G fulfillment
+    // Notify L10 Token Engine for V2G fulfillment (Proof of Physics included)
     await producer.send({
       topic: 'driver_actions',
       messages: [{
@@ -467,12 +485,14 @@ async function processChargingEvent(event) {
           action_type: 'v2g_discharge',
           source_value: energyDischargedKwh,
           event_id: sessionId,
-          iso: iso
+          iso: iso,
+          physics_score: 1.0, // V2G events default to high score unless flagged
+          is_high_fidelity: true
         })
       }]
     });
 
-    await checkV2GAchievements(driverId, iso);
+    await checkV2GAchievements(driverId, iso, sessionId);
     await updateChallengeProgress(driverId, 'v2g_participation');
     await updateChallengeProgress(driverId, 'vpp_participation');
 
@@ -491,8 +511,7 @@ async function processChargingEvent(event) {
 
 async function checkMarketMasterAchievement(driverId, iso, sessionId) {
   try {
-    const normalizedIso = iso.toUpperCase().replace(/-/g, '');
-    const profitabilityStr = await redisClient.hGet('market:profitability', normalizedIso);
+    const profitabilityStr = await redisClient.hGet('market:profitability', iso);
     const profitability = parseFloat(profitabilityStr || '0');
 
     // High Profitability Threshold: $100/MWh (Matching L10 Scarcity Boost)
@@ -516,6 +535,32 @@ async function checkMarketMasterAchievement(driverId, iso, sessionId) {
     }
   } catch (error) {
     console.error('[Engagement] Error checking Market Master achievement:', error);
+  }
+}
+
+async function checkMarketSynchronizerAchievement(driverId, iso, sessionId) {
+  try {
+    const profitabilityStr = await redisClient.hGet('market:profitability', iso);
+    const profitability = parseFloat(profitabilityStr || '0');
+
+    // Surplus Threshold: < $30/MWh
+    if (profitability < 30 && profitability !== 0) {
+      console.log(`[L6] Market surplus charging detected in ${iso} ($${profitability}/MWh) for session ${sessionId}.`);
+
+      const count = await pool.query(`
+        SELECT COUNT(*) FROM driver_actions
+        WHERE driver_id = $1 AND action_type = 'surplus_charge'
+      `, [driverId]);
+
+      if (parseInt(count.rows[0].count) >= 5) {
+        const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Market Synchronizer'");
+        if (achievement.rows.length > 0) {
+          await awardAchievement(driverId, achievement.rows[0].id);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking Market Synchronizer achievement:', error);
   }
 }
 
@@ -909,27 +954,10 @@ async function updateStreaks(driver_id) {
   }
 }
 
-async function checkScarcitySaviorAchievement(driverId, iso) {
-  try {
-    const profitabilityStr = await redisClient.hGet('market:profitability', iso);
-    const profitability = parseFloat(profitabilityStr || '0');
-
-    if (profitability > 100) {
-      console.log(`[L6] High scarcity V2G discharge detected in ${iso} ($${profitability}/MWh).`);
-      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Scarcity Savior'");
-      if (achievement.rows.length > 0) {
-        await awardAchievement(driverId, achievement.rows[0].id);
-      }
-    }
-  } catch (error) {
-    console.error('[Engagement] Error checking Scarcity Savior achievement:', error);
-  }
-}
-
-async function checkV2GAchievements(driver_id, iso) {
+async function checkV2GAchievements(driver_id, iso, sessionId) {
   try {
     // Scarcity Savior check
-    if (iso) await checkScarcitySaviorAchievement(driver_id, iso);
+    if (iso) await checkScarcitySaviorAchievement(driver_id, iso, sessionId);
 
     // 1. Grid Guardian (1 participation)
     const ggAchievement = await pool.query('SELECT id FROM achievements WHERE name = \'Grid Guardian\'');
