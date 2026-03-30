@@ -65,8 +65,8 @@ describe('BiddingOptimizer', () => {
 
     const { bids } = await optimizer.generateDayAheadBids('CAISO');
 
-    expect(bids).toHaveLength(1);
-    const fixMsg = bids[0];
+    expect(activeBids).toHaveLength(1);
+    const fixMsg = activeBids[0];
 
     expect(audit.capacity_fidelity).toBe('STANDARD');
     // 500 kW = 0.50 MW
@@ -233,7 +233,7 @@ describe('BiddingOptimizer', () => {
 
     const { bids } = await optimizer.generateDayAheadBids('ERCOT');
 
-    expect(bids).toHaveLength(0);
+    expect(ercotBids).toHaveLength(0);
     expect(mockRedisClient.get).toHaveBeenCalledWith('l4:grid:lock:ERCOT');
 
     // Test hyphenated ISO normalization

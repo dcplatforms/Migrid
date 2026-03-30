@@ -362,6 +362,7 @@ app.post('/bids/optimize', authenticateToken, async (req, res) => {
 });
 
 // Submit energy bid
+// Phase 5 Enhancement: Persist audit metadata for L11 ML Engine (FIX-PROT-AUDIT)
 app.post('/bids/submit', authenticateToken, async (req, res) => {
   const { iso, market_type, quantity_kw, price_per_mwh, delivery_hour, physics_score, capacity_fidelity, audit_context } = req.body;
 

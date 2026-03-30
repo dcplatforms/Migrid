@@ -91,6 +91,7 @@ class BiddingOptimizer {
 
   /**
    * Run optimization and generate FIX messages for Day-Ahead market.
+   * Returns a structured object with bids and audit metadata for L11 ML Engine.
    * @param {string} iso - The ISO name (e.g., 'CAISO')
    * @returns {Promise<Object>} Object containing bids and audit metadata
    */
@@ -101,6 +102,23 @@ class BiddingOptimizer {
       locks,
       timestamp: new Date().toISOString()
     };
+
+    // Audit context for L11 ML Engine readiness
+    let physicsScore = 1.0;
+    let capacityFidelity = 'STANDARD';
+    let auditContext = null;
+
+    try {
+      const lockContext = await this.redisClient.get('l1:safety:lock:context');
+      if (lockContext) {
+        auditContext = JSON.parse(lockContext);
+        if (auditContext.physics_score !== undefined) {
+          physicsScore = parseFloat(auditContext.physics_score);
+        }
+      }
+    } catch (err) {
+      console.warn('[BiddingOptimizer] Failed to fetch safety lock context for audit:', err.message);
+    }
 
     if (locks.l1 || locks.l4) {
       if (locks.l1) {

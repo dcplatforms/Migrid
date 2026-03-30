@@ -54,8 +54,8 @@
 - [✓] **Physics-Aware Reporting**: Integration of `physics_score` and `is_high_fidelity` for L11.
 - [~] **BESS Integration**: Support for stationary storage assets (75%).
 
-### Layer 4: Market Gateway (v3.6.0)
-- [✓] **AI Fidelity Tracking**: High-precision numeric ingestion for L11 training.
+### Layer 4: Market Gateway (v3.7.0)
+- [✓] **Bidding Auditability**: High-fidelity audit context (physics_score, capacity_fidelity) for all bids.
 - [✓] **Regional Grid Lock**: Improved observability and specific ISO lock logging.
 - [✓] **ERCOT & Nord Pool**: Full activation of Texas and Nordic market adapters.
 
