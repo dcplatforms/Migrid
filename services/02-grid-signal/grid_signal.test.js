@@ -600,6 +600,25 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body.site_id).toBe('SITE-456');
   });
 
+  test('GET /openadr/v3/reports should return cached regional stats (v2.4.2)', async () => {
+    const mockStats = {
+      CAISO: { vehicle_count: 1, high_fidelity_count: 1 },
+      ERCOT: { vehicle_count: 1, high_fidelity_count: 0 }
+    };
+
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l2:regional:stats') return Promise.resolve(JSON.stringify(mockStats));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app).get('/openadr/v3/reports');
+    expect(response.status).toBe(200);
+    expect(response.body.regional_stats.CAISO.vehicle_count).toBe(1);
+    expect(response.body.regional_stats.CAISO.high_fidelity_count).toBe(1);
+    expect(response.body.regional_stats.ERCOT.vehicle_count).toBe(1);
+    expect(response.body.regional_stats.ERCOT.high_fidelity_count).toBe(0);
+  });
+
   test('GET /openadr/v3/reports should return L8 site statuses (Optimized with SMEMBERS)', async () => {
     redisClient.scan.mockImplementation((cursor, options) => {
       if (options.MATCH === 'l8:site:status:*') {

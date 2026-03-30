@@ -261,8 +261,8 @@ Sell: LMP > $100/MWh (grid services revenue)
 High-velocity engineering updates across the stack:
 
 - [✓] **L10 Token Engine (v4.2.0)**: Deployed **Dynamic Multipliers** (1.5x Grid Surplus / 2.0x V2G Scarcity) and consolidated regional price updates.
-- [✓] **L2 Grid Signal (v2.4.1)**: Hardened **Regional Market Context** tracking and AI Data Readiness for historical event export.
-- [✓] **L1 Physics Engine (v10.1.0)**: Finalized **High-Fidelity Reconciliation** preserving regional metadata and contextual safety locks.
+- [✓] **L2 Grid Signal (v2.4.2)**: Hardened **Regional Market Context** tracking and deployed **High-Fidelity Regional Stats** for AI Data Readiness.
+- [✓] **L1 Physics Engine (v10.1.0)**: Finalized **High-Fidelity Reconciliation** and integrated **physics_score** into digital twin Redis sync.
 - [✓] **L3 VPP Aggregator (v3.3.0)**: Implemented **ISO Normalization** and **High-Fidelity Tracking** to unblock L11 ML Engine training.
 - [✓] **L4 Market Gateway (v3.7.0)**: Activated **Nord Pool & ERCOT** adapters, **Bidding Auditability** (FIX-PROT-AUDIT), and **Regional Grid Lock** scanning.
 - [✓] **L6 Engagement Engine (v5.3.2)**: Deployed **ENTSO-E Pioneer** and **Sustainability Refinement**; regional challenges reached 90% completion.
@@ -790,7 +790,7 @@ done
 | Layer | Service | Version | Status |
 | :--- | :--- | :--- | :--- |
 | **L1** | Physics Engine | `10.1.0` | ✅ Operational |
-| **L2** | Grid Signal | `2.4.1` | ✅ Operational |
+| **L2** | Grid Signal | `2.4.2` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.0` | ✅ Operational |
 | **L4** | Market Gateway | `3.7.0` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |

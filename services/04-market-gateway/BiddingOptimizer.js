@@ -120,6 +120,17 @@ class BiddingOptimizer {
       console.warn('[BiddingOptimizer] Failed to fetch safety lock context for audit:', err.message);
     }
 
+    // AI Readiness: Capture physics score and fidelity status
+    let physicsScore = 1.0;
+    let capacityFidelity = 'STANDARD';
+    const lockContextRaw = await this.redisClient.get('l1:safety:lock:context');
+    const lockContext = lockContextRaw ? JSON.parse(lockContextRaw) : null;
+
+    if (lockContext && lockContext.physics_score !== undefined) {
+      physicsScore = parseFloat(lockContext.physics_score);
+      capacityFidelity = physicsScore > 0.95 ? 'HIGH_FIDELITY' : 'STANDARD';
+    }
+
     if (locks.l1 || locks.l4) {
       if (locks.l1) {
         const lockContext = await this.redisClient.get('l1:safety:lock:context');

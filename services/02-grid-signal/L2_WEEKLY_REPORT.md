@@ -24,8 +24,8 @@
   - **Metadata Hardening:** Ensured full preservation of OpenADR 3.1.0 metadata fields in downstream broadcasts.
 
 * **Safety Invariants Checked:**
-  - **L1 Variance Rule:** Dispatch is strictly rejected if the 15% variance threshold is breached.
-  - **Fuse Rule 2.0:** All V2G requests respect the 20% SoC hard floor enforced by L1/L3.
+  - **L1 Variance Rule:** Dispatch is strictly rejected if the 15% variance threshold is breached, verified by L1 safety lock integration.
+  - **The Fuse Rule:** All V2G requests respect the 20% SoC hard floor enforced by L1/L3.
   - **Zero-Trust:** JWT authentication and Ajv schema validation enforced on all ingress endpoints.
 
 * **Action Items / PRs:**
