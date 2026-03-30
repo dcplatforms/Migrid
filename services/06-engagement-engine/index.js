@@ -119,6 +119,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
+    version: '5.6.0', // Weekly Product Update: L10 Proof-of-Physics & Scarcity Savior Refinement
     version: '5.6.0', // Weekly Product Update: Physics Sentinel & L10 Sync
     status: 'healthy',
     layer: 'L6'
@@ -366,14 +367,28 @@ async function processChargingEvent(event) {
     // Award Green Driver Score points (Example: 10 points per kWh if valid)
     if (event.energyDispensedKwh) {
       let pointsMultiplier = 1.0;
+      let multiplierReason = 'Standard Charging';
       try {
         const profitabilityStr = await redisClient.hGet('market:profitability', iso);
         const profitability = parseFloat(profitabilityStr || '0');
         if (profitability > 100) {
-          pointsMultiplier = 2.0;
-          console.log(`[L6] High Scarcity Bonus applied for ${iso}: 2.0x multiplier (L10 Scarcity Alignment).`);
-        } else if (profitability > 30) {
+          // L10 Scarcity Alignment: LMP > $100/MWh
+          // Only reward charging during high scarcity if explicitly part of a VPP/Grid Response event
+          const isGridResponse = event.isVPPEvent || event.is_vpp_event;
+          if (isGridResponse) {
+            pointsMultiplier = 2.0;
+            multiplierReason = 'High Scarcity VPP Bonus (2.0x)';
+            console.log(`[L6] High Scarcity VPP Bonus applied for ${iso}: 2.0x multiplier.`);
+          } else {
+            // Discourage charging during high scarcity
+            pointsMultiplier = 0.5;
+            multiplierReason = 'High Scarcity Surcharge (0.5x)';
+            console.log(`[L6] High Scarcity Surcharge applied for ${iso}: 0.5x multiplier.`);
+          }
+        } else if (profitability < 30) {
+          // L10 Surplus Alignment: LMP < $30/MWh
           pointsMultiplier = 1.5;
+          multiplierReason = 'Grid Surplus Bonus (1.5x)';
           console.log(`[L6] Grid Alignment Bonus applied for ${iso}: 1.5x multiplier (L10 Surplus Alignment).`);
         }
       } catch (err) {
@@ -392,6 +407,9 @@ async function processChargingEvent(event) {
         data: {
           session_id: sessionId,
           points,
+          physics_score: physicsScore.toFixed(4),
+          fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD',
+          multiplier_reason: multiplierReason
           physics_score: physics_score.toFixed(4),
           fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD'
         }
@@ -407,6 +425,9 @@ async function processChargingEvent(event) {
             source_value: parseFloat(event.energyDispensedKwh),
             event_id: sessionId,
             iso: iso,
+            physics_score: physicsScore,
+            is_high_fidelity: isHighFidelity,
+            multiplier_reason: multiplierReason
             physics_score: physics_score
           })
         }]
@@ -430,6 +451,9 @@ async function processChargingEvent(event) {
             source_value: parseFloat(event.energyDispensedKwh),
             event_id: sessionId,
             iso: iso,
+            physics_score: physicsScore,
+            is_high_fidelity: isHighFidelity,
+            multiplier_reason: multiplierReason
             physics_score: physics_score
           })
         }]
@@ -439,12 +463,14 @@ async function processChargingEvent(event) {
 
   if (event.type === 'v2g_discharge' && isValid) {
     let pointsMultiplier = 1.0;
+    let multiplierReason = 'Standard V2G';
     let isHighScarcity = false;
     try {
       const profitabilityStr = await redisClient.hGet('market:profitability', iso);
       const profitability = parseFloat(profitabilityStr || '0');
       if (profitability > 100) {
         pointsMultiplier = 2.0;
+        multiplierReason = 'High Scarcity Reward (2.0x)';
         isHighScarcity = true;
         console.log(`[L6] High Scarcity Bonus applied for ${iso}: 2.0x multiplier (L10 Scarcity Alignment).`);
       }
@@ -461,6 +487,10 @@ async function processChargingEvent(event) {
     // Award local points
     await updateLeaderboardPoints(driverId, points);
 
+    await checkV2GAchievements(driverId, iso, sessionId);
+    await updateChallengeProgress(driverId, 'v2g_participation');
+    await updateChallengeProgress(driverId, 'vpp_participation');
+
     // Notify L10 Token Engine for V2G fulfillment
     await producer.send({
       topic: 'driver_actions',
@@ -471,6 +501,13 @@ async function processChargingEvent(event) {
           source_value: energyDischargedKwh,
           event_id: sessionId,
           iso: iso,
+          physics_score: 1.0, // V2G discharge is verified by protocol and VPP controller
+          is_high_fidelity: true,
+          multiplier_reason: multiplierReason
+        })
+      }]
+    });
+
           physics_score: 1.0 // V2G discharge is physics-verified by L1/L3
         })
       }]
@@ -848,7 +885,9 @@ async function updateChallengeProgress(driver_id, challenge_type) {
               challenge_id: challenge.id,
               challenge_name: chal.rows[0].name,
               token_reward: chal.rows[0].token_reward,
-              event_id: challenge.id
+              event_id: challenge.id,
+              physics_score: 1.0, // Behavioral achievements are logically verified
+              is_high_fidelity: true
             })
           }]
         });
@@ -881,7 +920,9 @@ async function updateChallengeProgress(driver_id, challenge_type) {
               challenge_name: chal.rows[0].name,
               source_value: chal.rows[0].token_reward || chal.rows[0].points_reward,
               event_id: challenge.id,
-              iso: isoForChallenge
+              iso: isoForChallenge,
+              physics_score: 1.0,
+              is_high_fidelity: true
             })
           }]
         });
@@ -940,6 +981,7 @@ async function updateStreaks(driver_id) {
     console.error('[Engagement] Error updating streaks:', error);
   }
 }
+
 
 async function checkV2GAchievements(driver_id, iso, sessionId) {
   try {
@@ -1139,7 +1181,9 @@ async function awardAchievement(driver_id, achievement_id) {
           achievement_name: name,
           source_value: points,
           event_id: achievement_id,
-          iso: iso
+          iso: iso,
+          physics_score: 1.0, // Achievements are logically verified behavioral states
+          is_high_fidelity: true
         })
       }]
     });
@@ -1243,10 +1287,12 @@ async function start() {
     await redisClient.connect();
     console.log('✅ [Engagement Engine] Connected to Redis');
 
-    server.listen(port, () => {
-      console.log(`[Engagement Engine] Running on port ${port}`);
-      console.log('[Engagement Engine] Features: Leaderboards, Achievements, WebSockets');
-    });
+    if (require.main === module) {
+      server.listen(port, () => {
+        console.log(`[Engagement Engine] Running on port ${port}`);
+        console.log('[Engagement Engine] Features: Leaderboards, Achievements, WebSockets');
+      });
+    }
   } catch (err) {
     console.error('❌ [Engagement Engine] Startup error:', err);
     process.exit(1);
