@@ -29,7 +29,7 @@ class BiddingOptimizer {
    * Fetches real-time aggregated capacity from Redis.
    * Supports regional aggregation (Phase 5 Forward Engineering).
    * @param {string} iso - Optional ISO for regional capacity lookup
-   * @returns {Promise<Decimal>} Capacity in kW
+   * @returns {Promise<Object>} { capacity: Decimal, fidelity: string }
    */
   async getAggregatedCapacity(iso = null) {
     await this.connect();
@@ -45,9 +45,15 @@ class BiddingOptimizer {
 
           if (data !== undefined) {
             // Support both flat value (legacy) and nested object (v3.3.0+)
-            const capacityValue = (typeof data === 'object' && data !== null) ? data.capacity : data;
-            console.log(`[BiddingOptimizer] Using regional capacity for ${isoKey}: ${capacityValue} kWh (Fidelity: ${data.is_high_fidelity || 'STANDARD'})`);
-            return new Decimal(capacityValue || '0');
+            const isObject = (typeof data === 'object' && data !== null);
+            const capacityValue = isObject ? data.capacity : data;
+            const fidelity = isObject ? (data.is_high_fidelity ? 'HIGH_FIDELITY' : 'STANDARD') : 'STANDARD';
+
+            console.log(`[BiddingOptimizer] Using regional capacity for ${isoKey}: ${capacityValue} kWh (Fidelity: ${fidelity})`);
+            return {
+              capacity: new Decimal(capacityValue || '0'),
+              fidelity: fidelity
+            };
           }
         }
       } catch (err) {
@@ -56,7 +62,10 @@ class BiddingOptimizer {
     }
 
     const capacity = await this.redisClient.get('vpp:capacity:available');
-    return new Decimal(capacity || '0');
+    return {
+      capacity: new Decimal(capacity || '0'),
+      fidelity: 'STANDARD'
+    };
   }
 
   /**
@@ -103,9 +112,11 @@ class BiddingOptimizer {
         if (details) {
           console.warn(`[L4 Safety Context] Reason: ${details.event_type}, Severity: ${details.severity}, Score: ${details.physics_score || 'N/A'}, Site: ${details.site_id || 'N/A'}, Region: ${details.iso_region || 'N/A'}, VPPActive: ${details.vpp_active}, V2GActive: ${details.v2g_active}`);
 
-          if (details.iso_region && details.iso_region.toUpperCase() === iso.toUpperCase()) {
-            console.warn(`[L4 Safety Alert] High-risk: Physics violation DETECTED IN THIS REGION (${iso}).`);
-          }
+    if (locks.l1 || locks.l4) {
+      if (locks.l1) {
+        console.warn(`🚨 [L4 Market Gateway v3.7.0] Bidding halted: L1 safety lock is active for ${iso}`);
+        if (auditContext) {
+          console.warn(`[L4 Safety Context] Reason: ${auditContext.event_type}, Severity: ${auditContext.severity}, Score: ${auditContext.physics_score || 'N/A'}, Region: ${auditContext.iso_region || 'N/A'}`);
         }
       }
 
@@ -176,15 +187,10 @@ class BiddingOptimizer {
       let pBidMw = new Decimal(0);
 
       // Optimization Invariant: maximize (Pbid * LMP - Cdeg(Pbid))
-      // Profit = Pbid * (LMP - 20)
-      // If LMP > 20, maximize Pbid (set to Pvpp)
-      // If LMP <= 20, Pbid should be 0
       if (lmpMwh.gt(degradationCostMwh)) {
         pBidMw = pVppMw;
       }
 
-      // Format as FIX message
-      // Use degradation cost as the limit price to ensure we only clear when profitable
       const fixMsg = this.formatFixBid(iso, forecast.timestamp, pBidMw, degradationCostMwh, seqNum++);
       bids.push(fixMsg);
     }

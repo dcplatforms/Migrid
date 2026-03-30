@@ -264,10 +264,10 @@ High-velocity engineering updates across the stack:
 - [✓] **L2 Grid Signal (v2.4.1)**: Hardened **Regional Market Context** tracking and AI Data Readiness for historical event export.
 - [✓] **L1 Physics Engine (v10.1.0)**: Finalized **High-Fidelity Reconciliation** preserving regional metadata and contextual safety locks.
 - [✓] **L3 VPP Aggregator (v3.3.0)**: Implemented **ISO Normalization** and **High-Fidelity Tracking** to unblock L11 ML Engine training.
-- [✓] **L4 Market Gateway (v3.4.1)**: Activated **Nord Pool & ERCOT** adapters and implemented robust **Regional Grid Lock** scanning.
+- [✓] **L4 Market Gateway (v3.7.0)**: Activated **Nord Pool & ERCOT** adapters, **Bidding Auditability** (FIX-PROT-AUDIT), and **Regional Grid Lock** scanning.
 - [✓] **L6 Engagement Engine (v5.3.2)**: Deployed **ENTSO-E Pioneer** and **Sustainability Refinement**; regional challenges reached 90% completion.
 - [✓] **L3 VPP Aggregator (v3.3.0)**: Completed **Fuse Rule 2.0** and high-frequency **Redis Capacity Cache** for L4 bidding optimization.
-- [✓] **L4 Market Gateway (v3.6.0)**: Activated **Nord Pool & ERCOT** adapters and implemented robust **Regional Grid Lock** scanning.
+- [✓] **L4 Market Gateway (v3.7.0)**: Activated **Nord Pool & ERCOT** adapters, **Bidding Auditability** (FIX-PROT-AUDIT), and **Regional Grid Lock** scanning.
 - [✓] **L6 Engagement Engine (v5.5.0)**: Deployed **ENTSO-E Pioneer**, **Sustainability Refinement**, and **Scarcity Savior**; regional challenges reached 100% completion.
 - [✓] **L7 Device Gateway**: Native **OCPP 2.1 V2X** support active; ISO 15118 Certificate Exchange reached 75% completion.
 
@@ -792,7 +792,7 @@ done
 | **L1** | Physics Engine | `10.1.0` | ✅ Operational |
 | **L2** | Grid Signal | `2.4.1` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.0` | ✅ Operational |
-| **L4** | Market Gateway | `3.6.0` | ✅ Operational |
+| **L4** | Market Gateway | `3.7.0` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
 | **L6** | Engagement Engine | `5.5.0` | ✅ Operational |
 | **L7** | Device Gateway | `5.5.0` | ✅ Operational |
@@ -805,7 +805,7 @@ done
 
 ## Latest Release Wins (March 2026)
 
-- **L4 Market Gateway (v3.6.0)**: Activated **Nord Pool & ERCOT** adapters, **AI Fidelity Tracking**, and **Regional Grid Lock** observability.
+- **L4 Market Gateway (v3.7.0)**: Activated **Nord Pool & ERCOT** adapters, **Bidding Auditability** (FIX-PROT-AUDIT), and **Regional Grid Lock** observability.
 - **L6 Engagement Engine (v5.5.0)**: Deployed **Sustainability Champion**, **L11 Data Guardian**, and **Scarcity Savior**; regional challenges 100% complete.
 - **L7 Device Gateway (v5.5.0)**: Hardened **ISO 15118-20 Certificate Exchange** (85%), **EMAID** token handling, and native **OCPP 2.1 V2X** support.
 - **L10 Token Engine (v4.2.0)**: Deployed **Dynamic Multipliers** (1.5x Grid Surplus / 2.0x V2G Scarcity) and consolidated regional price updates.
