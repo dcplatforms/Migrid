@@ -80,11 +80,19 @@ async function handlePhysicsAlert(msg) {
   // Higher score (closer to 1.0) means more trustworthy data.
   // Lower score (closer to 0.0) indicates high variance and potential fraud.
   let physicsScore = 1.0;
-  if (payload.variance_pct !== undefined) {
+  if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
+    physicsScore = 0.0;
+  } else if (payload.variance_pct !== undefined) {
     physicsScore = Math.max(0, Math.min(1, 1 - (payload.variance_pct / 15.0)));
   } else if (payload.efficiency_pct !== undefined) {
     physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
+  } else if (payload.event_type === 'CAPACITY_VIOLATION' || payload.event_type === 'PHYSICS_FRAUD') {
+    physicsScore = 0.0;
   }
+
+  // L1-109 Enhancement: High-Fidelity Data Tracking for L11 ML Engine
+  // HIGH_FIDELITY if physics_score > 0.95 (Green Audit compliant)
+  const isHighFidelity = physicsScore > 0.95;
 
   // Cross-Layer ISO Normalization (e.g., ENTSO-E -> ENTSOE)
   const isoRegion = payload.iso_region ? payload.iso_region.toUpperCase().replace(/-/g, '') : 'CAISO';
@@ -109,6 +117,7 @@ async function handlePhysicsAlert(msg) {
         vin: payload.vin,
         variance_pct: payload.variance_pct,
         physics_score: physicsScore.toFixed(4),
+        is_high_fidelity: isHighFidelity,
         current_soc: payload.current_soc,
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
@@ -146,6 +155,7 @@ async function handlePhysicsAlert(msg) {
       expected: payload.expected,
       actual: payload.actual,
       physics_score: physicsScore.toFixed(4),
+      is_high_fidelity: isHighFidelity,
       billing_mode: payload.billing_mode,
       vpp_active: payload.vpp_active,
       v2g_active: payload.v2g_active,
@@ -218,6 +228,17 @@ async function reconcileLogs() {
       // Map severity correctly
       const severity = (payload.event_type === 'PHYSICS_FRAUD') ? 'FRAUD' : (payload.event_type === 'CAPACITY_VIOLATION' ? 'CRITICAL' : 'WARNING');
 
+      // Re-calculate physics score and fidelity for high-fidelity reconciliation
+      let physicsScore = 1.0;
+      if (payload.variance_pct !== undefined) {
+        physicsScore = Math.max(0, Math.min(1, 1 - (payload.variance_pct / 15.0)));
+      } else if (payload.efficiency_pct !== undefined) {
+        physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
+      } else if (payload.event_type === 'CAPACITY_VIOLATION' || payload.event_type === 'PHYSICS_FRAUD') {
+        physicsScore = 0.0;
+      }
+      const isHighFidelity = physicsScore > 0.95;
+
       // Re-publish missed alerts to Kafka
       const alert = {
         event_type: payload.event_type || 'EFFICIENCY_ALERT',
@@ -231,8 +252,12 @@ async function reconcileLogs() {
         threshold: payload.threshold || (payload.event_type === 'EFFICIENCY_ALERT' ? 0.85 : (payload.event_type === 'CAPACITY_VIOLATION' ? 20.0 : null)),
         expected: payload.expected,
         actual: payload.actual,
+        physics_score: physicsScore.toFixed(4),
+        is_high_fidelity: isHighFidelity,
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
+        physics_score: physicsScore.toFixed(4),
+        is_high_fidelity: isHighFidelity,
         v2g_active: payload.v2g_active,
         iso_region: payload.iso_region ? payload.iso_region.toUpperCase().replace(/-/g, '') : 'CAISO',
         market_price_at_session: payload.market_price_at_session || 0.0,
@@ -260,8 +285,8 @@ async function reconcileLogs() {
       }
 
       await pgClient.query(`
-        INSERT INTO audit_log (session_id, violation_type, expected_value, actual_value, severity, metadata, billing_mode, vpp_active, v2g_active, iso_region, market_price_at_session)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        INSERT INTO audit_log (session_id, violation_type, expected_value, actual_value, severity, metadata, billing_mode, vpp_active, v2g_active, iso_region, market_price_at_session, physics_score, is_high_fidelity)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         ON CONFLICT DO NOTHING
       `, [
         payload.session_id,
@@ -277,13 +302,17 @@ async function reconcileLogs() {
           v2g_active: payload.v2g_active,
           current_soc: payload.current_soc,
           variance_pct: payload.variance_pct,
-          efficiency_pct: payload.efficiency_pct
+          efficiency_pct: payload.efficiency_pct,
+          physics_score: physicsScore.toFixed(4),
+          is_high_fidelity: isHighFidelity
         }),
         payload.billing_mode,
         payload.vpp_active,
         payload.v2g_active,
         payload.iso_region ? payload.iso_region.toUpperCase().replace(/-/g, '') : 'CAISO',
-        payload.market_price_at_session || 0.0
+        payload.market_price_at_session || 0.0,
+        physicsScore.toFixed(4),
+        isHighFidelity
       ]);
 
       console.log(`✅ [L1 Physics] Reconciled high-fidelity log for session: ${payload.session_id || 'CAPACITY_VIOLATION'}`);
@@ -305,8 +334,9 @@ async function syncDigitalTwin() {
 
   try {
     // JOIN with fleets to get the ISO region for regional keying
+    // [L1-107] Enhancement: Fetch physics_score and is_high_fidelity for L2 reporting
     const result = await pgClient.query(
-      `SELECT v.id, v.fleet_id, v.battery_capacity_kwh, v.current_soc, v.is_plugged_in, v.v2g_enabled, f.iso
+      `SELECT v.id, v.fleet_id, v.battery_capacity_kwh, v.current_soc, v.is_plugged_in, v.v2g_enabled, v.physics_score, v.is_high_fidelity, f.iso
        FROM vehicles v
        JOIN fleets f ON v.fleet_id = f.id
        WHERE v.fleet_id = $1`,
@@ -318,6 +348,7 @@ async function syncDigitalTwin() {
       const key = `l1:${iso}:vehicle:${vehicle.id}`;
       await redisClient.setEx(key, 60, JSON.stringify({
         ...vehicle,
+        physics_score: parseFloat(vehicle.physics_score || 1.0),
         last_sync: new Date().toISOString()
       }));
     }

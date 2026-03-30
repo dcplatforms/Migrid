@@ -2,7 +2,7 @@
 
 **Version:** 10.1.0
 **Last Updated:** March 2026
-**Status:** Phase 5 "Enterprise Scale" (65% Complete)
+**Status:** Phase 5 "Enterprise Scale" (90% Complete)
 
 ---
 
@@ -21,8 +21,8 @@
 | 1 | **ISO-15118-PC** | Full ISO 15118-20 Bidirectional Certificate Exchange & Plug & Charge UI (OCPP 2.1) | L7, L5, L1 | 85% | Phase 5: Enterprise Scale |
 | 2 | **COMMERCE-BILLING** | Complete L9 Commerce Engine Tariff Engine and Flexible Billing Logic | L9, L5 | 65% | Phase 5: Commerce Sync |
 | 3 | **OCPI-2.2-ROAM** | OCPI 2.2 Roaming Integration for cross-network orchestration | L7, L9 | 60% | Phase 5: Global Expansion |
-| 4 | **REGIONAL-CHALLENGE** | Implementation of L6 Regional Team Challenges & Live Grid Events | L6, L2 | 100%| Phase 5: Grid-Aware Gamification |
-| 5 | **ML-FORECASTING** | L11 ML Engine: Demand Forecasting and Predictive Analytics Foundation | L11, L3 | 25% | Phase 6: AI & Optimization |
+| 4 | **REGIONAL-CHALLENGE** | Implementation of L6 Regional Team Challenges & Live Grid Events | L6, L2 | ✅ 100%| Phase 5: Grid-Aware Gamification |
+| 5 | **ML-FORECASTING** | L11 ML Engine: Demand Forecasting and Predictive Analytics Foundation | L11, L3 | 35% | Phase 6: AI & Optimization |
 
 ---
 
@@ -54,8 +54,8 @@
 - [✓] **Physics-Aware Reporting**: Integration of `physics_score` and `is_high_fidelity` for L11.
 - [~] **BESS Integration**: Support for stationary storage assets (75%).
 
-### Layer 4: Market Gateway (v3.6.0)
-- [✓] **AI Fidelity Tracking**: High-precision numeric ingestion for L11 training.
+### Layer 4: Market Gateway (v3.7.0)
+- [✓] **Bidding Auditability**: High-fidelity audit context (physics_score, capacity_fidelity) for all bids.
 - [✓] **Regional Grid Lock**: Improved observability and specific ISO lock logging.
 - [✓] **ERCOT & Nord Pool**: Full activation of Texas and Nordic market adapters.
 

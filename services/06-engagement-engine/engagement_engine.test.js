@@ -47,7 +47,7 @@ const { app, server, pool } = require('./index');
 describe('Engagement Engine API', () => {
   afterAll(async () => {
     await pool.end();
-    server.close();
+    // server.close();
   });
 
   describe('GET /health', () => {

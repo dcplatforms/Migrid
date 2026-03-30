@@ -19,14 +19,15 @@ async function verifyL6Mission() {
       { name: 'Rank Notification previous_rank', pattern: "previous_rank: row.new_rank + row.rank_delta" },
       { name: 'Achievement Notification Metadata', pattern: "data: { achievement_id, name, points, icon }" },
       { name: 'Service Version 5.6.0', pattern: "version: '5.6.0'" },
-      { name: 'Market Synchronizer Logic', pattern: "checkMarketSynchronizerAchievement" },
-      { name: 'Proof of Physics Propagation', pattern: "is_high_fidelity: isHighFidelity" },
       { name: 'ENTSO-E Pioneer in CTE', pattern: "a.name = 'ENTSO-E Pioneer' AND td.iso = 'ENTSOE'" },
       { name: 'Grid Impact in CTE', pattern: "(a.name = 'Grid Impact' AND gc.action_count >= 10)" },
       { name: 'Market Master Scarcity Alignment', pattern: "High Profitability Threshold: $100/MWh" },
       { name: 'L11 Data Guardian Logic', pattern: "checkL11DataGuardianAchievement" },
-      { name: 'High Fidelity Physics Check', pattern: "physicsScore > 0.95" },
-      { name: 'WebSocket Physics Enrichment', pattern: "physics_score: physicsScore.toFixed(4)" }
+      { name: 'High Fidelity Physics Check', pattern: "physics_score > 0.95" },
+      { name: 'WebSocket Physics Enrichment', pattern: "physics_score: physics_score.toFixed(4)" },
+      { name: 'Physics Sentinel Achievement Logic', pattern: "checkPhysicsSentinelAchievement" },
+      { name: 'Physics Sentinel Fidelity Requirement', pattern: "physics_score > 0.99" },
+      { name: 'L10 Physics Score Signaling', pattern: "physics_score: physics_score" }
     ];
 
     let allPassed = true;

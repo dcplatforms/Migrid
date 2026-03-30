@@ -92,7 +92,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.4.1',
+    version: '2.4.2',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -147,8 +147,37 @@ app.get('/openadr/v3/reports', async (req, res) => {
     const safetyContextRaw = await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
     const safetyContext = safetyContextRaw ? JSON.parse(safetyContextRaw) : null;
 
+    // Phase 5 Enhancement: Aggregate Regional Digital Twin Statistics (from L1)
+    const regionalDigitalTwin = {};
+    let dtCursor = '0';
+    do {
+      const result = await redisClient.scan(dtCursor, { MATCH: 'l1:*:vehicle:*', COUNT: 100 });
+      dtCursor = result.cursor;
+      if (result.keys && result.keys.length > 0) {
+        const values = await redisClient.mGet(result.keys);
+        result.keys.forEach((key, index) => {
+          const parts = key.split(':');
+          const iso = parts[1].toUpperCase();
+          const data = values[index] ? JSON.parse(values[index]) : null;
+
+          if (!regionalDigitalTwin[iso]) {
+            regionalDigitalTwin[iso] = { vehicle_count: 0, high_fidelity_count: 0 };
+          }
+          regionalDigitalTwin[iso].vehicle_count++;
+          // High Fidelity check: based on physics_score or presence of metadata
+          if (data && data.physics_score > 0.95) {
+            regionalDigitalTwin[iso].high_fidelity_count++;
+          }
+        });
+      }
+    } while (dtCursor !== 0 && dtCursor !== '0');
+
     // Fetch grid lock status (provided by L4)
     const gridLock = await redisClient.get('l4:grid:lock');
+
+    // [L2 v2.4.2] Optimized: Serve regional stats from Redis cache (Background task)
+    const regionalStatsRaw = await redisClient.get('l2:regional:stats');
+    const regionalStats = regionalStatsRaw ? JSON.parse(regionalStatsRaw) : {};
 
     // Consistently fetch L8 Site Statuses and Safe Mode status
     const siteStatuses = {};
@@ -207,6 +236,7 @@ app.get('/openadr/v3/reports', async (req, res) => {
       market_context: marketContext,
       regional_markets: regionalMarkets,
       regional_capacity: regionalCapacity,
+      regional_stats: regionalStats,
       safety_lock: {
         active: safetyLock === '1' || safetyLock === 'true',
         context: safetyContext
@@ -215,6 +245,7 @@ app.get('/openadr/v3/reports', async (req, res) => {
         active: gridLock === '1' || gridLock === 'true',
         regional: regionalLocks
       },
+      digital_twin: regionalDigitalTwin,
       site_statuses: siteStatuses,
       timestamp: new Date().toISOString()
     });
@@ -324,6 +355,10 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
       const safetyContextRaw = await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
       const safetyContext = safetyContextRaw ? JSON.parse(safetyContextRaw) : {};
 
+      // [L2-v2.4.2] Enhanced High-Fidelity Kafka Broadcast
+      const physicsScore = parseFloat(safetyContext.physics_score || '1.0000');
+      const fidelityStatus = physicsScore > 0.95 ? 'HIGH_FIDELITY' : 'STANDARD';
+
       await producer.send({
         topic: 'grid_signals',
         messages: [{
@@ -339,7 +374,10 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
             market_price_at_session: event.metadata?.market_price_at_session ?? (marketMetadata.price_per_mwh ?? 0), // L2 v2.4.1: Nullish coalescing for 0-price preservation
             profitability_index: marketMetadata.profitability_index,
             degradation_cost_mwh: marketMetadata.degradation_cost_mwh,
+            physics_score: parseFloat(safetyContext.physics_score || '1.0000'),
+            fidelity_status: parseFloat(safetyContext.physics_score || '1.0000') > 0.95 ? 'HIGH_FIDELITY' : 'STANDARD',
             physics_score: safetyContext.physics_score || '1.0000',
+            fidelity_status: (parseFloat(safetyContext.physics_score || 1.0) > 0.95) ? 'HIGH_FIDELITY' : 'STANDARD',
             metadata: event.metadata || {}, // L2 v2.4.1: Full metadata preservation (OpenADR 3.1.0)
             billing_mode: event.metadata?.billing_mode,
             intervals: event.intervals || [],
@@ -391,6 +429,44 @@ app.get('/data/training/events', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to export training data' });
   }
 });
+
+/**
+ * Background task: Aggregate regional digital twin stats for sub-500ms reporting
+ */
+const updateRegionalStats = async () => {
+  const stats = {};
+  try {
+    let twinCursor = '0';
+    do {
+      // [L1-107] Keys follow l1:{ISO}:vehicle:{ID}
+      const result = await redisClient.scan(twinCursor, { MATCH: 'l1:*', COUNT: 100 });
+      twinCursor = result.cursor;
+      if (result.keys && result.keys.length > 0) {
+        const values = await redisClient.mGet(result.keys);
+        result.keys.forEach((key, index) => {
+          const parts = key.split(':');
+          if (parts.length >= 3 && parts[0] === 'l1' && parts[2] === 'vehicle') {
+            const iso = parts[1].toUpperCase().replace(/-/g, '');
+            const vehicle = JSON.parse(values[index] || '{}');
+
+            if (!stats[iso]) {
+              stats[iso] = { vehicle_count: 0, high_fidelity_count: 0 };
+            }
+            stats[iso].vehicle_count++;
+            if (vehicle.is_high_fidelity || (vehicle.physics_score > 0.95)) {
+              stats[iso].high_fidelity_count++;
+            }
+          }
+        });
+      }
+    } while (twinCursor !== 0 && twinCursor !== '0');
+
+    // Cache results for 30s to meet SLA
+    await redisClient.setEx('l2:regional:stats', 30, JSON.stringify(stats));
+  } catch (error) {
+    console.error('[L2 Grid Signal] Regional Stats Background Task Error:', error.message);
+  }
+};
 
 /**
  * Listen for cross-layer Kafka events (L1 Safety & L4 Market)
@@ -487,6 +563,10 @@ async function start() {
 
     await startSafetyConsumer();
     console.log('✅ [L2] Safety Consumer running (Listening to L1)');
+
+    // Start regional stats aggregation loop
+    setInterval(updateRegionalStats, 15000);
+    updateRegionalStats();
 
     app.listen(port, () => {
       console.log(`[L2 Grid Signal] Running on port ${port} (OpenADR 3.0 Ready)`);
