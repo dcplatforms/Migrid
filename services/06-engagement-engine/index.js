@@ -312,6 +312,7 @@ async function processChargingEvent(event) {
 
   // Get regional context (ISO) for the driver
   const driverData = await pool.query('SELECT f.iso FROM drivers d JOIN fleets f ON d.fleet_id = f.id WHERE d.id = $1', [driverId]);
+  // L10/L4 Standard: ISO normalization (uppercase, no hyphens) for Redis lookups
   const iso = (driverData.rows[0]?.iso || 'CAISO').toUpperCase().replace(/-/g, '');
 
   // Verify Physics Integrity before awarding points
@@ -350,8 +351,10 @@ async function processChargingEvent(event) {
       await checkFirstSessionAchievement(driverId);
       await updateStreaks(driverId);
       await checkSustainabilityChampion(driverId);
+
       // Market Master is awarded only on session completion to ensure it's session-based
       await checkMarketMasterAchievement(driverId, iso, sessionId);
+      await checkMarketSynchronizerAchievement(driverId, iso, sessionId);
 
       // Phase 6 AI Readiness: Check for ML Contributor (High-fidelity data)
       if (isLowVariance) {
@@ -398,6 +401,11 @@ async function processChargingEvent(event) {
       const points = Math.floor(parseFloat(event.energyDispensedKwh) * 10 * pointsMultiplier);
       await updateLeaderboardPoints(driverId, points);
 
+      if (isSurplus && isFinal) {
+        await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
+          [driverId, 'surplus_charge', JSON.stringify({ iso, sessionId, physicsScore, isHighFidelity })]);
+      }
+
       // Notify of points earned
       const notification = {
         driver_id: driverId,
@@ -415,7 +423,7 @@ async function processChargingEvent(event) {
         }
       };
 
-      // Notify L10 Token Engine for points fulfillment
+      // Notify L10 Token Engine for points fulfillment (Proof of Physics included)
       await producer.send({
         topic: 'driver_actions',
         messages: [{
@@ -532,8 +540,7 @@ async function processChargingEvent(event) {
 
 async function checkMarketMasterAchievement(driverId, iso, sessionId) {
   try {
-    const normalizedIso = iso.toUpperCase().replace(/-/g, '');
-    const profitabilityStr = await redisClient.hGet('market:profitability', normalizedIso);
+    const profitabilityStr = await redisClient.hGet('market:profitability', iso);
     const profitability = parseFloat(profitabilityStr || '0');
 
     // High Profitability Threshold: $100/MWh (Matching L10 Scarcity Boost)
@@ -557,6 +564,32 @@ async function checkMarketMasterAchievement(driverId, iso, sessionId) {
     }
   } catch (error) {
     console.error('[Engagement] Error checking Market Master achievement:', error);
+  }
+}
+
+async function checkMarketSynchronizerAchievement(driverId, iso, sessionId) {
+  try {
+    const profitabilityStr = await redisClient.hGet('market:profitability', iso);
+    const profitability = parseFloat(profitabilityStr || '0');
+
+    // Surplus Threshold: < $30/MWh
+    if (profitability < 30 && profitability !== 0) {
+      console.log(`[L6] Market surplus charging detected in ${iso} ($${profitability}/MWh) for session ${sessionId}.`);
+
+      const count = await pool.query(`
+        SELECT COUNT(*) FROM driver_actions
+        WHERE driver_id = $1 AND action_type = 'surplus_charge'
+      `, [driverId]);
+
+      if (parseInt(count.rows[0].count) >= 5) {
+        const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Market Synchronizer'");
+        if (achievement.rows.length > 0) {
+          await awardAchievement(driverId, achievement.rows[0].id);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking Market Synchronizer achievement:', error);
   }
 }
 
