@@ -80,7 +80,9 @@ async function handlePhysicsAlert(msg) {
   // Higher score (closer to 1.0) means more trustworthy data.
   // Lower score (closer to 0.0) indicates high variance and potential fraud.
   let physicsScore = 1.0;
-  if (payload.variance_pct !== undefined) {
+  if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
+    physicsScore = 0.0;
+  } else if (payload.variance_pct !== undefined) {
     physicsScore = Math.max(0, Math.min(1, 1 - (payload.variance_pct / 15.0)));
   } else if (payload.efficiency_pct !== undefined) {
     physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
@@ -254,6 +256,8 @@ async function reconcileLogs() {
         is_high_fidelity: isHighFidelity,
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
+        physics_score: physicsScore.toFixed(4),
+        is_high_fidelity: isHighFidelity,
         v2g_active: payload.v2g_active,
         iso_region: payload.iso_region ? payload.iso_region.toUpperCase().replace(/-/g, '') : 'CAISO',
         market_price_at_session: payload.market_price_at_session || 0.0,
@@ -298,7 +302,9 @@ async function reconcileLogs() {
           v2g_active: payload.v2g_active,
           current_soc: payload.current_soc,
           variance_pct: payload.variance_pct,
-          efficiency_pct: payload.efficiency_pct
+          efficiency_pct: payload.efficiency_pct,
+          physics_score: physicsScore.toFixed(4),
+          is_high_fidelity: isHighFidelity
         }),
         payload.billing_mode,
         payload.vpp_active,
