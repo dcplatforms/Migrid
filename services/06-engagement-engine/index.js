@@ -120,6 +120,7 @@ app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
     version: '5.6.0', // Weekly Product Update: L10 Proof-of-Physics & Scarcity Savior Refinement
+    version: '5.6.0', // Weekly Product Update: Physics Sentinel & L10 Sync
     status: 'healthy',
     layer: 'L6'
   });
@@ -326,25 +327,25 @@ async function processChargingEvent(event) {
   if ((type === 'SESSION_COMPLETED' || type === 'session_completed' || event.energyDispensedKwh) && isValid) {
     const isFinal = type === 'SESSION_COMPLETED' || type === 'session_completed';
 
-    // Calculate physicsScore and isHighFidelity if not already provided
-    let physicsScore = 1.0;
+    // Calculate physics_score and isHighFidelity if not already provided
+    let physics_score = 1.0;
     let isHighFidelity = true;
     let isLowVariance = true;
 
     // Use event-provided score if available
-    if (event.physicsScore !== undefined) physicsScore = parseFloat(event.physicsScore);
-    if (event.physics_score !== undefined) physicsScore = parseFloat(event.physics_score);
-    isHighFidelity = physicsScore > 0.95;
+    if (event.physicsScore !== undefined) physics_score = parseFloat(event.physicsScore);
+    if (event.physics_score !== undefined) physics_score = parseFloat(event.physics_score);
+    isHighFidelity = physics_score > 0.95;
 
     if (isFinal) {
       const sessionData = await pool.query('SELECT variance_percentage FROM charging_sessions WHERE id = $1', [sessionId]);
       const variance = parseFloat(sessionData.rows[0]?.variance_percentage || '100');
       isLowVariance = variance < 5.0;
-      physicsScore = Math.max(0, Math.min(1, 1 - (variance / 15.0)));
-      isHighFidelity = physicsScore > 0.95;
+      physics_score = Math.max(0, Math.min(1, 1 - (variance / 15.0)));
+      isHighFidelity = physics_score > 0.95;
 
       await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
-        [driverId, 'session_completed', JSON.stringify({ sessionId, energyDispensedKwh: event.energyDispensedKwh, isLowVariance, physicsScore, isHighFidelity })]);
+        [driverId, 'session_completed', JSON.stringify({ sessionId, energyDispensedKwh: event.energyDispensedKwh, isLowVariance, physics_score, isHighFidelity })]);
 
       await checkFirstSessionAchievement(driverId);
       await updateStreaks(driverId);
@@ -354,10 +355,11 @@ async function processChargingEvent(event) {
 
       // Phase 6 AI Readiness: Check for ML Contributor (High-fidelity data)
       if (isLowVariance) {
-        await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'low_variance_session', JSON.stringify({ sessionId, variance, physicsScore })]);
+        await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'low_variance_session', JSON.stringify({ sessionId, variance, physics_score })]);
         await checkMLContributorAchievement(driverId);
         await checkEnergyArchitectAchievement(driverId);
         await checkL11DataGuardianAchievement(driverId);
+        await checkPhysicsSentinelAchievement(driverId);
         await updateChallengeProgress(driverId, 'low_variance_charging');
       }
     }
@@ -408,6 +410,8 @@ async function processChargingEvent(event) {
           physics_score: physicsScore.toFixed(4),
           fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD',
           multiplier_reason: multiplierReason
+          physics_score: physics_score.toFixed(4),
+          fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD'
         }
       };
 
@@ -424,6 +428,7 @@ async function processChargingEvent(event) {
             physics_score: physicsScore,
             is_high_fidelity: isHighFidelity,
             multiplier_reason: multiplierReason
+            physics_score: physics_score
           })
         }]
       });
@@ -449,6 +454,7 @@ async function processChargingEvent(event) {
             physics_score: physicsScore,
             is_high_fidelity: isHighFidelity,
             multiplier_reason: multiplierReason
+            physics_score: physics_score
           })
         }]
       });
@@ -502,6 +508,14 @@ async function processChargingEvent(event) {
       }]
     });
 
+          physics_score: 1.0 // V2G discharge is physics-verified by L1/L3
+        })
+      }]
+    });
+
+    await checkV2GAchievements(driverId, iso, sessionId);
+    await updateChallengeProgress(driverId, 'v2g_participation');
+    await updateChallengeProgress(driverId, 'vpp_participation');
 
     // V2X Pioneer Achievement (OCPP 2.1 native)
     if (event.protocol && event.protocol.toLowerCase().trim() === 'ocpp2.1') {
@@ -548,13 +562,15 @@ async function checkMarketMasterAchievement(driverId, iso, sessionId) {
 
 async function checkScarcitySaviorAchievement(driverId, iso, sessionId) {
   try {
-    const profitabilityStr = await redisClient.hGet('market:profitability', iso);
+    const normalizedIso = iso.toUpperCase().replace(/-/g, '');
+    const profitabilityStr = await redisClient.hGet('market:profitability', normalizedIso);
     const profitability = parseFloat(profitabilityStr || '0');
 
     // High Scarcity Threshold: $100/MWh
     if (profitability > 100) {
       console.log(`[L6] High scarcity V2G detected in ${iso} ($${profitability}/MWh) for session ${sessionId}.`);
 
+      // requirement: 3 V2G actions during high scarcity
       const count = await pool.query(`
         SELECT COUNT(*) FROM driver_actions
         WHERE driver_id = $1 AND action_type = 'v2g_discharge'
@@ -761,13 +777,39 @@ async function checkFirstSessionAchievement(driver_id) {
   }
 }
 
+async function checkPhysicsSentinelAchievement(driver_id) {
+  // Requirement: 10 consecutive high-fidelity sessions (Physics Score > 0.99)
+  // We check the last 10 'session_completed' actions and ensure they all have physics_score > 0.99.
+  const result = await pool.query(`
+    WITH recent_sessions AS (
+      SELECT (metadata->>'physics_score')::float as physics_score
+      FROM driver_actions
+      WHERE driver_id = $1 AND action_type = 'session_completed'
+      ORDER BY created_at DESC
+      LIMIT 10
+    )
+    SELECT COUNT(*) as total,
+           COUNT(*) FILTER (WHERE physics_score > 0.99) as sentinel_count
+    FROM recent_sessions
+  `, [driver_id]);
+
+  const { total, sentinel_count } = result.rows[0];
+
+  if (parseInt(total) >= 10 && parseInt(sentinel_count) === 10) {
+    const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Physics Sentinel'");
+    if (achievement.rows.length > 0) {
+      await awardAchievement(driver_id, achievement.rows[0].id);
+    }
+  }
+}
+
 async function checkL11DataGuardianAchievement(driver_id) {
   // Requirement: 15 consecutive high-fidelity sessions (Physics Score > 0.95)
   // We check the last 15 'session_completed' actions and ensure they all have isHighFidelity = true in metadata.
   const result = await pool.query(`
     WITH recent_sessions AS (
       SELECT (metadata->>'isHighFidelity')::boolean as is_high_fidelity,
-             (metadata->>'physicsScore')::float as physics_score
+             (metadata->>'physics_score')::float as physics_score
       FROM driver_actions
       WHERE driver_id = $1 AND action_type = 'session_completed'
       ORDER BY created_at DESC
@@ -1001,7 +1043,7 @@ async function checkMLContributorAchievement(driver_id) {
   const result = await pool.query(`
     WITH recent_sessions AS (
       SELECT (metadata->>'isLowVariance')::boolean as is_low_variance,
-             (metadata->>'physicsScore')::float as physics_score
+             (metadata->>'physics_score')::float as physics_score
       FROM driver_actions
       WHERE driver_id = $1 AND action_type = 'session_completed'
       ORDER BY created_at DESC
@@ -1028,7 +1070,7 @@ async function checkEnergyArchitectAchievement(driver_id) {
   const result = await pool.query(`
     WITH recent_sessions AS (
       SELECT (metadata->>'isLowVariance')::boolean as is_low_variance,
-             (metadata->>'physicsScore')::float as physics_score
+             (metadata->>'physics_score')::float as physics_score
       FROM driver_actions
       WHERE driver_id = $1 AND action_type = 'session_completed'
       ORDER BY created_at DESC
