@@ -177,6 +177,8 @@ describe('L2 Grid Signal Service', () => {
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
     expect(sentValue.physics_score).toBe(0.8500);
     expect(sentValue.fidelity_status).toBe('STANDARD');
+    expect(sentValue.physics_score).toBe('0.9850');
+    expect(sentValue.fidelity_status).toBe('HIGH_FIDELITY');
   });
 
   test('POST /openadr/v3/events should preserve zero price per MWh (Nullish Coalescing L2 v2.4.1)', async () => {
@@ -323,6 +325,34 @@ describe('L2 Grid Signal Service', () => {
     expect(response.status).toBe(200);
     expect(response.body.regional_capacity.CAISO).toBe(500.5);
     expect(response.body.regional_capacity.ERCOT).toBe(1200.0);
+  });
+
+  test('GET /openadr/v3/reports should aggregate regional digital twin stats from L1 keys', async () => {
+    const mockVehicle1 = { id: 'V1', physics_score: 0.98 };
+    const mockVehicle2 = { id: 'V2', physics_score: 0.80 };
+
+    redisClient.scan.mockImplementation((cursor, options) => {
+      if (options && options.MATCH === 'l1:*:vehicle:*') {
+        if (cursor === '0' || cursor === 0) {
+          return Promise.resolve({ cursor: '123', keys: ['l1:CAISO:vehicle:V1'] });
+        }
+        return Promise.resolve({ cursor: 0, keys: ['l1:ERCOT:vehicle:V2'] });
+      }
+      return Promise.resolve({ cursor: 0, keys: [] });
+    });
+
+    redisClient.mGet.mockImplementation((keys) => {
+      if (keys.includes('l1:CAISO:vehicle:V1')) return Promise.resolve([JSON.stringify(mockVehicle1)]);
+      if (keys.includes('l1:ERCOT:vehicle:V2')) return Promise.resolve([JSON.stringify(mockVehicle2)]);
+      return Promise.resolve([]);
+    });
+
+    const response = await request(app).get('/openadr/v3/reports');
+    expect(response.status).toBe(200);
+    expect(response.body.digital_twin.CAISO.vehicle_count).toBe(1);
+    expect(response.body.digital_twin.CAISO.high_fidelity_count).toBe(1);
+    expect(response.body.digital_twin.ERCOT.vehicle_count).toBe(1);
+    expect(response.body.digital_twin.ERCOT.high_fidelity_count).toBe(0);
   });
 
   test('GET /openadr/v3/reports should return safety context when locked', async () => {
