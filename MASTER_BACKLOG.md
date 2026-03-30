@@ -10,9 +10,9 @@
 
 | Priority | Feature / Task | Primary Layer | Blocking Dependencies | Target Phase |
 |:---:|:---|:---:|:---|:---:|
-| **P0** | **ML Demand Forecasting** | L11 (ML Engine) | 🚧 L11 Foundation v0.1.0 Active | Phase 6 |
-| **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | ✅ L7 v5.5.0 Hardened Certificate Exchange | Phase 5 |
-| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 (Market) v3.6.0 AI Fidelity Feeds | Phase 5 |
+| **P0** | **ML Demand Forecasting** | L11 (ML Engine) | ✅ Phase 5 High-Fidelity Data Pipelines (L1, L2, L3, L4) | Phase 6 |
+| **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | 🚧 L7 v5.5.0 Hardened (85% Complete) | Phase 5 |
+| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 (Market) v3.7.0 Bidding Auditability | Phase 5 |
 | **P3** | **OCPI 2.2 Roaming** | L7 (Device) | L9 (Commerce) v5.1.0 settlement engine sync | Phase 5 |
 | **P4** | **AI Anomaly Detection** | L8 (Energy) | L11 (ML Engine) Foundation active | Phase 6 |
 
