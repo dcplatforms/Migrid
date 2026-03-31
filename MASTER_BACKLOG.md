@@ -34,8 +34,8 @@
 | **L5 Driver DX** | PnC Auth Status | **L7 Device Gateway** | Driver cannot use Plug & Charge sessions | 🚧 85% |
 | **L9 Commerce** | Billing Reconciliation | **L1 Physics / L4 Market** | Inaccurate split-billing or tariff logic | ✅ Active |
 | **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.0 Active |
-| **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine** | Rewards fail for 'ISO Explorer' challenges | ✅ v5.3.0 Sync |
-| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway** | VTN cannot see market-aware grid signals | ✅ v2.4.0 Sync |
+| **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine** | Rewards fail for 'ISO Explorer' challenges | ✅ v5.5.0 Sync |
+| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway** | VTN cannot see market-aware grid signals | ✅ v3.6.0 Sync |
 
 ---
 
@@ -58,6 +58,7 @@
 - [✓] **Bidding Auditability**: High-fidelity audit context (physics_score, capacity_fidelity) for all bids.
 - [✓] **Regional Grid Lock**: Improved observability and specific ISO lock logging.
 - [✓] **ERCOT & Nord Pool**: Full activation of Texas and Nordic market adapters.
+- [~] **BESS RL Bidding**: Research phase for reinforcement learning models (10%).
 
 ### Layer 6: Engagement Engine (v5.5.0)
 - [✓] **ENTSO-E Pioneer**: European regional grid response achievement.
