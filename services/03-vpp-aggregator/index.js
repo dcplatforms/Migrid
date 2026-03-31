@@ -183,10 +183,14 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
 
 // Register resource
 app.post('/resources/register', authenticateToken, async (req, res) => {
-  const { vehicle_id, battery_capacity_kwh, v2g_enabled } = req.body;
+  const { vehicle_id, battery_capacity_kwh, v2g_enabled, resource_type = 'EV' } = req.body;
 
   if (!vehicle_id || typeof vehicle_id !== 'string' || typeof battery_capacity_kwh !== 'number' || typeof v2g_enabled !== 'boolean') {
     return res.status(400).json({ error: 'Invalid input parameters' });
+  }
+
+  if (!['EV', 'BESS'].includes(resource_type)) {
+    return res.status(400).json({ error: 'resource_type must be EV or BESS' });
   }
 
   if (battery_capacity_kwh < 50) {
@@ -205,11 +209,11 @@ app.post('/resources/register', authenticateToken, async (req, res) => {
     }
 
     await pool.query(`
-      INSERT INTO vpp_resources (vehicle_id, battery_capacity_kwh, v2g_enabled, registered_at)
-      VALUES ($1, $2, $3, NOW())
+      INSERT INTO vpp_resources (vehicle_id, battery_capacity_kwh, v2g_enabled, resource_type, registered_at)
+      VALUES ($1, $2, $3, $4, NOW())
       ON CONFLICT (vehicle_id) DO UPDATE SET
-        battery_capacity_kwh = $2, v2g_enabled = $3, updated_at = NOW()
-    `, [vehicle_id, battery_capacity_kwh, v2g_enabled]);
+        battery_capacity_kwh = $2, v2g_enabled = $3, resource_type = $4, updated_at = NOW()
+    `, [vehicle_id, battery_capacity_kwh, v2g_enabled, resource_type]);
 
     res.json({ success: true, message: 'Resource registered' });
   } catch (error) {
@@ -261,20 +265,22 @@ const updateGlobalCapacity = async () => {
     const result = await pool.query(`
       SELECT
         COALESCE(cs.iso_region, 'SYSTEM_WIDE') as region,
+        r.resource_type,
         SUM(
           GREATEST(0, (v.current_soc - GREATEST(COALESCE(v.min_soc_threshold, 0), 20.0)) / 100.0)
           * v.battery_capacity_kwh
           * COALESCE(v.availability_factor, 1.0)
         ) as raw_capacity_kwh
       FROM vehicles v
+      LEFT JOIN vpp_resources r ON v.id = r.vehicle_id
       LEFT JOIN charging_sessions cs ON v.id = cs.vehicle_id AND cs.end_time IS NULL
       LEFT JOIN chargers c ON cs.charger_id = c.id
-      WHERE v.is_plugged_in = true
-        AND v.v2g_enabled = true
+      WHERE (v.is_plugged_in = true OR COALESCE(r.resource_type, 'EV') = 'BESS')
+        AND COALESCE(r.v2g_enabled, v.v2g_enabled) = true
         AND v.current_soc > GREATEST(COALESCE(v.min_soc_threshold, 0), 20.0)
         AND (c.location_id IS NULL OR c.location_id::text != ALL($1))
         AND ($2::UUID IS NULL OR v.fleet_id != $2)
-      GROUP BY region
+      GROUP BY region, r.resource_type
     `, [safeModeSites, lockedFleetId]);
 
     let totalCapacity = 0;
@@ -283,7 +289,6 @@ const updateGlobalCapacity = async () => {
 
     result.rows.forEach(row => {
       // ISO Normalization: Uppercase and remove hyphens (e.g., 'ENTSO-E' to 'ENTSOE')
-      // Null safety added for row.region
       const regionStr = row.region || 'SYSTEM_WIDE';
       const normalizedRegion = regionStr.toUpperCase().replace(/-/g, '');
       const deratedCapacity = parseFloat(row.raw_capacity_kwh || 0) * physicsMultiplier;
@@ -295,12 +300,20 @@ const updateGlobalCapacity = async () => {
     });
 
     await redisClient.set('vpp:capacity:available', totalCapacity.toString());
-    await redisClient.set('vpp:capacity:regional', JSON.stringify(regionalCapacity));
+
+    // L4 Compatibility: Also provide legacy flat mapping for L4 (until L4 is updated to v3.7.0)
+    const legacyRegional = {};
+    Object.keys(regionalCapacity).forEach(region => {
+        legacyRegional[region] = regionalCapacity[region].total;
+    });
+
+    await redisClient.set('vpp:capacity:regional', JSON.stringify(legacyRegional));
+    await redisClient.set('vpp:capacity:regional:high_fidelity', JSON.stringify(regionalCapacity));
 
     // Save historical state for L11 ML Engine Training
     await pool.query(
-      'INSERT INTO vpp_capacity_history (total_capacity_kwh, regional_data, physics_multiplier, is_high_fidelity, timestamp) VALUES ($1, $2, $3, $4, NOW())',
-      [totalCapacity, JSON.stringify(regionalCapacity), physicsMultiplier, isHighFidelity]
+      'INSERT INTO vpp_capacity_history (total_capacity_kwh, regional_data, physics_multiplier, is_high_fidelity, safety_context, timestamp) VALUES ($1, $2, $3, $4, $5, NOW())',
+      [totalCapacity, JSON.stringify(regionalCapacity), physicsMultiplier, isHighFidelity, safetyContextRaw]
     ).catch(e => console.error('[VPP Aggregator] Failed to log history for L11:', e.message));
 
     console.log(`[VPP Aggregator] Global Capacity Updated: ${totalCapacity.toFixed(2)} kWh (Multiplier: ${physicsMultiplier}, Fidelity: ${isHighFidelity})`);
@@ -365,11 +378,19 @@ const initKafka = async () => {
         }
 
         if (topic === 'grid_signals') {
-          const { event_id, program_id, market_context, site_id, priority, v2g_requested } = payload;
+          const { event_id, program_id, market_context, site_id, priority, v2g_requested, der_control } = payload;
           console.log(`⚡ [VPP Aggregator] Grid Signal received: ${event_id}. Program: ${program_id}, Market: ${market_context}, Site: ${site_id}, Priority: ${priority}`);
 
-          if (v2g_requested) {
+          if (v2g_requested || der_control) {
             console.log(`🔋 [IEEE 2030.5] Initiating Automated V2G Dispatch Sequence for Event: ${event_id}`);
+
+            // IEEE 2030.5 DERControl Skeleton (Phase 7/8 Forward Engineering)
+            if (der_control) {
+                const { op_mode, set_point_kw } = der_control;
+                console.log(`[IEEE 2030.5] DERControl received: Mode=${op_mode}, Target=${set_point_kw}kW`);
+                // Logic to select specific BESS/EV assets based on op_mode (e.g., peak shaving vs frequency response)
+            }
+
             // Phase 8 Preview: Fast Frequency Response logic would trigger here
             // Currently: Dispatches to all available authorized resources in the site/region
           }
