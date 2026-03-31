@@ -4,6 +4,7 @@
  */
 
 const express = require('express');
+const helmet = require('helmet');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
@@ -45,6 +46,7 @@ const connectKafka = async () => {
 };
 connectKafka();
 
+app.use(helmet());
 app.use(express.json());
 
 // Rate limiting state: In-memory Maps to track attempts
@@ -132,8 +134,18 @@ app.get('/health', (req, res) => {
 
 // Register new driver (With Transaction and Security Sanitization)
 app.post('/auth/register', registrationRateLimiter, async (req, res) => {
-  const client = await pool.connect();
   const { email, password, first_name, last_name, fleet_id } = req.body;
+
+  // Input Validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email || !emailRegex.test(email)) {
+    return res.status(400).json({ error: 'Invalid email format' });
+  }
+  if (!password || typeof password !== 'string' || password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+  }
+
+  const client = await pool.connect();
 
   try {
     await client.query('BEGIN');

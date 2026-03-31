@@ -4,6 +4,7 @@
  */
 
 const express = require('express');
+const helmet = require('helmet');
 const http = require('http');
 const { Pool } = require('pg');
 const { Kafka } = require('kafkajs');
@@ -30,6 +31,7 @@ const redisClient = redis.createClient({
   url: process.env.REDIS_URL || 'redis://localhost:6379'
 });
 
+app.use(helmet());
 app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
