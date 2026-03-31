@@ -47,7 +47,8 @@ class BiddingOptimizer {
             // Support both flat value (legacy) and nested object (v3.3.0+)
             const isObject = (typeof data === 'object' && data !== null);
             const capacityValue = isObject ? data.capacity : data;
-            const fidelity = isObject ? (data.is_high_fidelity ? 'HIGH_FIDELITY' : 'STANDARD') : 'STANDARD';
+            const isHighFidelity = isObject ? !!data.is_high_fidelity : false;
+            const fidelity = isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD';
 
             console.log(`[BiddingOptimizer] Using regional capacity for ${isoKey}: ${capacityValue} kWh (Fidelity: ${fidelity})`);
             return {
@@ -96,22 +97,18 @@ class BiddingOptimizer {
    * @returns {Promise<Object>} Object containing bids and audit metadata
    */
   async generateDayAheadBids(iso) {
-    // Verify the Physics & Grid signals: Check for safety locks before bidding
+    await this.connect();
+
+    // 1. Verify the Physics & Grid signals: Check for safety locks before bidding
     const locks = await this.getSafetyLockStatus(iso);
-    const auditContext = {
-      locks,
-      timestamp: new Date().toISOString()
-    };
 
-    // Audit context for L11 ML Engine readiness
+    // 2. Fetch safety lock context for audit (L11 ML Engine readiness)
     let physicsScore = 1.0;
-    let capacityFidelity = 'STANDARD';
     let auditContext = null;
-
     try {
-      const lockContext = await this.redisClient.get('l1:safety:lock:context');
-      if (lockContext) {
-        auditContext = JSON.parse(lockContext);
+      const lockContextRaw = await this.redisClient.get('l1:safety:lock:context');
+      if (lockContextRaw) {
+        auditContext = JSON.parse(lockContextRaw);
         if (auditContext.physics_score !== undefined) {
           physicsScore = parseFloat(auditContext.physics_score);
         }
@@ -120,27 +117,9 @@ class BiddingOptimizer {
       console.warn('[BiddingOptimizer] Failed to fetch safety lock context for audit:', err.message);
     }
 
-    // AI Readiness: Capture physics score and fidelity status
-    let physicsScore = 1.0;
-    let capacityFidelity = 'STANDARD';
-    const lockContextRaw = await this.redisClient.get('l1:safety:lock:context');
-    const lockContext = lockContextRaw ? JSON.parse(lockContextRaw) : null;
+    const capacityFidelity = physicsScore > 0.95 ? 'HIGH_FIDELITY' : 'STANDARD';
 
-    if (lockContext && lockContext.physics_score !== undefined) {
-      physicsScore = parseFloat(lockContext.physics_score);
-      capacityFidelity = physicsScore > 0.95 ? 'HIGH_FIDELITY' : 'STANDARD';
-    }
-
-    if (locks.l1 || locks.l4) {
-      if (locks.l1) {
-        const lockContext = await this.redisClient.get('l1:safety:lock:context');
-        const details = lockContext ? JSON.parse(lockContext) : null;
-        auditContext.l1_details = details;
-
-        console.warn(`🚨 [L4 Market Gateway v3.7.0] Bidding halted: L1 safety lock is active for ${iso}`);
-        if (details) {
-          console.warn(`[L4 Safety Context] Reason: ${details.event_type}, Severity: ${details.severity}, Score: ${details.physics_score || 'N/A'}, Site: ${details.site_id || 'N/A'}, Region: ${details.iso_region || 'N/A'}, VPPActive: ${details.vpp_active}, V2GActive: ${details.v2g_active}`);
-
+    // 3. Handle Halted Bidding
     if (locks.l1 || locks.l4) {
       if (locks.l1) {
         console.warn(`🚨 [L4 Market Gateway v3.7.0] Bidding halted: L1 safety lock is active for ${iso}`);
@@ -155,61 +134,29 @@ class BiddingOptimizer {
         console.warn(`⚠️ [L4 Market Gateway v3.7.0] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
       }
 
-      return { bids: [], audit: auditContext };
-    }
-
-    const forecasts = await this.pricingService.getDayAheadForecast(iso);
-
-    // Fetch capacity and fidelity (Phase 5/6 requirement)
-    let pVppKw = new Decimal(0);
-    let isHighFidelity = false;
-
-    try {
-      await this.connect();
-      const regionalCapacityRaw = await this.redisClient.get('vpp:capacity:regional');
-      if (regionalCapacityRaw) {
-        const regionalCapacity = JSON.parse(regionalCapacityRaw);
-        const isoKey = iso.toUpperCase().replace(/-/g, '');
-        const data = regionalCapacity[isoKey];
-        if (data !== undefined) {
-          pVppKw = new Decimal((typeof data === 'object' && data !== null) ? data.capacity : data);
-          isHighFidelity = (typeof data === 'object' && data !== null) ? !!data.is_high_fidelity : false;
-        } else {
-          // Fallback to global capacity
-          const globalCapacity = await this.redisClient.get('vpp:capacity:available');
-          pVppKw = new Decimal(globalCapacity || '0');
+      return {
+        bids: [],
+        audit: {
+          locks,
+          physics_score: physicsScore,
+          capacity_fidelity: capacityFidelity,
+          audit_context: auditContext,
+          timestamp: new Date().toISOString()
         }
-      } else {
-        // Fallback to global capacity
-        const globalCapacity = await this.redisClient.get('vpp:capacity:available');
-        pVppKw = new Decimal(globalCapacity || '0');
-      }
-    } catch (err) {
-      console.error(`[BiddingOptimizer] Failed to parse regional capacity for audit:`, err.message);
-      // Fallback to global capacity
-      const globalCapacity = await this.redisClient.get('vpp:capacity:available');
-      pVppKw = new Decimal(globalCapacity || '0');
+      };
     }
 
+    // 4. Fetch Capacity Data
+    const { capacity: pVppKw, fidelity: capacityFidelityFromRedis } = await this.getAggregatedCapacity(iso);
     const pVppMw = pVppKw.dividedBy(1000);
 
     const degradationCostKwh = new Decimal(process.env.DEGRADATION_COST_KWH || '0.02');
     const degradationCostMwh = degradationCostKwh.times(1000); // $20/MWh
 
+    // 5. Generate Bids
+    const forecasts = await this.pricingService.getDayAheadForecast(iso);
     const bids = [];
     let seqNum = 1;
-
-    // Fetch latest physics score for audit
-    let currentPhysicsScore = 1.0;
-    try {
-      const lockContext = await this.redisClient.get('l1:safety:lock:context');
-      if (lockContext) {
-        const details = JSON.parse(lockContext);
-        if (details.physics_score !== undefined) {
-          currentPhysicsScore = parseFloat(details.physics_score);
-        }
-      }
-    } catch (err) {}
 
     for (const forecast of forecasts) {
       const lmpMwh = new Decimal(forecast.price_per_mwh);
@@ -227,10 +174,12 @@ class BiddingOptimizer {
     return {
       bids,
       audit: {
-        ...auditContext,
-        physics_score: currentPhysicsScore,
-        capacity_fidelity: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD',
-        pVppKw: pVppKw.toNumber()
+        locks,
+        physics_score: physicsScore,
+        capacity_fidelity: capacityFidelityFromRedis, // Already normalized in getAggregatedCapacity
+        audit_context: auditContext,
+        pVppKw: pVppKw.toNumber(),
+        timestamp: new Date().toISOString()
       }
     };
   }

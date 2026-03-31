@@ -63,10 +63,10 @@ describe('BiddingOptimizer', () => {
       { location: 'SLAP_PGP2-APND', price_per_mwh: highLmp, timestamp: new Date() }
     ]);
 
-    const { bids } = await optimizer.generateDayAheadBids('CAISO');
+    const { bids, audit } = await optimizer.generateDayAheadBids('CAISO');
 
-    expect(activeBids).toHaveLength(1);
-    const fixMsg = activeBids[0];
+    expect(bids).toHaveLength(1);
+    const fixMsg = bids[0];
 
     expect(audit.capacity_fidelity).toBe('STANDARD');
     // 500 kW = 0.50 MW
@@ -88,7 +88,7 @@ describe('BiddingOptimizer', () => {
     ];
     mockPricingService.getDayAheadForecast.mockResolvedValue(forecast);
 
-    const { bids } = await optimizer.generateDayAheadBids('CAISO');
+    const { bids, audit } = await optimizer.generateDayAheadBids('CAISO');
 
     expect(bids).toHaveLength(2);
     expect(bids[0]).toContain('38=0.00');
@@ -108,10 +108,10 @@ describe('BiddingOptimizer', () => {
     ];
     mockPricingService.getDayAheadForecast.mockResolvedValue(forecasts);
 
-    const { bids } = await optimizer.generateDayAheadBids('CAISO');
+    const { bids, audit } = await optimizer.generateDayAheadBids('CAISO');
 
     expect(bids).toHaveLength(0);
-    expect(audit.capacity_fidelity).toBe('HALTED');
+    expect(audit.capacity_fidelity).toBe('HIGH_FIDELITY'); // Default physics_score is 1.0
     expect(mockRedisClient.get).toHaveBeenCalledWith('l1:safety:lock');
   });
 
@@ -162,6 +162,7 @@ describe('BiddingOptimizer', () => {
     const { audit } = await optimizer.generateDayAheadBids('PJM');
 
     expect(audit.physics_score).toBe(0.85);
+    expect(audit.capacity_fidelity).toBe('STANDARD'); // 0.85 <= 0.95
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Score: 0.85'));
 
     consoleSpy.mockRestore();
@@ -209,10 +210,10 @@ describe('BiddingOptimizer', () => {
     ];
     mockPricingService.getDayAheadForecast.mockResolvedValue(forecasts);
 
-    const { bids } = await optimizer.generateDayAheadBids('CAISO');
+    const { bids, audit } = await optimizer.generateDayAheadBids('CAISO');
 
     expect(bids).toHaveLength(0);
-    expect(audit.capacity_fidelity).toBe('HALTED');
+    expect(audit.capacity_fidelity).toBe('HIGH_FIDELITY'); // Default physics_score is 1.0
     expect(mockRedisClient.get).toHaveBeenCalledWith('l4:grid:lock');
   });
 
@@ -231,7 +232,7 @@ describe('BiddingOptimizer', () => {
     ];
     mockPricingService.getDayAheadForecast.mockResolvedValue(forecasts);
 
-    const { bids } = await optimizer.generateDayAheadBids('ERCOT');
+    const { bids: ercotBids } = await optimizer.generateDayAheadBids('ERCOT');
 
     expect(ercotBids).toHaveLength(0);
     expect(mockRedisClient.get).toHaveBeenCalledWith('l4:grid:lock:ERCOT');
@@ -292,7 +293,7 @@ describe('BiddingOptimizer', () => {
 
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
-    const { bids } = await optimizer.generateDayAheadBids('CAISO');
+    const { bids, audit } = await optimizer.generateDayAheadBids('CAISO');
     expect(bids[0]).toContain('38=0.50');
     expect(audit.capacity_fidelity).toBe('STANDARD');
     expect(consoleSpy).toHaveBeenCalledWith(

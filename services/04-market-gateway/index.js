@@ -307,19 +307,20 @@ app.get('/health', async (req, res) => {
 // Get current LMP prices
 app.get('/markets/:iso/prices', authenticateToken, async (req, res) => {
   const { iso } = req.params;
+  const normalizedIso = iso.toUpperCase().replace(/-/g, '');
 
   try {
-    const prices = await pricingService.getLatestPrices(iso);
+    const prices = await pricingService.getLatestPrices(normalizedIso);
 
     if (prices.length > 0) {
       // Broadcast the latest price for dynamic billing/L9
-      await broadcastMarketPrice(iso, prices[0].price_per_mwh, prices[0].location);
+      await broadcastMarketPrice(normalizedIso, prices[0].price_per_mwh, prices[0].location);
     }
 
     const latestPrice = prices[0] ? prices[0].price_per_mwh : null;
 
     res.json({
-      iso: iso.toUpperCase(),
+      iso: normalizedIso,
       prices: prices.map(p => ({ ...p, price_per_mwh: p.price_per_mwh.toNumber() })),
       strategy: {
         should_charge: latestPrice ? latestPrice.lt(LMP_THRESHOLD_BUY) : false,
@@ -340,17 +341,19 @@ app.post('/bids/optimize', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'ISO is required' });
   }
 
+  const normalizedIso = iso.toUpperCase().replace(/-/g, '');
+
   try {
     const optimizer = new BiddingOptimizer(pool, process.env.REDIS_URL || 'redis://localhost:6379');
-    const { bids, audit } = await optimizer.generateDayAheadBids(iso);
+    const { bids, audit } = await optimizer.generateDayAheadBids(normalizedIso);
 
     // In a real scenario, we would send these FIX messages to CAISO
     // For now, we'll return them and log them
-    console.log(`[Market Gateway] Generated ${bids.length} optimized bids for ${iso} (Physics Score: ${audit.physics_score})`);
+    console.log(`[Market Gateway] Generated ${bids.length} optimized bids for ${normalizedIso} (Physics Score: ${audit.physics_score})`);
 
     res.json({
       success: true,
-      iso,
+      iso: normalizedIso,
       bid_count: bids.length,
       bids: bids, // Returning FIX messages for verification
       audit: audit // FIX-PROT-AUDIT requirements
@@ -366,12 +369,18 @@ app.post('/bids/optimize', authenticateToken, async (req, res) => {
 app.post('/bids/submit', authenticateToken, async (req, res) => {
   const { iso, market_type, quantity_kw, price_per_mwh, delivery_hour, physics_score, capacity_fidelity, audit_context } = req.body;
 
+  if (!iso) {
+    return res.status(400).json({ error: 'ISO is required' });
+  }
+
   // Validate bid size
   if (quantity_kw < 100) {
     return res.status(400).json({
       error: 'Minimum bid size is 100 kW'
     });
   }
+
+  const normalizedIso = iso.toUpperCase().replace(/-/g, '');
 
   try {
     // Use Decimal.js for financial calculations
@@ -388,7 +397,7 @@ app.post('/bids/submit', authenticateToken, async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, $6, 'pending', NOW(), $7, $8, $9)
       RETURNING id, status
     `, [
-      iso.toUpperCase(),
+      normalizedIso,
       market_type,
       quantity_kw,
       price_per_mwh,
