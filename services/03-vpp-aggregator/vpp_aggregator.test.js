@@ -166,11 +166,28 @@ describe('L3 VPP Aggregator Service', () => {
             .send({
                 vehicle_id: 'VEH-001',
                 battery_capacity_kwh: 75,
-                v2g_enabled: true
+                v2g_enabled: true,
+                resource_type: 'BESS'
             });
 
         expect(response.status).toBe(200);
         expect(response.body.success).toBe(true);
+        expect(mockPool.query).toHaveBeenCalledWith(expect.stringContaining('resource_type'), expect.arrayContaining(['BESS']));
+    });
+
+    test('POST /resources/register should reject invalid resource_type', async () => {
+        const response = await request(app)
+            .post('/resources/register')
+            .set('Authorization', `Bearer ${mockToken}`)
+            .send({
+                vehicle_id: 'VEH-001',
+                battery_capacity_kwh: 75,
+                v2g_enabled: true,
+                resource_type: 'INVALID'
+            });
+
+        expect(response.status).toBe(400);
+        expect(response.body.error).toContain('resource_type must be EV or BESS');
     });
 
     describe('POST /dispatch/v2g', () => {

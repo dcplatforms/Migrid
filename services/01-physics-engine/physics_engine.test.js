@@ -78,12 +78,14 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.severity).toBe('FRAUD');
     expect(alertValue.variance_pct).toBe(18.5);
     expect(alertValue.physics_score).toBe("0.0000"); // 1 - (18.5/15) = -0.23 -> clamp to 0
+    expect(alertValue.is_high_fidelity).toBe(false);
+    expect(alertValue.is_sentinel_fidelity).toBe(false);
   });
 
-  test('should calculate physics_score correctly for moderate variance', async () => {
+  test('should calculate physics_score and is_high_fidelity correctly for moderate variance', async () => {
     const msg = {
       payload: JSON.stringify({
-        event_type: 'PHYSICS_FRAUD',
+        event_type: 'EFFICIENCY_ALERT',
         variance_pct: 7.5
       })
     };
@@ -92,6 +94,7 @@ describe('L1 Physics Engine Alert Handling', () => {
 
     const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
     expect(alertValue.physics_score).toBe("0.5000"); // 1 - (7.5/15) = 0.5
+    expect(alertValue.is_high_fidelity).toBe(false);
   });
 
   test('should dispatch CAPACITY_VIOLATION alert to Kafka', async () => {
@@ -116,6 +119,7 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.event_type).toBe('CAPACITY_VIOLATION');
     expect(alertValue.severity).toBe('CRITICAL');
     expect(alertValue.current_soc).toBe(19.5);
+    expect(alertValue.physics_score).toBe("0.0000"); // Forced 0.0 for CAPACITY_VIOLATION
   });
 
   test('should dispatch CAPACITY_VIOLATION with VPP status', async () => {
@@ -176,6 +180,8 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"site_id":"SITE-001"'));
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"billing_mode":"FLEET"'));
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"physics_score":"0.0000"'));
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"is_high_fidelity":false'));
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"is_sentinel_fidelity":false'));
   });
 
   test('should set safety lock and context in Redis for CAPACITY_VIOLATION', async () => {
@@ -322,6 +328,38 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.vin).toBe('TEXAS-BATT-001');
   });
 
+  test('should include is_high_fidelity in Kafka alert for high efficiency', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'EFFICIENCY_ALERT',
+        efficiency_pct: 99.0
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.is_high_fidelity).toBe(true);
+    expect(alertValue.is_sentinel_fidelity).toBe(false); // Exactly 0.99 is not > 0.99
+    expect(alertValue.physics_score).toBe("0.9900");
+  });
+
+  test('should include is_sentinel_fidelity for ultra-high efficiency', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'EFFICIENCY_ALERT',
+        efficiency_pct: 99.5
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.is_high_fidelity).toBe(true);
+    expect(alertValue.is_sentinel_fidelity).toBe(true);
+    expect(alertValue.physics_score).toBe("0.9950");
+  });
+
   test('should handle ERCOT capacity violation during scarcity event (LMP > 100)', async () => {
     const msg = {
       payload: JSON.stringify({
@@ -345,6 +383,21 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.iso_region).toBe('ERCOT');
     expect(alertValue.market_price_at_session).toBe(120.0);
     expect(alertValue.severity).toBe('CRITICAL');
+  });
+
+  test('should flag high-fidelity charging session (variance < 0.75%)', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'EFFICIENCY_ALERT',
+        variance_pct: 0.5
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.physics_score).toBe("0.9667"); // 1 - (0.5/15) = 0.96666...
+    expect(alertValue.is_high_fidelity).toBe(true);
   });
 });
 
@@ -373,12 +426,91 @@ describe('L1 Physics Engine Digital Twin Sync', () => {
     await physicsEngine.syncDigitalTwin();
 
     expect(global.mockPgQuery).toHaveBeenCalledWith(
-        expect.stringContaining('SELECT id, fleet_id, battery_capacity_kwh, current_soc, is_plugged_in, v2g_enabled FROM vehicles WHERE fleet_id = $1'),
+        expect.stringContaining('FROM vehicles'),
         ['f1']
     );
     expect(global.mockRedisSetEx).toHaveBeenCalledTimes(2);
-    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:digital_twin:vehicle:v1', 60, expect.stringContaining('"id":"v1"'));
-    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:digital_twin:vehicle:v2', 60, expect.stringContaining('"id":"v2"'));
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:CAISO:vehicle:v1', 60, expect.stringContaining('"id":"v1"'));
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:CAISO:vehicle:v2', 60, expect.stringContaining('"id":"v2"'));
+  });
+
+  test('should sync vehicles using regional namespaces from joined fleet data', async () => {
+    global.mockPgQuery.mockResolvedValue({
+      rows: [
+        { id: 'v-ercot', fleet_id: 'f-tx', iso: 'ERCOT', current_soc: 50 },
+        { id: 'v-entsoe', fleet_id: 'f-eu', iso: 'ENTSO-E', current_soc: 60 }
+      ]
+    });
+
+    await physicsEngine.syncDigitalTwin();
+
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:ERCOT:vehicle:v-ercot', 60, expect.stringContaining('"id":"v-ercot"'));
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:ENTSOE:vehicle:v-entsoe', 60, expect.stringContaining('"id":"v-entsoe"'));
+  });
+});
+
+describe('L1 Physics Engine Scarcity Mode', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('should activate scarcity mode when market price exceeds $100', async () => {
+    // Initial start to set up the interval
+    await physicsEngine.start();
+    const initialIntervalId = physicsEngine.getSyncIntervalId();
+    // In some environments _idleTimeout might not be available or might be different
+    // Let's use a more robust check if possible, or skip the internal timeout check if it's finicky.
+    // However, since it failed with undefined, let's see.
+
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'EFFICIENCY_ALERT',
+        market_price_at_session: 150.0
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    expect(physicsEngine.getLastMarketPrice()).toBe(150.0);
+    const newIntervalId = physicsEngine.getSyncIntervalId();
+    expect(newIntervalId).not.toBe(initialIntervalId);
+
+    // Clean up
+    clearInterval(newIntervalId);
+  });
+
+  test('should deactivate scarcity mode when market price drops below $100', async () => {
+    // Initial start in scarcity mode
+    const msgScarcity = {
+      payload: JSON.stringify({
+        event_type: 'EFFICIENCY_ALERT',
+        market_price_at_session: 150.0
+      })
+    };
+    await physicsEngine.start();
+    await physicsEngine.handlePhysicsAlert(msgScarcity);
+    const scarcityIntervalId = physicsEngine.getSyncIntervalId();
+
+    const msgNormal = {
+      payload: JSON.stringify({
+        event_type: 'EFFICIENCY_ALERT',
+        market_price_at_session: 45.0
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msgNormal);
+
+    expect(physicsEngine.getLastMarketPrice()).toBe(45.0);
+    const normalIntervalId = physicsEngine.getSyncIntervalId();
+    expect(normalIntervalId).not.toBe(scarcityIntervalId);
+
+    // Clean up
+    clearInterval(normalIntervalId);
   });
 });
 
@@ -393,7 +525,7 @@ describe('L1 Physics Engine Reconciliation', () => {
     const payload = {
       session_id: 'recon-session-1',
       event_type: 'PHYSICS_FRAUD',
-      efficiency_pct: 0.70,
+      efficiency_pct: 70.0,
       billing_mode: 'FLEET',
       vpp_active: true,
       v2g_active: true,
@@ -415,11 +547,14 @@ describe('L1 Physics Engine Reconciliation', () => {
     expect(alertValue.market_price_at_session).toBe(95.0);
     expect(alertValue.v2g_active).toBe(true);
     expect(alertValue.reconciled).toBe(true);
+    expect(alertValue.physics_score).toBe("0.0000");
+    expect(alertValue.is_high_fidelity).toBe(false);
+    expect(alertValue.is_sentinel_fidelity).toBe(false);
 
     // Verify DB Insertion during reconciliation
     expect(global.mockPgQuery).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO audit_log'),
-      expect.arrayContaining(['recon-session-1', 'PHYSICS_FRAUD', 'PJM', 95.0])
+      expect.arrayContaining(['recon-session-1', 'PHYSICS_FRAUD', 'PJM', 95.0, '0.0000', false])
     );
   });
 

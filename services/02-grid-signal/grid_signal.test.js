@@ -155,7 +155,53 @@ describe('L2 Grid Signal Service', () => {
 
     expect(response.status).toBe(202);
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
-    expect(sentValue.physics_score).toBe('0.9850');
+    expect(sentValue.physics_score).toBe(0.9850);
+    expect(sentValue.fidelity_status).toBe('HIGH_FIDELITY');
+  });
+
+  test('POST /openadr/v3/events should include STANDARD fidelity_status when score <= 0.95', async () => {
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({ physics_score: '0.8500' }));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-standard-fidelity',
+        type: 'demand-response'
+      });
+
+    expect(response.status).toBe(202);
+    const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
+    expect(sentValue.physics_score).toBe(0.8500);
+    expect(sentValue.fidelity_status).toBe('STANDARD');
+  });
+
+  test('POST /openadr/v3/events should preserve zero price per MWh (Nullish Coalescing L2 v2.4.2)', async () => {
+    const mockMarketContext = {
+      price_per_mwh: 0,
+      profitability_index: 0
+    };
+
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'market:context:CAISO') return Promise.resolve(JSON.stringify(mockMarketContext));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-zero-price',
+        type: 'demand-response',
+        targets: [{ type: 'region', value: 'caiso' }]
+      });
+
+    expect(response.status).toBe(202);
+    const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
+    expect(sentValue.market_price_at_session).toBe(0); // Should be exactly 0, not defaulted
   });
 
   test('POST /openadr/v3/events should support program_id (3.1.0 Alignment)', async () => {
@@ -277,6 +323,34 @@ describe('L2 Grid Signal Service', () => {
     expect(response.status).toBe(200);
     expect(response.body.regional_capacity.CAISO).toBe(500.5);
     expect(response.body.regional_capacity.ERCOT).toBe(1200.0);
+  });
+
+  test('GET /openadr/v3/reports should aggregate regional digital twin stats from L1 keys', async () => {
+    const mockVehicle1 = { id: 'V1', physics_score: 0.98 };
+    const mockVehicle2 = { id: 'V2', physics_score: 0.80 };
+
+    redisClient.scan.mockImplementation((cursor, options) => {
+      if (options && options.MATCH === 'l1:*:vehicle:*') {
+        if (cursor === '0' || cursor === 0) {
+          return Promise.resolve({ cursor: '123', keys: ['l1:CAISO:vehicle:V1'] });
+        }
+        return Promise.resolve({ cursor: 0, keys: ['l1:ERCOT:vehicle:V2'] });
+      }
+      return Promise.resolve({ cursor: 0, keys: [] });
+    });
+
+    redisClient.mGet.mockImplementation((keys) => {
+      if (keys.includes('l1:CAISO:vehicle:V1')) return Promise.resolve([JSON.stringify(mockVehicle1)]);
+      if (keys.includes('l1:ERCOT:vehicle:V2')) return Promise.resolve([JSON.stringify(mockVehicle2)]);
+      return Promise.resolve([]);
+    });
+
+    const response = await request(app).get('/openadr/v3/reports');
+    expect(response.status).toBe(200);
+    expect(response.body.digital_twin.CAISO.vehicle_count).toBe(1);
+    expect(response.body.digital_twin.CAISO.high_fidelity_count).toBe(1);
+    expect(response.body.digital_twin.ERCOT.vehicle_count).toBe(1);
+    expect(response.body.digital_twin.ERCOT.high_fidelity_count).toBe(0);
   });
 
   test('GET /openadr/v3/reports should return safety context when locked', async () => {
@@ -429,14 +503,14 @@ describe('L2 Grid Signal Service', () => {
     );
   });
 
-  test('startSafetyConsumer should cache market price updates with degradation cost', async () => {
+  test('startSafetyConsumer should cache market price updates with degradation cost and ISO Normalization (v2.4.2)', async () => {
     const { consumer, startSafetyConsumer } = require('./index');
     await startSafetyConsumer();
 
     const eachMessage = consumer.run.mock.calls[0][0].eachMessage;
 
     const marketUpdate = {
-      iso: 'ERCOT',
+      iso: 'ENTSO-E',
       price_per_mwh: 120.0,
       profitability_index: 100.0,
       degradation_cost_mwh: 20.0,
@@ -451,7 +525,7 @@ describe('L2 Grid Signal Service', () => {
     expect(redisClient.setEx).toHaveBeenCalledWith(
       'market:latest:context',
       600,
-      expect.stringContaining('"iso":"ERCOT"')
+      expect.stringContaining('"iso":"ENTSOE"')
     );
     expect(redisClient.setEx).toHaveBeenCalledWith(
       'market:latest:context',
@@ -459,9 +533,9 @@ describe('L2 Grid Signal Service', () => {
       expect.stringContaining('"degradation_cost_mwh":20')
     );
     expect(redisClient.setEx).toHaveBeenCalledWith(
-      'market:context:ERCOT',
+      'market:context:ENTSOE',
       600,
-      expect.stringContaining('"iso":"ERCOT"')
+      expect.stringContaining('"iso":"ENTSOE"')
     );
   });
 
@@ -484,9 +558,9 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body.region).toBe('GLOBAL');
   });
 
-  test('POST /openadr/v3/events should reject when regional L4 grid lock is active (Case-Insensitive Hardening)', async () => {
+  test('POST /openadr/v3/events should reject when regional L4 grid lock is active (ISO Normalization L2 v2.4.2)', async () => {
     redisClient.get.mockImplementation((key) => {
-      if (key === 'l4:grid:lock:CAISO') return Promise.resolve('1');
+      if (key === 'l4:grid:lock:ENTSOE') return Promise.resolve('1');
       return Promise.resolve(null);
     });
 
@@ -494,14 +568,14 @@ describe('L2 Grid Signal Service', () => {
       .post('/openadr/v3/events')
       .set('Authorization', `Bearer ${mockToken}`)
       .send({
-        id: 'evt-lock-regional-case',
+        id: 'evt-lock-entsoe',
         type: 'demand-response',
-        targets: [{ type: 'region', value: 'caiso' }] // Lowercase region
+        targets: [{ type: 'region', value: 'ENTSO-E' }] // Hyphenated region
       });
 
     expect(response.status).toBe(503);
     expect(response.body.reason).toBe('GRID_LOCK_ACTIVE');
-    expect(response.body.region).toBe('CAISO'); // Should be normalized to uppercase
+    expect(response.body.region).toBe('ENTSOE'); // Normalized: Uppercase, no hyphens
   });
 
   test('POST /openadr/v3/events should reject when site is in L8 Safe Mode', async () => {
@@ -522,6 +596,25 @@ describe('L2 Grid Signal Service', () => {
     expect(response.status).toBe(503);
     expect(response.body.reason).toBe('SITE_IN_SAFE_MODE');
     expect(response.body.site_id).toBe('SITE-456');
+  });
+
+  test('GET /openadr/v3/reports should return cached regional stats (v2.4.2)', async () => {
+    const mockStats = {
+      CAISO: { vehicle_count: 1, high_fidelity_count: 1 },
+      ERCOT: { vehicle_count: 1, high_fidelity_count: 0 }
+    };
+
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l2:regional:stats') return Promise.resolve(JSON.stringify(mockStats));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app).get('/openadr/v3/reports');
+    expect(response.status).toBe(200);
+    expect(response.body.regional_stats.CAISO.vehicle_count).toBe(1);
+    expect(response.body.regional_stats.CAISO.high_fidelity_count).toBe(1);
+    expect(response.body.regional_stats.ERCOT.vehicle_count).toBe(1);
+    expect(response.body.regional_stats.ERCOT.high_fidelity_count).toBe(0);
   });
 
   test('GET /openadr/v3/reports should return L8 site statuses (Optimized with SMEMBERS)', async () => {
@@ -602,5 +695,23 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body.status).toBe('READY_FOR_L11');
     expect(response.body.record_count).toBe(1);
     expect(response.body.data[0].event_id).toBe('evt-1');
+  });
+
+  test('POST /openadr/v3/events should normalize ISO region (e.g., ENTSO-E to ENTSOE)', async () => {
+    redisClient.get.mockResolvedValue(null);
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-iso-norm',
+        type: 'demand-response',
+        targets: [{ type: 'region', value: 'ENTSO-E' }]
+      });
+
+    expect(response.status).toBe(202);
+    const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
+    expect(sentValue.iso_region).toBe('ENTSOE');
+    expect(redisClient.get).toHaveBeenCalledWith('l4:grid:lock:ENTSOE');
   });
 });
