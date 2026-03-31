@@ -4,6 +4,7 @@
  */
 
 const express = require('express');
+const helmet = require('helmet');
 const http = require('http');
 const { Pool } = require('pg');
 const { Kafka } = require('kafkajs');
@@ -30,6 +31,7 @@ const redisClient = redis.createClient({
   url: process.env.REDIS_URL || 'redis://localhost:6379'
 });
 
+app.use(helmet());
 app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
@@ -906,23 +908,6 @@ async function updateStreaks(driver_id) {
     }
   } catch (error) {
     console.error('[Engagement] Error updating streaks:', error);
-  }
-}
-
-async function checkScarcitySaviorAchievement(driverId, iso) {
-  try {
-    const profitabilityStr = await redisClient.hGet('market:profitability', iso);
-    const profitability = parseFloat(profitabilityStr || '0');
-
-    if (profitability > 100) {
-      console.log(`[L6] High scarcity V2G discharge detected in ${iso} ($${profitability}/MWh).`);
-      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Scarcity Savior'");
-      if (achievement.rows.length > 0) {
-        await awardAchievement(driverId, achievement.rows[0].id);
-      }
-    }
-  } catch (error) {
-    console.error('[Engagement] Error checking Scarcity Savior achievement:', error);
   }
 }
 
