@@ -37,10 +37,14 @@ describe('BiddingOptimizer', () => {
       { location: 'SLAP_PGP2-APND', price_per_mwh: lowLmp, timestamp: new Date() }
     ]);
 
-    const bids = await optimizer.generateDayAheadBids('CAISO');
+    const { bids, audit } = await optimizer.generateDayAheadBids('CAISO');
 
     expect(bids).toHaveLength(1);
     const fixMsg = bids[0];
+
+    // FIX-PROT-AUDIT: Check audit metadata
+    expect(audit.physics_score).toBe(1.0);
+    expect(audit.capacity_fidelity).toBe('STANDARD');
 
     // FIX tag 38 is OrderQty
     expect(fixMsg).toContain('38=0.00');
@@ -59,11 +63,12 @@ describe('BiddingOptimizer', () => {
       { location: 'SLAP_PGP2-APND', price_per_mwh: highLmp, timestamp: new Date() }
     ]);
 
-    const bids = await optimizer.generateDayAheadBids('CAISO');
+    const { bids, audit } = await optimizer.generateDayAheadBids('CAISO');
 
     expect(bids).toHaveLength(1);
     const fixMsg = bids[0];
 
+    expect(audit.capacity_fidelity).toBe('STANDARD');
     // 500 kW = 0.50 MW
     expect(fixMsg).toContain('38=0.50');
     // Limit price should still be degradation cost ($20.00/MWh)
@@ -83,11 +88,12 @@ describe('BiddingOptimizer', () => {
     ];
     mockPricingService.getDayAheadForecast.mockResolvedValue(forecast);
 
-    const bids = await optimizer.generateDayAheadBids('CAISO');
+    const { bids, audit } = await optimizer.generateDayAheadBids('CAISO');
 
     expect(bids).toHaveLength(2);
     expect(bids[0]).toContain('38=0.00');
     expect(bids[1]).toContain('38=1.00');
+    expect(audit.physics_score).toBe(1.0);
   });
 
   test('should return no bids when L1 safety lock is active', async () => {
@@ -102,9 +108,10 @@ describe('BiddingOptimizer', () => {
     ];
     mockPricingService.getDayAheadForecast.mockResolvedValue(forecasts);
 
-    const bids = await optimizer.generateDayAheadBids('CAISO');
+    const { bids, audit } = await optimizer.generateDayAheadBids('CAISO');
 
     expect(bids).toHaveLength(0);
+    expect(audit.capacity_fidelity).toBe('HIGH_FIDELITY'); // Default physics_score is 1.0
     expect(mockRedisClient.get).toHaveBeenCalledWith('l1:safety:lock');
   });
 
@@ -125,10 +132,11 @@ describe('BiddingOptimizer', () => {
       return Promise.resolve(null);
     });
 
-    await optimizer.generateDayAheadBids('CAISO');
+    const { audit } = await optimizer.generateDayAheadBids('CAISO');
 
+    expect(audit.physics_score).toBe(1.0); // Default if not in context
+    expect(audit.audit_context.event_type).toBe('PHYSICS_FRAUD');
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('L1 safety lock is active'));
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Reason: PHYSICS_FRAUD, Severity: FRAUD, Score: N/A, Site: SITE-123, Region: CAISO, VPPActive: true, V2GActive: true'));
 
     consoleSpy.mockRestore();
   });
@@ -151,10 +159,11 @@ describe('BiddingOptimizer', () => {
       return Promise.resolve(null);
     });
 
-    await optimizer.generateDayAheadBids('PJM');
+    const { audit } = await optimizer.generateDayAheadBids('PJM');
 
+    expect(audit.physics_score).toBe(0.85);
+    expect(audit.capacity_fidelity).toBe('STANDARD'); // 0.85 <= 0.95
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Score: 0.85'));
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Reason: CAPACITY_VIOLATION, Severity: CRITICAL, Score: 0.85, Site: SITE-456, Region: PJM'));
 
     consoleSpy.mockRestore();
   });
@@ -172,7 +181,7 @@ describe('BiddingOptimizer', () => {
       { location: 'LOC1', price_per_mwh: lmp, timestamp: new Date() }
     ]);
 
-    const bids = await optimizer.generateDayAheadBids('CAISO');
+    const { bids } = await optimizer.generateDayAheadBids('CAISO');
 
     expect(bids).toHaveLength(1);
     expect(bids[0]).toContain('38=0.00'); // Should not bid as it is below $50/MWh
@@ -183,7 +192,7 @@ describe('BiddingOptimizer', () => {
       { location: 'LOC1', price_per_mwh: 60.00, timestamp: new Date() }
     ]);
 
-    const activeBids = await optimizer.generateDayAheadBids('CAISO');
+    const { bids: activeBids } = await optimizer.generateDayAheadBids('CAISO');
     expect(activeBids[0]).toContain('38=0.50'); // Should bid
     expect(activeBids[0]).toContain('44=50.00');
   });
@@ -201,9 +210,10 @@ describe('BiddingOptimizer', () => {
     ];
     mockPricingService.getDayAheadForecast.mockResolvedValue(forecasts);
 
-    const bids = await optimizer.generateDayAheadBids('CAISO');
+    const { bids, audit } = await optimizer.generateDayAheadBids('CAISO');
 
     expect(bids).toHaveLength(0);
+    expect(audit.capacity_fidelity).toBe('HIGH_FIDELITY'); // Default physics_score is 1.0
     expect(mockRedisClient.get).toHaveBeenCalledWith('l4:grid:lock');
   });
 
@@ -222,18 +232,18 @@ describe('BiddingOptimizer', () => {
     ];
     mockPricingService.getDayAheadForecast.mockResolvedValue(forecasts);
 
-    const bids = await optimizer.generateDayAheadBids('ERCOT');
+    const { bids: ercotBids } = await optimizer.generateDayAheadBids('ERCOT');
 
-    expect(bids).toHaveLength(0);
+    expect(ercotBids).toHaveLength(0);
     expect(mockRedisClient.get).toHaveBeenCalledWith('l4:grid:lock:ERCOT');
 
     // Test hyphenated ISO normalization
-    const entsoeBids = await optimizer.generateDayAheadBids('ENTSO-E');
+    const { bids: entsoeBids } = await optimizer.generateDayAheadBids('ENTSO-E');
     expect(entsoeBids).toHaveLength(0);
     expect(mockRedisClient.get).toHaveBeenCalledWith('l4:grid:lock:ENTSOE');
 
     // Should NOT be locked for CAISO if only ERCOT and ENTSOE are locked
-    const caisoBids = await optimizer.generateDayAheadBids('CAISO');
+    const { bids: caisoBids } = await optimizer.generateDayAheadBids('CAISO');
     expect(caisoBids).toHaveLength(1);
   });
 
@@ -255,15 +265,17 @@ describe('BiddingOptimizer', () => {
     ]);
 
     // Test ERCOT specific capacity
-    const ercotBids = await optimizer.generateDayAheadBids('ERCOT');
+    const { bids: ercotBids, audit: ercotAudit } = await optimizer.generateDayAheadBids('ERCOT');
     expect(ercotBids[0]).toContain('38=1.20');
+    expect(ercotAudit.capacity_fidelity).toBe('HIGH_FIDELITY');
 
     // Test CAISO specific capacity
-    const caisoBids = await optimizer.generateDayAheadBids('CAISO');
+    const { bids: caisoBids, audit: caisoAudit } = await optimizer.generateDayAheadBids('CAISO');
     expect(caisoBids[0]).toContain('38=0.80');
+    expect(caisoAudit.capacity_fidelity).toBe('STANDARD');
 
     // Test PJM (not in regional data) should fall back to global
-    const pjmBids = await optimizer.generateDayAheadBids('PJM');
+    const { bids: pjmBids } = await optimizer.generateDayAheadBids('PJM');
     expect(pjmBids[0]).toContain('38=0.50');
   });
 
@@ -281,8 +293,9 @@ describe('BiddingOptimizer', () => {
 
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
-    const bids = await optimizer.generateDayAheadBids('CAISO');
+    const { bids, audit } = await optimizer.generateDayAheadBids('CAISO');
     expect(bids[0]).toContain('38=0.50');
+    expect(audit.capacity_fidelity).toBe('STANDARD');
     expect(consoleSpy).toHaveBeenCalledWith(
       expect.stringContaining('Failed to parse regional capacity'),
       expect.anything()

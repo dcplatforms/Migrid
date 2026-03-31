@@ -2,7 +2,7 @@
 
 **Version:** 10.1.0
 **Last Updated:** March 2026
-**Status:** Phase 5 "Enterprise Scale" (65% Complete)
+**Status:** Phase 5 "Enterprise Scale" (90% Complete)
 
 ---
 
@@ -10,9 +10,9 @@
 
 | Priority | Feature / Task | Primary Layer | Blocking Dependencies | Target Phase |
 |:---:|:---|:---:|:---|:---:|
-| **P0** | **ML Demand Forecasting** | L11 (ML Engine) | 🚧 L11 Foundation v0.1.0 Active | Phase 6 |
-| **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | ✅ L7 v5.5.0 Hardened Certificate Exchange | Phase 5 |
-| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 (Market) v3.6.0 AI Fidelity Feeds | Phase 5 |
+| **P0** | **ML Demand Forecasting** | L11 (ML Engine) | ✅ Phase 5 High-Fidelity Data Pipelines (L1, L2, L3, L4) | Phase 6 |
+| **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | 🚧 L7 v5.5.0 Hardened (85% Complete) | Phase 5 |
+| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 (Market) v3.7.0 Bidding Auditability | Phase 5 |
 | **P3** | **OCPI 2.2 Roaming** | L7 (Device) | L9 (Commerce) v5.1.0 settlement engine sync | Phase 5 |
 | **P4** | **AI Anomaly Detection** | L8 (Energy) | L11 (ML Engine) Foundation active | Phase 6 |
 
@@ -21,8 +21,8 @@
 | 1 | **ISO-15118-PC** | Full ISO 15118-20 Bidirectional Certificate Exchange & Plug & Charge UI (OCPP 2.1) | L7, L5, L1 | 85% | Phase 5: Enterprise Scale |
 | 2 | **COMMERCE-BILLING** | Complete L9 Commerce Engine Tariff Engine and Flexible Billing Logic | L9, L5 | 65% | Phase 5: Commerce Sync |
 | 3 | **OCPI-2.2-ROAM** | OCPI 2.2 Roaming Integration for cross-network orchestration | L7, L9 | 60% | Phase 5: Global Expansion |
-| 4 | **REGIONAL-CHALLENGE** | Implementation of L6 Regional Team Challenges & Live Grid Events | L6, L2 | 100%| Phase 5: Grid-Aware Gamification |
-| 5 | **ML-FORECASTING** | L11 ML Engine: Demand Forecasting and Predictive Analytics Foundation | L11, L3 | 25% | Phase 6: AI & Optimization |
+| 4 | **REGIONAL-CHALLENGE** | Implementation of L6 Regional Team Challenges & Live Grid Events | L6, L2 | ✅ 100%| Phase 5: Grid-Aware Gamification |
+| 5 | **ML-FORECASTING** | L11 ML Engine: Demand Forecasting and Predictive Analytics Foundation | L11, L3 | 35% | Phase 6: AI & Optimization |
 
 ---
 
@@ -34,8 +34,8 @@
 | **L5 Driver DX** | PnC Auth Status | **L7 Device Gateway** | Driver cannot use Plug & Charge sessions | 🚧 85% |
 | **L9 Commerce** | Billing Reconciliation | **L1 Physics / L4 Market** | Inaccurate split-billing or tariff logic | ✅ Active |
 | **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.0 Active |
-| **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine** | Rewards fail for 'ISO Explorer' challenges | ✅ v5.3.0 Sync |
-| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway** | VTN cannot see market-aware grid signals | ✅ v2.4.0 Sync |
+| **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine** | Rewards fail for 'ISO Explorer' challenges | ✅ v5.5.0 Sync |
+| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway** | VTN cannot see market-aware grid signals | ✅ v3.6.0 Sync |
 
 ---
 
@@ -54,10 +54,11 @@
 - [✓] **Physics-Aware Reporting**: Integration of `physics_score` and `is_high_fidelity` for L11.
 - [~] **BESS Integration**: Support for stationary storage assets (75%).
 
-### Layer 4: Market Gateway (v3.6.0)
-- [✓] **AI Fidelity Tracking**: High-precision numeric ingestion for L11 training.
+### Layer 4: Market Gateway (v3.7.0)
+- [✓] **Bidding Auditability**: High-fidelity audit context (physics_score, capacity_fidelity) for all bids.
 - [✓] **Regional Grid Lock**: Improved observability and specific ISO lock logging.
 - [✓] **ERCOT & Nord Pool**: Full activation of Texas and Nordic market adapters.
+- [~] **BESS RL Bidding**: Research phase for reinforcement learning models (10%).
 
 ### Layer 6: Engagement Engine (v5.5.0)
 - [✓] **ENTSO-E Pioneer**: European regional grid response achievement.

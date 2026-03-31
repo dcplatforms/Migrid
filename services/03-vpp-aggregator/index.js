@@ -295,17 +295,8 @@ const updateGlobalCapacity = async () => {
 
       totalCapacity += deratedCapacity;
 
-      // Ensure regional entry exists
-      if (!regionalCapacity[normalizedRegion]) {
-        regionalCapacity[normalizedRegion] = { total: 0, ev: 0, bess: 0 };
-      }
-
-      regionalCapacity[normalizedRegion].total += deratedCapacity;
-      if (row.resource_type === 'BESS') {
-        regionalCapacity[normalizedRegion].bess += deratedCapacity;
-      } else {
-        regionalCapacity[normalizedRegion].ev += deratedCapacity;
-      }
+      // Normalize ISO naming to uppercase and hyphen-free for cross-layer consistency (L4/L10)
+      regionalCapacity[normalizedRegion] = (normalizedRegion in regionalCapacity) ? regionalCapacity[normalizedRegion] + deratedCapacity : deratedCapacity;
     });
 
     await redisClient.set('vpp:capacity:available', totalCapacity.toString());
