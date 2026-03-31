@@ -333,9 +333,10 @@ async function processChargingEvent(event) {
     let isHighFidelity = true;
     let isLowVariance = true;
 
-    // Use event-provided score if available
-    if (event.physicsScore !== undefined) physics_score = parseFloat(event.physicsScore);
+    // Use event-provided score if available (Backward compatibility for camelCase)
     if (event.physics_score !== undefined) physics_score = parseFloat(event.physics_score);
+    else if (event.physicsScore !== undefined) physics_score = parseFloat(event.physicsScore);
+
     isHighFidelity = physics_score > 0.95;
 
     if (isFinal) {
@@ -371,28 +372,32 @@ async function processChargingEvent(event) {
     if (event.energyDispensedKwh) {
       let pointsMultiplier = 1.0;
       let multiplierReason = 'Standard Charging';
+      let isSurplus = false;
       try {
         const profitabilityStr = await redisClient.hGet('market:profitability', iso);
-        const profitability = parseFloat(profitabilityStr || '0');
-        if (profitability > 100) {
-          // L10 Scarcity Alignment: LMP > $100/MWh
-          // Only reward charging during high scarcity if explicitly part of a VPP/Grid Response event
-          const isGridResponse = event.isVPPEvent || event.is_vpp_event;
-          if (isGridResponse) {
-            pointsMultiplier = 2.0;
-            multiplierReason = 'High Scarcity VPP Bonus (2.0x)';
-            console.log(`[L6] High Scarcity VPP Bonus applied for ${iso}: 2.0x multiplier.`);
-          } else {
-            // Discourage charging during high scarcity
-            pointsMultiplier = 0.5;
-            multiplierReason = 'High Scarcity Surcharge (0.5x)';
-            console.log(`[L6] High Scarcity Surcharge applied for ${iso}: 0.5x multiplier.`);
+        if (profitabilityStr !== null) {
+          const profitability = parseFloat(profitabilityStr);
+          if (profitability > 100) {
+            // L10 Scarcity Alignment: LMP > $100/MWh
+            // Only reward charging during high scarcity if explicitly part of a VPP/Grid Response event
+            const isGridResponse = event.isVPPEvent || event.is_vpp_event;
+            if (isGridResponse) {
+              pointsMultiplier = 2.0;
+              multiplierReason = 'High Scarcity VPP Bonus (2.0x)';
+              console.log(`[L6] High Scarcity VPP Bonus applied for ${iso}: 2.0x multiplier.`);
+            } else {
+              // Discourage charging during high scarcity
+              pointsMultiplier = 0.5;
+              multiplierReason = 'High Scarcity Surcharge (0.5x)';
+              console.log(`[L6] High Scarcity Surcharge applied for ${iso}: 0.5x multiplier.`);
+            }
+          } else if (profitability < 30) {
+            // L10 Surplus Alignment: LMP < $30/MWh (Including $0 and negative prices)
+            pointsMultiplier = 1.5;
+            multiplierReason = 'Grid Surplus Bonus (1.5x)';
+            isSurplus = true;
+            console.log(`[L6] Grid Alignment Bonus applied for ${iso}: 1.5x multiplier (L10 Surplus Alignment).`);
           }
-        } else if (profitability < 30) {
-          // L10 Surplus Alignment: LMP < $30/MWh
-          pointsMultiplier = 1.5;
-          multiplierReason = 'Grid Surplus Bonus (1.5x)';
-          console.log(`[L6] Grid Alignment Bonus applied for ${iso}: 1.5x multiplier (L10 Surplus Alignment).`);
         }
       } catch (err) {
         console.error('[L6] Error fetching market profitability for bonus:', err.message);
@@ -403,7 +408,7 @@ async function processChargingEvent(event) {
 
       if (isSurplus && isFinal) {
         await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
-          [driverId, 'surplus_charge', JSON.stringify({ iso, sessionId, physicsScore, isHighFidelity })]);
+          [driverId, 'surplus_charge', JSON.stringify({ iso, sessionId, physics_score, isHighFidelity })]);
       }
 
       // Notify of points earned
@@ -415,11 +420,9 @@ async function processChargingEvent(event) {
         data: {
           session_id: sessionId,
           points,
-          physics_score: physicsScore.toFixed(4),
+          physics_score: physics_score.toFixed(4),
           fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD',
           multiplier_reason: multiplierReason
-          physics_score: physics_score.toFixed(4),
-          fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD'
         }
       };
 
@@ -433,10 +436,9 @@ async function processChargingEvent(event) {
             source_value: parseFloat(event.energyDispensedKwh),
             event_id: sessionId,
             iso: iso,
-            physics_score: physicsScore,
+            physics_score: physics_score,
             is_high_fidelity: isHighFidelity,
             multiplier_reason: multiplierReason
-            physics_score: physics_score
           })
         }]
       });
@@ -459,10 +461,9 @@ async function processChargingEvent(event) {
             source_value: parseFloat(event.energyDispensedKwh),
             event_id: sessionId,
             iso: iso,
-            physics_score: physicsScore,
+            physics_score: physics_score,
             is_high_fidelity: isHighFidelity,
             multiplier_reason: multiplierReason
-            physics_score: physics_score
           })
         }]
       });
@@ -516,11 +517,6 @@ async function processChargingEvent(event) {
       }]
     });
 
-          physics_score: 1.0 // V2G discharge is physics-verified by L1/L3
-        })
-      }]
-    });
-
     await checkV2GAchievements(driverId, iso, sessionId);
     await updateChallengeProgress(driverId, 'v2g_participation');
     await updateChallengeProgress(driverId, 'vpp_participation');
@@ -570,10 +566,11 @@ async function checkMarketMasterAchievement(driverId, iso, sessionId) {
 async function checkMarketSynchronizerAchievement(driverId, iso, sessionId) {
   try {
     const profitabilityStr = await redisClient.hGet('market:profitability', iso);
-    const profitability = parseFloat(profitabilityStr || '0');
+    if (profitabilityStr === null) return;
+    const profitability = parseFloat(profitabilityStr);
 
     // Surplus Threshold: < $30/MWh
-    if (profitability < 30 && profitability !== 0) {
+    if (profitability < 30) {
       console.log(`[L6] Market surplus charging detected in ${iso} ($${profitability}/MWh) for session ${sessionId}.`);
 
       const count = await pool.query(`
@@ -942,7 +939,7 @@ async function updateChallengeProgress(driver_id, challenge_type) {
 
         // Emit to driver_actions for L10 Token Engine
         const driverDataForChallenge = await pool.query('SELECT f.iso FROM drivers d JOIN fleets f ON d.fleet_id = f.id WHERE d.id = $1', [driver_id]);
-        const isoForChallenge = driverDataForChallenge.rows[0]?.iso || 'CAISO';
+        const isoForChallenge = (driverDataForChallenge.rows[0]?.iso || 'CAISO').toUpperCase().replace(/-/g, '');
 
         await producer.send({
           topic: 'driver_actions',
@@ -1203,7 +1200,7 @@ async function awardAchievement(driver_id, achievement_id) {
 
     // 5. Emit Kafka message for L10 Token Engine
     const driverData = await pool.query('SELECT f.iso FROM drivers d JOIN fleets f ON d.fleet_id = f.id WHERE d.id = $1', [driver_id]);
-    const iso = driverData.rows[0]?.iso || 'CAISO';
+    const iso = (driverData.rows[0]?.iso || 'CAISO').toUpperCase().replace(/-/g, '');
 
     await producer.send({
       topic: 'driver_actions',
