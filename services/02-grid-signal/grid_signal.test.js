@@ -296,14 +296,21 @@ describe('L2 Grid Signal Service', () => {
   });
 
   test('GET /openadr/v3/reports should return regional market contexts', async () => {
-    const mockCaisoContext = { iso: 'CAISO', price_per_mwh: 45.5 };
-    const mockErcotContext = { iso: 'ERCOT', price_per_mwh: 120.0 };
+    const mockUnifiedContext = {
+      digital_twin: {},
+      regional_markets: {
+        CAISO: { iso: 'CAISO', price_per_mwh: 45.5 },
+        ERCOT: { iso: 'ERCOT', price_per_mwh: 120.0 }
+      },
+      regional_locks: {},
+      site_statuses: {},
+      regional_capacity: {}
+    };
 
-    redisClient.scan.mockResolvedValue({ cursor: 0, keys: ['market:context:CAISO', 'market:context:ERCOT'] });
-    redisClient.mGet.mockResolvedValue([
-      JSON.stringify(mockCaisoContext),
-      JSON.stringify(mockErcotContext)
-    ]);
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l2:unified:context') return Promise.resolve(JSON.stringify(mockUnifiedContext));
+      return Promise.resolve(null);
+    });
 
     const response = await request(app).get('/openadr/v3/reports');
     expect(response.status).toBe(200);
@@ -326,23 +333,20 @@ describe('L2 Grid Signal Service', () => {
   });
 
   test('GET /openadr/v3/reports should aggregate regional digital twin stats from L1 keys', async () => {
-    const mockVehicle1 = { id: 'V1', physics_score: 0.98 };
-    const mockVehicle2 = { id: 'V2', physics_score: 0.80 };
+    const mockUnifiedContext = {
+      digital_twin: {
+        CAISO: { vehicle_count: 1, high_fidelity_count: 1 },
+        ERCOT: { vehicle_count: 1, high_fidelity_count: 0 }
+      },
+      regional_markets: {},
+      regional_locks: {},
+      site_statuses: {},
+      regional_capacity: {}
+    };
 
-    redisClient.scan.mockImplementation((cursor, options) => {
-      if (options && options.MATCH === 'l1:*:vehicle:*') {
-        if (cursor === '0' || cursor === 0) {
-          return Promise.resolve({ cursor: '123', keys: ['l1:CAISO:vehicle:V1'] });
-        }
-        return Promise.resolve({ cursor: 0, keys: ['l1:ERCOT:vehicle:V2'] });
-      }
-      return Promise.resolve({ cursor: 0, keys: [] });
-    });
-
-    redisClient.mGet.mockImplementation((keys) => {
-      if (keys.includes('l1:CAISO:vehicle:V1')) return Promise.resolve([JSON.stringify(mockVehicle1)]);
-      if (keys.includes('l1:ERCOT:vehicle:V2')) return Promise.resolve([JSON.stringify(mockVehicle2)]);
-      return Promise.resolve([]);
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l2:unified:context') return Promise.resolve(JSON.stringify(mockUnifiedContext));
+      return Promise.resolve(null);
     });
 
     const response = await request(app).get('/openadr/v3/reports');
@@ -599,13 +603,19 @@ describe('L2 Grid Signal Service', () => {
   });
 
   test('GET /openadr/v3/reports should return cached regional stats (v2.4.2)', async () => {
-    const mockStats = {
-      CAISO: { vehicle_count: 1, high_fidelity_count: 1 },
-      ERCOT: { vehicle_count: 1, high_fidelity_count: 0 }
+    const mockUnifiedContext = {
+      digital_twin: {
+        CAISO: { vehicle_count: 1, high_fidelity_count: 1 },
+        ERCOT: { vehicle_count: 1, high_fidelity_count: 0 }
+      },
+      regional_markets: {},
+      regional_locks: {},
+      site_statuses: {},
+      regional_capacity: {}
     };
 
     redisClient.get.mockImplementation((key) => {
-      if (key === 'l2:regional:stats') return Promise.resolve(JSON.stringify(mockStats));
+      if (key === 'l2:unified:context') return Promise.resolve(JSON.stringify(mockUnifiedContext));
       return Promise.resolve(null);
     });
 
@@ -618,21 +628,20 @@ describe('L2 Grid Signal Service', () => {
   });
 
   test('GET /openadr/v3/reports should return L8 site statuses (Optimized with SMEMBERS)', async () => {
-    redisClient.scan.mockImplementation((cursor, options) => {
-      if (options.MATCH === 'l8:site:status:*') {
-        return Promise.resolve({ cursor: 0, keys: ['l8:site:status:SITE-1', 'l8:site:status:SITE-2'] });
-      }
-      return Promise.resolve({ cursor: 0, keys: [] });
-    });
+    const mockUnifiedContext = {
+      digital_twin: {},
+      regional_markets: {},
+      regional_locks: {},
+      site_statuses: {
+        'SITE-1': 'OPERATIONAL',
+        'SITE-2': 'SAFE_MODE'
+      },
+      regional_capacity: {}
+    };
 
-    redisClient.mGet.mockImplementation((keys) => {
-      if (keys.includes('l8:site:status:SITE-1')) return Promise.resolve(['OPERATIONAL', 'OPERATIONAL']);
-      return Promise.resolve([]);
-    });
-
-    redisClient.sMembers.mockImplementation((key) => {
-      if (key === 'l3:vpp:safemode_sites') return Promise.resolve(['SITE-2']);
-      return Promise.resolve([]);
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l2:unified:context') return Promise.resolve(JSON.stringify(mockUnifiedContext));
+      return Promise.resolve(null);
     });
 
     const response = await request(app).get('/openadr/v3/reports');
