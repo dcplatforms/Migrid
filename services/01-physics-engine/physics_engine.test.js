@@ -1,6 +1,8 @@
 // Manual mocks
 global.mockProducerSend = jest.fn();
 global.mockRedisSetEx = jest.fn();
+global.mockRedisIncr = jest.fn();
+global.mockRedisSet = jest.fn();
 global.mockRedisRPop = jest.fn();
 global.mockPgQuery = jest.fn();
 
@@ -35,6 +37,15 @@ jest.mock('redis', () => ({
     connect: jest.fn().mockResolvedValue({}),
     lPush: jest.fn().mockResolvedValue({}),
     rPop: jest.fn().mockImplementation((key) => global.mockRedisRPop(key)),
+    incr: jest.fn().mockImplementation((key) => {
+        global.mockRedisIncr(key);
+        return Promise.resolve(1);
+    }),
+    expire: jest.fn().mockResolvedValue(true),
+    set: jest.fn().mockImplementation((key, value) => {
+        global.mockRedisSet(key, value);
+        return Promise.resolve('OK');
+    }),
     setEx: jest.fn().mockImplementation((key, ttl, value) => {
         global.mockRedisSetEx(key, ttl, value);
         return Promise.resolve('OK');
@@ -399,6 +410,51 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.physics_score).toBe("0.9667"); // 1 - (0.5/15) = 0.96666...
     expect(alertValue.is_high_fidelity).toBe(true);
   });
+
+  test('should increment sentinel streak for score > 0.99', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'SESSION_COMPLETED',
+        vehicle_id: 'vehicle-sentinel',
+        efficiency_pct: 99.5
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    expect(global.mockRedisIncr).toHaveBeenCalledWith('l1:streak:sentinel:vehicle-sentinel');
+  });
+
+  test('should reset sentinel streak for score <= 0.99', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'SESSION_COMPLETED',
+        vehicle_id: 'vehicle-normal',
+        efficiency_pct: 98.0
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    expect(global.mockRedisSet).toHaveBeenCalledWith('l1:streak:sentinel:vehicle-normal', '0');
+  });
+});
+
+describe('L1 Physics Metadata Calculation', () => {
+  test('should correctly calculate sentinel fidelity for > 0.99', () => {
+    const payload = { event_type: 'EFFICIENCY_ALERT', efficiency_pct: 99.1 };
+    const metadata = physicsEngine.calculatePhysicsMetadata(payload);
+    expect(metadata.physicsScore).toBe(0.9910);
+    expect(metadata.isSentinelFidelity).toBe(true);
+  });
+
+  test('should correctly calculate high fidelity for > 0.95', () => {
+    const payload = { event_type: 'EFFICIENCY_ALERT', efficiency_pct: 96.0 };
+    const metadata = physicsEngine.calculatePhysicsMetadata(payload);
+    expect(metadata.physicsScore).toBe(0.9600);
+    expect(metadata.isHighFidelity).toBe(true);
+    expect(metadata.isSentinelFidelity).toBe(false);
+  });
 });
 
 describe('L1 Physics Engine Digital Twin Sync', () => {
@@ -437,15 +493,17 @@ describe('L1 Physics Engine Digital Twin Sync', () => {
   test('should sync vehicles using regional namespaces from joined fleet data', async () => {
     global.mockPgQuery.mockResolvedValue({
       rows: [
-        { id: 'v-ercot', fleet_id: 'f-tx', iso: 'ERCOT', current_soc: 50 },
-        { id: 'v-entsoe', fleet_id: 'f-eu', iso: 'ENTSO-E', current_soc: 60 }
+        { id: 'v-ercot', fleet_id: 'f-tx', iso: 'ERCOT', current_soc: 50, resource_type: 'BESS' },
+        { id: 'v-entsoe', fleet_id: 'f-eu', iso: 'ENTSO-E', current_soc: 60, resource_type: 'EV' }
       ]
     });
 
     await physicsEngine.syncDigitalTwin();
 
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:ERCOT:vehicle:v-ercot', 60, expect.stringContaining('"id":"v-ercot"'));
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:ERCOT:vehicle:v-ercot', 60, expect.stringContaining('"resource_type":"BESS"'));
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:ENTSOE:vehicle:v-entsoe', 60, expect.stringContaining('"id":"v-entsoe"'));
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:ENTSOE:vehicle:v-entsoe', 60, expect.stringContaining('"resource_type":"EV"'));
   });
 });
 

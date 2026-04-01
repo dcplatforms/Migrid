@@ -68,18 +68,10 @@ async function connectServices() {
 }
 
 /**
- * Handle EFFICIENCY_ALERT notifications from PostgreSQL
+ * Centralized Physics Metadata Calculation
+ * Calculates physics_score, is_high_fidelity, and is_sentinel_fidelity.
  */
-async function handlePhysicsAlert(msg) {
-  const payload = JSON.parse(msg.payload);
-  console.log('⚡ [L1 Physics] Received Physics Alert:', payload);
-
-  const severity = (payload.event_type === 'PHYSICS_FRAUD') ? 'FRAUD' : (payload.event_type === 'CAPACITY_VIOLATION' ? 'CRITICAL' : 'WARNING');
-
-  // L1-103 Enhancement: Confidence Score (Physics Score)
-  // Higher score (closer to 1.0) means more trustworthy data.
-  // Lower score (closer to 0.0) indicates high variance and potential fraud.
-  // Priority: Direct violations (FRAUD/CAPACITY) ALWAYS result in 0.0 score.
+function calculatePhysicsMetadata(payload) {
   let physicsScore = 1.0;
   if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
     physicsScore = 0.0;
@@ -89,12 +81,40 @@ async function handlePhysicsAlert(msg) {
     physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
   }
 
-  // L1-109 Enhancement: High-Fidelity Data Tracking for L11 ML Engine
-  // HIGH_FIDELITY if physics_score > 0.95 (Green Audit compliant)
-  const isHighFidelity = physicsScore > 0.95;
+  return {
+    physicsScore: parseFloat(physicsScore.toFixed(4)),
+    isHighFidelity: physicsScore > 0.95,
+    isSentinelFidelity: physicsScore > 0.99
+  };
+}
 
-  // L6-v5.6.0 Enhancement: Physics Sentinel status (score > 0.99)
-  const isSentinelFidelity = physicsScore > 0.99;
+/**
+ * Handle EFFICIENCY_ALERT notifications from PostgreSQL
+ */
+async function handlePhysicsAlert(msg) {
+  const payload = JSON.parse(msg.payload);
+  console.log('⚡ [L1 Physics] Received Physics Alert:', payload);
+
+  const severity = (payload.event_type === 'PHYSICS_FRAUD') ? 'FRAUD' : (payload.event_type === 'CAPACITY_VIOLATION' ? 'CRITICAL' : 'WARNING');
+
+  const { physicsScore, isHighFidelity, isSentinelFidelity } = calculatePhysicsMetadata(payload);
+
+  // [L1-114] Sentinel Streak Tracker: Track consecutive 0.99+ sessions in Redis
+  if (payload.vehicle_id && (payload.event_type === 'SESSION_COMPLETED' || payload.event_type === 'EFFICIENCY_ALERT')) {
+    const streakKey = `l1:streak:sentinel:${payload.vehicle_id}`;
+    try {
+      if (isSentinelFidelity) {
+        await redisClient.incr(streakKey);
+        await redisClient.expire(streakKey, 86400 * 30); // 30-day retention
+        console.log(`✨ [L1 Physics] Sentinel Streak incremented for ${payload.vehicle_id}`);
+      } else {
+        await redisClient.set(streakKey, '0');
+        console.log(`📉 [L1 Physics] Sentinel Streak reset for ${payload.vehicle_id} (Score: ${physicsScore})`);
+      }
+    } catch (streakErr) {
+      console.error('❌ [L1 Physics] Failed to update sentinel streak:', streakErr.message);
+    }
+  }
 
   // Cross-Layer ISO Normalization (e.g., ENTSO-E -> ENTSOE)
   const isoRegion = payload.iso_region ? payload.iso_region.toUpperCase().replace(/-/g, '') : 'CAISO';
@@ -233,18 +253,7 @@ async function reconcileLogs() {
       const severity = (payload.event_type === 'PHYSICS_FRAUD') ? 'FRAUD' : (payload.event_type === 'CAPACITY_VIOLATION' ? 'CRITICAL' : 'WARNING');
 
       // Re-calculate physics score and fidelity for high-fidelity reconciliation
-      // Priority: Direct violations (FRAUD/CAPACITY) ALWAYS result in 0.0 score.
-      let physicsScore = 1.0;
-      if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
-        physicsScore = 0.0;
-      } else if (payload.variance_pct !== undefined) {
-        physicsScore = Math.max(0, Math.min(1, 1 - (payload.variance_pct / 15.0)));
-      } else if (payload.efficiency_pct !== undefined) {
-        physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
-      }
-
-      const isHighFidelity = physicsScore > 0.95;
-      const isSentinelFidelity = physicsScore > 0.99;
+      const { physicsScore, isHighFidelity, isSentinelFidelity } = calculatePhysicsMetadata(payload);
 
       // Re-publish missed alerts to Kafka
       const alert = {
@@ -340,11 +349,13 @@ async function syncDigitalTwin() {
 
   try {
     // JOIN with fleets to get the ISO region for regional keying
+    // JOIN with vpp_resources to include resource_type (EV/BESS) for L2/L3 alignment
     // [L1-107] Enhancement: Fetch physics_score and is_high_fidelity for L2 reporting
     const result = await pgClient.query(
-      `SELECT v.id, v.fleet_id, v.battery_capacity_kwh, v.current_soc, v.is_plugged_in, v.v2g_enabled, v.physics_score, v.is_high_fidelity, f.iso
+      `SELECT v.id, v.fleet_id, v.battery_capacity_kwh, v.current_soc, v.is_plugged_in, v.v2g_enabled, v.physics_score, v.is_high_fidelity, f.iso, COALESCE(vr.resource_type, 'EV') as resource_type
        FROM vehicles v
        JOIN fleets f ON v.fleet_id = f.id
+       LEFT JOIN vpp_resources vr ON v.id = vr.vehicle_id
        WHERE v.fleet_id = $1`,
       [fleetId]
     );
@@ -407,6 +418,7 @@ if (require.main === module) {
 
 module.exports = {
   handlePhysicsAlert,
+  calculatePhysicsMetadata,
   producer,
   connectServices,
   syncDigitalTwin,
