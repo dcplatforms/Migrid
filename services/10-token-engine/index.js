@@ -149,12 +149,12 @@ async function start() {
 
         if (action_type === 'challenge_completed' || action_type === 'achievement_unlocked') {
           // Fixed-value rewards (points/tokens)
-          calculatedPoints = new Decimal(source_value || 0);
+          pointsAwarded = new Decimal(source_value || 0);
 
           const rule = await getRewardRule(action_type);
           rule_id = rule ? rule.rule_id : '00000000-0000-0000-0000-000000000000';
 
-          console.log(`[L10] ${action_type} by driver ${driver_id}. Awarding ${calculatedPoints.toNumber()} tokens.`);
+          console.log(`[L10] ${action_type} by driver ${driver_id}. Awarding ${pointsAwarded.toNumber()} tokens.`);
         } else {
           // Proof of Physics Gate: Energy-based rewards must have verified physics
           if (physics_score !== undefined && physics_score !== null) {
@@ -178,9 +178,9 @@ async function start() {
           // 2. Calculate Reward with Dynamic Boosting (Energy-based)
           const marketMultiplier = getDynamicMultiplier(iso, action_type);
           const baseReward = new Decimal(source_value || 0).times(rule.reward_multiplier);
-          calculatedPoints = baseReward.times(marketMultiplier).toDecimalPlaces(8);
+          pointsAwarded = baseReward.times(marketMultiplier).toDecimalPlaces(8);
 
-          console.log(`[L10] Reward calculated: ${calculatedPoints.toNumber()} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Market Mult: ${marketMultiplier})`);
+          console.log(`[L10] Reward calculated: ${pointsAwarded.toNumber()} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Market Mult: ${marketMultiplier})`);
         }
 
         if (pointsAwarded.isZero()) {

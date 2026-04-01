@@ -121,7 +121,6 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.6.0', // Weekly Product Update: L10 Proof-of-Physics & Scarcity Savior Refinement
     version: '5.6.0', // Weekly Product Update: Physics Sentinel & L10 Sync
     status: 'healthy',
     layer: 'L6'
@@ -428,10 +427,9 @@ async function processChargingEvent(event) {
         }
       };
 
-      // Notify L10 Token Engine for points fulfillment (Proof of Physics included)
-      await producer.send({
-        topic: 'driver_actions',
-        messages: [{
+      // Consolidated Kafka Messages for L10 Token Engine (Proof of Physics included)
+      const l10Messages = [
+        {
           value: JSON.stringify({
             driver_id: driverId,
             action_type: 'green_charging',
@@ -442,21 +440,11 @@ async function processChargingEvent(event) {
             is_high_fidelity: isHighFidelity,
             multiplier_reason: multiplierReason
           })
-        }]
-      });
+        }
+      ];
 
-      await producer.send({
-        topic: 'engagement_notifications',
-        messages: [{ key: driverId, value: JSON.stringify(notification) }]
-      });
-
-      // WebSocket Real-time Push
-      io.to(`driver:${driverId}`).emit('notification', notification);
-
-      // Emit to driver_actions for L10 Token Engine (Proof of Physics)
-      await producer.send({
-        topic: 'driver_actions',
-        messages: [{
+      if (isFinal) {
+        l10Messages.push({
           value: JSON.stringify({
             driver_id: driverId,
             action_type: 'session_completed',
@@ -467,8 +455,18 @@ async function processChargingEvent(event) {
             is_high_fidelity: isHighFidelity,
             multiplier_reason: multiplierReason
           })
-        }]
+        });
+      }
+
+      await producer.send({ topic: 'driver_actions', messages: l10Messages });
+
+      await producer.send({
+        topic: 'engagement_notifications',
+        messages: [{ key: driverId, value: JSON.stringify(notification) }]
       });
+
+      // WebSocket Real-time Push
+      io.to(`driver:${driverId}`).emit('notification', notification);
     }
   }
 
@@ -647,7 +645,7 @@ async function handleGridSignal(payload) {
     // - Returning data needed for notifications
     const results = await pool.query(`
       WITH target_drivers AS (
-          SELECT cs.driver_id, f.iso, f.id as fleet_id
+          SELECT cs.driver_id, UPPER(REPLACE(f.iso, '-', '')) as iso, f.id as fleet_id
           FROM charging_sessions cs
           JOIN drivers d ON cs.driver_id = d.id
           JOIN fleets f ON d.fleet_id = f.id
@@ -907,7 +905,10 @@ async function updateChallengeProgress(driver_id, challenge_type) {
         const chal = await pool.query('SELECT name, points_reward, token_reward FROM challenges WHERE id = $1', [challenge.id]);
         await updateLeaderboardPoints(driver_id, chal.rows[0].points_reward);
 
-        // Notify L10 Token Engine of challenge completion
+        // Notify L10 Token Engine of challenge completion (Consolidated)
+        const driverDataForChallenge = await pool.query('SELECT f.iso FROM drivers d JOIN fleets f ON d.fleet_id = f.id WHERE d.id = $1', [driver_id]);
+        const isoForChallenge = (driverDataForChallenge.rows[0]?.iso || 'CAISO').toUpperCase().replace(/-/g, '');
+
         await producer.send({
           topic: 'driver_actions',
           messages: [{
@@ -916,8 +917,9 @@ async function updateChallengeProgress(driver_id, challenge_type) {
               action_type: 'challenge_completed',
               challenge_id: challenge.id,
               challenge_name: chal.rows[0].name,
-              token_reward: chal.rows[0].token_reward,
+              source_value: chal.rows[0].token_reward || chal.rows[0].points_reward,
               event_id: challenge.id,
+              iso: isoForChallenge,
               physics_score: 1.0, // Behavioral achievements are logically verified
               is_high_fidelity: true
             })
@@ -938,26 +940,6 @@ async function updateChallengeProgress(driver_id, challenge_type) {
         });
 
         io.to(`driver:${driver_id}`).emit('notification', notification);
-
-        // Emit to driver_actions for L10 Token Engine
-        const driverDataForChallenge = await pool.query('SELECT f.iso FROM drivers d JOIN fleets f ON d.fleet_id = f.id WHERE d.id = $1', [driver_id]);
-        const isoForChallenge = (driverDataForChallenge.rows[0]?.iso || 'CAISO').toUpperCase().replace(/-/g, '');
-
-        await producer.send({
-          topic: 'driver_actions',
-          messages: [{
-            value: JSON.stringify({
-              driver_id,
-              action_type: 'challenge_completed',
-              challenge_name: chal.rows[0].name,
-              source_value: chal.rows[0].token_reward || chal.rows[0].points_reward,
-              event_id: challenge.id,
-              iso: isoForChallenge,
-              physics_score: 1.0,
-              is_high_fidelity: true
-            })
-          }]
-        });
       }
     }
   } catch (error) {
