@@ -68,15 +68,25 @@ async function connectServices() {
 }
 
 /**
+ * Helper: Standardize ISO region naming for cross-layer consistency
+ */
+function normalizeIso(iso) {
+  return (iso || 'CAISO').toUpperCase().replace(/-/g, '');
+}
+
+/**
  * Centralized Physics Metadata Calculation
  * Calculates physics_score, is_high_fidelity, and is_sentinel_fidelity.
  */
 function calculatePhysicsMetadata(payload) {
   let physicsScore = 1.0;
+  // [L1-117] BESS Efficiency Curves: Stricter 10% threshold for BESS (vs 15% for EV)
+  const varianceThreshold = (payload.resource_type === 'BESS') ? 10.0 : 15.0;
+
   if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
     physicsScore = 0.0;
   } else if (payload.variance_pct !== undefined) {
-    physicsScore = Math.max(0, Math.min(1, 1 - (payload.variance_pct / 15.0)));
+    physicsScore = Math.max(0, Math.min(1, 1 - (payload.variance_pct / varianceThreshold)));
   } else if (payload.efficiency_pct !== undefined) {
     physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
   }
@@ -104,8 +114,18 @@ async function handlePhysicsAlert(msg) {
     const streakKey = `l1:streak:sentinel:${payload.vehicle_id}`;
     try {
       if (isSentinelFidelity) {
-        await redisClient.incr(streakKey);
-        await redisClient.expire(streakKey, 86400 * 30); // 30-day retention
+        // [L1-116] Streak Decay: Reset if inactivity > 7 days
+        const ttl = await redisClient.ttl(streakKey);
+        const thirtyDays = 86400 * 30;
+        const sevenDays = 86400 * 7;
+
+        if (ttl > 0 && ttl < (thirtyDays - sevenDays)) {
+          console.log(`⏳ [L1 Physics] Sentinel Streak decayed for ${payload.vehicle_id} due to 7+ days inactivity.`);
+          await redisClient.set(streakKey, '1');
+        } else {
+          await redisClient.incr(streakKey);
+        }
+        await redisClient.expire(streakKey, thirtyDays); // 30-day retention
         console.log(`✨ [L1 Physics] Sentinel Streak incremented for ${payload.vehicle_id}`);
       } else {
         await redisClient.set(streakKey, '0');
@@ -117,7 +137,7 @@ async function handlePhysicsAlert(msg) {
   }
 
   // Cross-Layer ISO Normalization (e.g., ENTSO-E -> ENTSOE)
-  const isoRegion = payload.iso_region ? payload.iso_region.toUpperCase().replace(/-/g, '') : 'CAISO';
+  const isoRegion = normalizeIso(payload.iso_region);
 
   // Update last known market price for Scarcity Mode detection
   if (payload.market_price_at_session !== undefined) {
@@ -173,6 +193,7 @@ async function handlePhysicsAlert(msg) {
       site_id: payload.site_id || payload.metadata?.site_id || SITE_ID,
       efficiency_pct: payload.efficiency_pct,
       variance_pct: payload.variance_pct,
+      resource_type: payload.resource_type || 'EV',
       current_soc: payload.current_soc,
       threshold: payload.threshold || (payload.event_type === 'EFFICIENCY_ALERT' ? 0.85 : (payload.event_type === 'CAPACITY_VIOLATION' ? 20.0 : null)),
       expected: payload.expected,
@@ -264,6 +285,7 @@ async function reconcileLogs() {
         site_id: payload.site_id || payload.metadata?.site_id || SITE_ID,
         efficiency_pct: payload.efficiency_pct,
         variance_pct: payload.variance_pct,
+        resource_type: payload.resource_type || 'EV',
         current_soc: payload.current_soc,
         threshold: payload.threshold || (payload.event_type === 'EFFICIENCY_ALERT' ? 0.85 : (payload.event_type === 'CAPACITY_VIOLATION' ? 20.0 : null)),
         expected: payload.expected,
@@ -274,7 +296,7 @@ async function reconcileLogs() {
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
         v2g_active: payload.v2g_active,
-        iso_region: payload.iso_region ? payload.iso_region.toUpperCase().replace(/-/g, '') : 'CAISO',
+        iso_region: normalizeIso(payload.iso_region),
         market_price_at_session: payload.market_price_at_session || 0.0,
         timestamp: payload.timestamp || new Date().toISOString(),
         source_layer: 'L1',
@@ -288,7 +310,7 @@ async function reconcileLogs() {
       });
 
       // High-Fidelity SQL Insertion: map values correctly based on event_type
-      let expectedValue = payload.threshold || 0.85;
+      let expectedValue = payload.threshold || (payload.resource_type === 'BESS' ? 0.90 : 0.85);
       let actualValue = payload.efficiency_pct;
 
       if (payload.event_type === 'PHYSICS_FRAUD') {
@@ -324,7 +346,7 @@ async function reconcileLogs() {
         payload.billing_mode,
         payload.vpp_active,
         payload.v2g_active,
-        payload.iso_region ? payload.iso_region.toUpperCase().replace(/-/g, '') : 'CAISO',
+        normalizeIso(payload.iso_region),
         payload.market_price_at_session || 0.0,
         physicsScore.toFixed(4),
         isHighFidelity
@@ -361,7 +383,7 @@ async function syncDigitalTwin() {
     );
 
     for (const vehicle of result.rows) {
-      const iso = vehicle.iso ? vehicle.iso.toUpperCase().replace(/-/g, '') : 'CAISO';
+      const iso = normalizeIso(vehicle.iso);
       const key = `l1:${iso}:vehicle:${vehicle.id}`;
 
       const physicsScore = parseFloat(vehicle.physics_score || 1.0);

@@ -4,6 +4,7 @@ global.mockRedisSetEx = jest.fn();
 global.mockRedisIncr = jest.fn();
 global.mockRedisSet = jest.fn();
 global.mockRedisRPop = jest.fn();
+global.mockRedisTtl = jest.fn();
 global.mockPgQuery = jest.fn();
 
 // Mock dependencies (hoisted by Jest)
@@ -37,6 +38,7 @@ jest.mock('redis', () => ({
     connect: jest.fn().mockResolvedValue({}),
     lPush: jest.fn().mockResolvedValue({}),
     rPop: jest.fn().mockImplementation((key) => global.mockRedisRPop(key)),
+    ttl: jest.fn().mockImplementation((key) => global.mockRedisTtl(key)),
     incr: jest.fn().mockImplementation((key) => {
         global.mockRedisIncr(key);
         return Promise.resolve(1);
@@ -438,6 +440,25 @@ describe('L1 Physics Engine Alert Handling', () => {
 
     expect(global.mockRedisSet).toHaveBeenCalledWith('l1:streak:sentinel:vehicle-normal', '0');
   });
+
+  test('[L1-116] should decay sentinel streak for score > 0.99 if inactivity > 7 days', async () => {
+    const streakKey = 'l1:streak:sentinel:vehicle-decay';
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'SESSION_COMPLETED',
+        vehicle_id: 'vehicle-decay',
+        efficiency_pct: 99.5
+      })
+    };
+
+    // TTL less than 23 days (30 - 7) means more than 7 days have passed since last update
+    global.mockRedisTtl.mockResolvedValue(86400 * 22);
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    expect(global.mockRedisTtl).toHaveBeenCalledWith(streakKey);
+    expect(global.mockRedisSet).toHaveBeenCalledWith(streakKey, '1');
+  });
 });
 
 describe('L1 Physics Metadata Calculation', () => {
@@ -454,6 +475,28 @@ describe('L1 Physics Metadata Calculation', () => {
     expect(metadata.physicsScore).toBe(0.9600);
     expect(metadata.isHighFidelity).toBe(true);
     expect(metadata.isSentinelFidelity).toBe(false);
+  });
+
+  test('[L1-117] should use stricter 10% threshold for BESS', () => {
+    const payload = {
+      event_type: 'EFFICIENCY_ALERT',
+      variance_pct: 8.0,
+      resource_type: 'BESS'
+    };
+    const metadata = physicsEngine.calculatePhysicsMetadata(payload);
+    // 1 - (8 / 10) = 0.2
+    expect(metadata.physicsScore).toBe(0.2000);
+  });
+
+  test('[L1-117] should use standard 15% threshold for EV', () => {
+    const payload = {
+      event_type: 'EFFICIENCY_ALERT',
+      variance_pct: 8.0,
+      resource_type: 'EV'
+    };
+    const metadata = physicsEngine.calculatePhysicsMetadata(payload);
+    // 1 - (8 / 15) = 0.4666666666666667
+    expect(metadata.physicsScore).toBe(0.4667);
   });
 });
 
