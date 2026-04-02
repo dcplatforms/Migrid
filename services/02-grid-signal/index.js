@@ -92,7 +92,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.4.3',
+    version: '2.4.4',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -121,7 +121,8 @@ app.get('/openadr/v3/reports', async (req, res) => {
       regional_markets: {},
       regional_locks: {},
       site_statuses: {},
-      regional_capacity: {}
+      regional_capacity: {},
+      confidence_score: 1.0
     };
 
     const marketContext = marketContextRaw ? JSON.parse(marketContextRaw) : null;
@@ -142,6 +143,7 @@ app.get('/openadr/v3/reports', async (req, res) => {
         active: gridLock === '1' || gridLock === 'true',
         regional: unifiedContext.regional_locks
       },
+      confidence_score: unifiedContext.confidence_score,
       digital_twin: unifiedContext.digital_twin,
       site_statuses: unifiedContext.site_statuses,
       timestamp: new Date().toISOString()
@@ -252,9 +254,14 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
       const safetyContextRaw = await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
       const safetyContext = safetyContextRaw ? JSON.parse(safetyContextRaw) : {};
 
-      // [L2-v2.4.2] Enhanced High-Fidelity Kafka Broadcast
+      // [L2-v2.4.4] Enhanced High-Fidelity Kafka Broadcast with Confidence & Regional Context
       const physicsScore = parseFloat(safetyContext.physics_score || '1.0000');
       const fidelityStatus = physicsScore > 0.95 ? 'HIGH_FIDELITY' : 'STANDARD';
+
+      // Fetch high-fidelity capacity snapshot for this region if available
+      const unifiedContextRaw = await redisClient.get('l2:unified:context');
+      const unifiedContext = unifiedContextRaw ? JSON.parse(unifiedContextRaw) : null;
+      const regionalCapacity = unifiedContext?.regional_capacity?.[isoRegion] || null;
 
       await producer.send({
         topic: 'grid_signals',
@@ -268,10 +275,12 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
             site_status: siteStatus || 'OPERATIONAL',
             v2g_requested: v2gRequested,
             iso_region: isoRegion,
+            regional_capacity: regionalCapacity, // L2 v2.4.4: Regional capacity breakdown (Total/EV/BESS)
             market_price_at_session: event.metadata?.market_price_at_session ?? (marketMetadata.price_per_mwh ?? 0), // L2 v2.4.1: Nullish coalescing for 0-price preservation
             profitability_index: marketMetadata.profitability_index,
             degradation_cost_mwh: marketMetadata.degradation_cost_mwh,
             physics_score: physicsScore,
+            confidence_score: physicsScore, // L2 v2.4.4: Explicit confidence score for L11
             fidelity_status: fidelityStatus,
             metadata: event.metadata || {}, // L2 v2.4.1: Full metadata preservation (OpenADR 3.1.0)
             billing_mode: event.metadata?.billing_mode,
@@ -352,11 +361,15 @@ const updateRegionalStats = async () => {
           const data = values[index] ? JSON.parse(values[index]) : null;
 
           if (!context.digital_twin[iso]) {
-            context.digital_twin[iso] = { vehicle_count: 0, high_fidelity_count: 0 };
+            context.digital_twin[iso] = { vehicle_count: 0, high_fidelity_count: 0, ev_count: 0, bess_count: 0 };
           }
           context.digital_twin[iso].vehicle_count++;
-          if (data && (data.is_high_fidelity || data.physics_score > 0.95)) {
-            context.digital_twin[iso].high_fidelity_count++;
+          if (data) {
+            if (data.is_high_fidelity || data.physics_score > 0.95) {
+              context.digital_twin[iso].high_fidelity_count++;
+            }
+            if (data.resource_type === 'EV') context.digital_twin[iso].ev_count++;
+            if (data.resource_type === 'BESS') context.digital_twin[iso].bess_count++;
           }
         });
       }
@@ -415,10 +428,23 @@ const updateRegionalStats = async () => {
       });
     }
 
-    // 5. Fetch regional capacity aggregation (from L3)
-    const regionalCapacityRaw = await redisClient.get('vpp:capacity:regional');
+    // 5. Fetch high-fidelity regional capacity aggregation (from L3)
+    const regionalCapacityRaw = await redisClient.get('vpp:capacity:regional:high_fidelity') || await redisClient.get('vpp:capacity:regional');
     if (regionalCapacityRaw) {
       context.regional_capacity = JSON.parse(regionalCapacityRaw);
+    }
+
+    // 6. Aggregate Physics Confidence Score (from L1)
+    const safetyContextRaw = await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
+    if (safetyContextRaw) {
+      try {
+        const safetyContext = JSON.parse(safetyContextRaw);
+        if (safetyContext.physics_score) {
+          context.confidence_score = parseFloat(safetyContext.physics_score);
+        }
+      } catch (e) {}
+    } else {
+      context.confidence_score = 1.0; // Default to full confidence if no locks/alerts
     }
 
     // Cache unified results for 30s to meet sub-500ms SLA

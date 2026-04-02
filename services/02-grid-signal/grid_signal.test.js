@@ -139,7 +139,7 @@ describe('L2 Grid Signal Service', () => {
     expect(sentValue.billing_mode).toBe('V2G_OPTIMIZED');
   });
 
-  test('POST /openadr/v3/events should include physics_score in broadcast (Phase 5)', async () => {
+  test('POST /openadr/v3/events should include physics_score and confidence_score in broadcast (v2.4.4)', async () => {
     redisClient.get.mockImplementation((key) => {
       if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({ physics_score: '0.9850' }));
       return Promise.resolve(null);
@@ -156,6 +156,7 @@ describe('L2 Grid Signal Service', () => {
     expect(response.status).toBe(202);
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
     expect(sentValue.physics_score).toBe(0.9850);
+    expect(sentValue.confidence_score).toBe(0.9850);
     expect(sentValue.fidelity_status).toBe('HIGH_FIDELITY');
   });
 
@@ -602,16 +603,17 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body.site_id).toBe('SITE-456');
   });
 
-  test('GET /openadr/v3/reports should return cached regional stats (v2.4.2)', async () => {
+  test('GET /openadr/v3/reports should return cached regional stats with EV/BESS breakdowns (v2.4.4)', async () => {
     const mockUnifiedContext = {
       digital_twin: {
-        CAISO: { vehicle_count: 1, high_fidelity_count: 1 },
-        ERCOT: { vehicle_count: 1, high_fidelity_count: 0 }
+        CAISO: { vehicle_count: 2, high_fidelity_count: 2, ev_count: 1, bess_count: 1 },
+        ERCOT: { vehicle_count: 1, high_fidelity_count: 0, ev_count: 1, bess_count: 0 }
       },
       regional_markets: {},
       regional_locks: {},
       site_statuses: {},
-      regional_capacity: {}
+      regional_capacity: {},
+      confidence_score: 0.99
     };
 
     redisClient.get.mockImplementation((key) => {
@@ -621,10 +623,10 @@ describe('L2 Grid Signal Service', () => {
 
     const response = await request(app).get('/openadr/v3/reports');
     expect(response.status).toBe(200);
-    expect(response.body.regional_stats.CAISO.vehicle_count).toBe(1);
-    expect(response.body.regional_stats.CAISO.high_fidelity_count).toBe(1);
-    expect(response.body.regional_stats.ERCOT.vehicle_count).toBe(1);
-    expect(response.body.regional_stats.ERCOT.high_fidelity_count).toBe(0);
+    expect(response.body.regional_stats.CAISO.vehicle_count).toBe(2);
+    expect(response.body.regional_stats.CAISO.ev_count).toBe(1);
+    expect(response.body.regional_stats.CAISO.bess_count).toBe(1);
+    expect(response.body.confidence_score).toBe(0.99);
   });
 
   test('GET /openadr/v3/reports should return L8 site statuses (Optimized with SMEMBERS)', async () => {
