@@ -723,4 +723,31 @@ describe('L2 Grid Signal Service', () => {
     expect(sentValue.iso_region).toBe('ENTSOE');
     expect(redisClient.get).toHaveBeenCalledWith('l4:grid:lock:ENTSOE');
   });
+
+  test('startSafetyConsumer should enforce 10% variance lock for BESS (Phase 5/6 Alignment)', async () => {
+    const { consumer, startSafetyConsumer } = require('./index');
+    await startSafetyConsumer();
+
+    const eachMessage = consumer.run.mock.calls[0][0].eachMessage;
+
+    const bessVarianceAlert = {
+      severity: 'WARNING',
+      event_type: 'EFFICIENCY_ALERT',
+      resource_type: 'BESS',
+      variance_pct: 12.5, // > 10% threshold for BESS
+      site_id: 'SITE-BESS-001'
+    };
+
+    await eachMessage({
+      topic: 'migrid.physics.alerts',
+      message: { value: Buffer.from(JSON.stringify(bessVarianceAlert)) }
+    });
+
+    expect(redisClient.setEx).toHaveBeenCalledWith('l1:safety:lock', 900, '1');
+    expect(redisClient.setEx).toHaveBeenCalledWith(
+      'l1:safety:lock:context',
+      900,
+      expect.stringContaining('exceeds 10% threshold for BESS')
+    );
+  });
 });

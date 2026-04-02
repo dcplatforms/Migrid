@@ -92,7 +92,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.4.3',
+    version: '2.4.4',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -416,9 +416,14 @@ const updateRegionalStats = async () => {
     }
 
     // 5. Fetch regional capacity aggregation (from L3)
-    const regionalCapacityRaw = await redisClient.get('vpp:capacity:regional');
+    // [L2 v2.4.4] Prefer high-fidelity regional capacity for breakdown (EV vs BESS)
+    const regionalCapacityRaw = await redisClient.get('vpp:capacity:regional:high_fidelity');
+    const legacyRegionalCapacityRaw = await redisClient.get('vpp:capacity:regional');
+
     if (regionalCapacityRaw) {
       context.regional_capacity = JSON.parse(regionalCapacityRaw);
+    } else if (legacyRegionalCapacityRaw) {
+      context.regional_capacity = JSON.parse(legacyRegionalCapacityRaw);
     }
 
     // Cache unified results for 30s to meet sub-500ms SLA
@@ -461,16 +466,18 @@ async function startSafetyConsumer() {
           await redisClient.setEx(`l8:site:status:${site_id}`, 3600, 'OPERATIONAL');
         }
       } else if (topic === 'migrid.physics.alerts') {
-        // PHYSICS RULE: Trigger lock if CRITICAL/FRAUD OR if variance exceeds 15%
+        // PHYSICS RULE: Trigger lock if CRITICAL/FRAUD OR if variance exceeds thresholds
+        // [L2 v2.4.4] BESS Invariant: 10% variance threshold; EV Invariant: 15% threshold.
         const isCritical = payload.severity === 'CRITICAL' || payload.severity === 'FRAUD';
-        const isHighVariance = payload.variance_pct > 15;
+        const varianceThreshold = payload.resource_type === 'BESS' ? 10 : 15;
+        const isHighVariance = payload.variance_pct > varianceThreshold;
 
         if (isHighVariance || isCritical) {
           const reason = isHighVariance ? 'HIGH_VARIANCE_THRESHOLD' : payload.event_type;
 
-          // CORE INVARIANT: Respect <15% variance threshold from L1 Physics Engine
+          // CORE INVARIANT: Respect physics variance thresholds from L1 Physics Engine
           if (isHighVariance) {
-            console.error(`🚨 [L2] CRITICAL INVARIANT VIOLATION: Variance (${payload.variance_pct}%) exceeds 15% threshold on Site ${payload.site_id}. Locking grid dispatch.`);
+            console.error(`🚨 [L2] CRITICAL INVARIANT VIOLATION: Variance (${payload.variance_pct}%) exceeds ${varianceThreshold}% threshold for ${payload.resource_type || 'EV'} on Site ${payload.site_id}. Locking grid dispatch.`);
           } else {
             console.error(`🚨 [L2] L1 SAFETY ALERT: ${reason} on Site ${payload.site_id}. Region: ${payload.iso_region}. Locking grid dispatch.`);
           }
@@ -485,6 +492,7 @@ async function startSafetyConsumer() {
           await redisClient.setEx(`${SAFETY_LOCK_KEY}:context`, 900, JSON.stringify({
             ...payload,
             reason,
+            message: isHighVariance ? `Variance (${payload.variance_pct}%) exceeds ${varianceThreshold}% threshold for ${payload.resource_type || 'EV'}` : undefined,
             billing_mode: payload.billing_mode,
             vpp_active: payload.vpp_active,
             v2g_active: payload.v2g_active,

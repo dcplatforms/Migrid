@@ -1,25 +1,25 @@
-### 🌐 L2 Grid Signal: Weekly Sync & Update (v2.4.3)
+### 🌐 L2 Grid Signal: Weekly Sync & Update (v2.4.4)
 * **Cross-Layer Delta:**
-  - **L1 (Physics Engine v10.1.0):** Aligned regional digital twin aggregation with sub-50ms reporting; L2 background task now performs multi-pass scan for `l1:*:vehicle:*` keys.
-  - **L3 (VPP Aggregator v3.3.0):** Integrated regional capacity and safe-mode site tracking via SMEMBERS for sub-millisecond response latency.
-  - **L4 (Market Gateway v3.7.0):** Synchronized regional market contexts and grid locks; L2 now aggregates these in a background context for optimized reports.
-  - **L11 (ML Engine):** Maintained high-fidelity telemetry pipelines; L2 unified context provides a consolidated "Ground Truth" snapshot for training readiness.
+  - **L1 (Physics Engine v10.1.0):** Implemented stricter BESS efficiency curves (10% variance vs 15% for EVs); L2 now enforces this resource-aware invariant in the safety consumer.
+  - **L3 (VPP Aggregator v3.3.0):** Activated `vpp:capacity:regional:high_fidelity` Redis stream; L2 now ingest this for granular EV vs BESS capacity reporting in the unified context.
+  - **L4 (Market Gateway v3.7.0):** Maintained alignment on regional grid locks and market context; ISO normalization remains the source of truth for cross-layer lookups.
+  - **L11 (ML Engine):** High-fidelity training pipelines hardened with resource-specific variance thresholds, ensuring higher data quality for BESS forecasting.
 
 * **OpenADR 3.0 Health:**
-  - VEN implementation continues full 3.0 compliance; performance refactor ensures reports remain responsive as fleet size scales.
-  - **ISO Normalization:** Strictly enforced `toUpperCase().replace(/-/g, '')` across all background aggregation passes to prevent cross-layer context fragmentation.
+  - VEN implementation maintains strict 3.0 compliance.
+  - Performance: Unified context aggregation remains sub-500ms; background task optimized to handle high-fidelity capacity breakdowns.
 
 * **Engineered Updates:**
-  - **Unified Context Caching:** Implemented `updateRegionalStats` refactor to aggregate digital twin, market context, grid locks, and site statuses into a single `l2:unified:context` Redis key (30s TTL).
-  - **Performance Optimization:** Refactored `GET /openadr/v3/reports` to utilize parallel `Promise.all` retrieval and the unified context, reducing Redis operations per request by >80%.
-  - **Sub-50ms Response:** Optimized report latency for AI readiness by offloading expensive SCAN/MGET operations to the background interval task.
-  - **Security & Integrity:** Maintained Zero-Trust JWT authentication and validated schema compliance for all ingress events.
+  - **Resource-Aware Safety:** Refactored `startSafetyConsumer` to enforce a 10% variance threshold for BESS assets while maintaining 15% for EVs, aligned with L1 [L1-117].
+  - **High-Fidelity Capacity Tracking:** Enhanced `updateRegionalStats` to ingest the new `vpp:capacity:regional:high_fidelity` Redis key from L3, enabling detailed resource breakdowns in the `l2:unified:context`.
+  - **Enhanced Lock Context:** Improved safety lock messages to explicitly state the resource type and exceeded threshold for improved observability.
+  - **Version Upgrade:** Deployed L2 v2.4.4 across the service and platform status.
 
 * **Safety Invariants Checked:**
-  - **L1 Variance Rule:** Verified that dispatch remains strictly rejected during active safety locks.
-  - **The Fuse Rule:** All regional capacity and V2G dispatches respect the 20% SoC hard floor enforced by L1/L3.
-  - **Zero-Trust:** All reports and event endpoints enforce JWT verification and role-based access.
+  - **BESS Invariant:** Verified that BESS variance > 10% triggers an immediate grid dispatch lock.
+  - **EV Invariant:** Maintained 15% variance threshold for standard EV resources.
+  - **The Fuse Rule:** Regional capacity reporting continues to respect the 20% SoC hard floor.
 
 * **Action Items / PRs:**
-  - Deployed L2 v2.4.3: Unified Context Aggregation & Performance Optimization.
-  - Verified 28/28 unit tests passing in `services/02-grid-signal`.
+  - Deployed L2 v2.4.4: Resource-Aware Safety & High-Fidelity Capacity Tracking.
+  - Verified 30/30 unit tests passing, including new BESS-specific safety regressions.
