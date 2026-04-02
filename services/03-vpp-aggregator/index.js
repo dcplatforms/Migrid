@@ -255,6 +255,7 @@ const updateGlobalCapacity = async () => {
     if (isLocked) {
         await redisClient.set('vpp:capacity:available', '0');
         await redisClient.set('vpp:capacity:regional', JSON.stringify({}));
+        await redisClient.set('vpp:capacity:regional:high_fidelity', JSON.stringify({}));
         return;
     }
 
@@ -292,11 +293,17 @@ const updateGlobalCapacity = async () => {
       const regionStr = row.region || 'SYSTEM_WIDE';
       const normalizedRegion = regionStr.toUpperCase().replace(/-/g, '');
       const deratedCapacity = parseFloat(row.raw_capacity_kwh || 0) * physicsMultiplier;
+      const resourceType = row.resource_type || 'EV';
 
       totalCapacity += deratedCapacity;
 
-      // Normalize ISO naming to uppercase and hyphen-free for cross-layer consistency (L4/L10)
-      regionalCapacity[normalizedRegion] = (normalizedRegion in regionalCapacity) ? regionalCapacity[normalizedRegion] + deratedCapacity : deratedCapacity;
+      if (!regionalCapacity[normalizedRegion]) {
+        regionalCapacity[normalizedRegion] = { total: 0, ev: 0, bess: 0, is_high_fidelity: isHighFidelity };
+      }
+
+      regionalCapacity[normalizedRegion].total += deratedCapacity;
+      if (resourceType === 'EV') regionalCapacity[normalizedRegion].ev += deratedCapacity;
+      if (resourceType === 'BESS') regionalCapacity[normalizedRegion].bess += deratedCapacity;
     });
 
     await redisClient.set('vpp:capacity:available', totalCapacity.toString());
@@ -495,4 +502,4 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
-module.exports = app;
+module.exports = { app, updateGlobalCapacity };
