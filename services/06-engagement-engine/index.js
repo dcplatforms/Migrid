@@ -121,7 +121,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.6.0', // Weekly Product Update: Physics Sentinel & L10 Sync
+      version: '5.7.0', // Weekly Update: Sentinel & BESS Alignment
     status: 'healthy',
     layer: 'L6'
   });
@@ -341,10 +341,19 @@ async function processChargingEvent(event) {
     isHighFidelity = physics_score > 0.95;
 
     if (isFinal) {
-      const sessionData = await pool.query('SELECT variance_percentage FROM charging_sessions WHERE id = $1', [sessionId]);
+      const sessionData = await pool.query(`
+        SELECT cs.variance_percentage, COALESCE(vr.resource_type, 'EV') as resource_type
+        FROM charging_sessions cs
+        LEFT JOIN vpp_resources vr ON cs.vehicle_id = vr.vehicle_id
+        WHERE cs.id = $1
+      `, [sessionId]);
+
       const variance = parseFloat(sessionData.rows[0]?.variance_percentage || '100');
+      const resourceType = sessionData.rows[0]?.resource_type || 'EV';
+      const varianceThreshold = resourceType === 'BESS' ? 10.0 : 15.0;
+
       isLowVariance = variance < 5.0;
-      physics_score = Math.max(0, Math.min(1, 1 - (variance / 15.0)));
+      physics_score = Math.max(0, Math.min(1, 1 - (variance / varianceThreshold)));
       isHighFidelity = physics_score > 0.95;
 
       await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
@@ -353,6 +362,7 @@ async function processChargingEvent(event) {
       await checkFirstSessionAchievement(driverId);
       await updateStreaks(driverId);
       await checkSustainabilityChampion(driverId);
+      await checkSentinelOfTheGridAchievement(driverId, event.vehicle_id || event.vehicleId);
 
       // Market Master is awarded only on session completion to ensure it's session-based
       await checkMarketMasterAchievement(driverId, iso, sessionId);
@@ -1000,7 +1010,10 @@ async function updateStreaks(driver_id) {
 async function checkV2GAchievements(driver_id, iso, sessionId) {
   try {
     // Scarcity Savior check
-    if (iso) await checkScarcitySaviorAchievement(driver_id, iso, sessionId);
+    if (iso) {
+      const normalizedIso = iso.toUpperCase().replace(/-/g, '');
+      await checkScarcitySaviorAchievement(driver_id, normalizedIso, sessionId);
+    }
 
     // 1. Grid Guardian (1 participation)
     const ggAchievement = await pool.query('SELECT id FROM achievements WHERE name = \'Grid Guardian\'');
@@ -1102,6 +1115,23 @@ async function checkEnergyArchitectAchievement(driver_id) {
     if (achievement.rows.length > 0) {
       await awardAchievement(driver_id, achievement.rows[0].id);
     }
+  }
+}
+
+async function checkSentinelOfTheGridAchievement(driver_id, vehicle_id) {
+  if (!vehicle_id) return;
+  try {
+    const streakStr = await redisClient.get(`l1:streak:sentinel:${vehicle_id}`);
+    const streak = parseInt(streakStr || '0');
+
+    if (streak >= 30) {
+      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Sentinel of the Grid'");
+      if (achievement.rows.length > 0) {
+        await awardAchievement(driver_id, achievement.rows[0].id);
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking Sentinel of the Grid achievement:', error);
   }
 }
 
