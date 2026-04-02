@@ -52,7 +52,7 @@ jest.mock('pg', () => ({
 }), { virtual: true });
 
 // Require the app after mocks
-const app = require('./index');
+const { app, updateGlobalCapacity } = require('./index');
 
 const JWT_SECRET = 'dev_secret_change_in_production';
 const mockToken = jwt.sign({ fleet_id: 'FLEET-001' }, JWT_SECRET);
@@ -230,6 +230,33 @@ describe('L3 VPP Aggregator Service', () => {
             expect(response.status).toBe(200);
             expect(response.body.status).toBe('DISPATCHED');
             expect(mockProducer.send).toHaveBeenCalled();
+        });
+    });
+
+    describe('updateGlobalCapacity', () => {
+        test('should aggregate EV and BESS correctly for regional breakdown', async () => {
+            mockRedisClient.get.mockResolvedValue(null);
+            mockPool.query.mockResolvedValueOnce({
+                rows: [
+                    { region: 'CAISO', resource_type: 'EV', raw_capacity_kwh: 100 },
+                    { region: 'CAISO', resource_type: 'BESS', raw_capacity_kwh: 50 },
+                    { region: 'PJM', resource_type: 'EV', raw_capacity_kwh: 200 }
+                ]
+            });
+
+            await updateGlobalCapacity();
+
+            // Verify high-fidelity Redis key
+            expect(mockRedisClient.set).toHaveBeenCalledWith(
+                'vpp:capacity:regional:high_fidelity',
+                expect.stringContaining('"CAISO":{"total":150,"ev":100,"bess":50}')
+            );
+
+            // Verify legacy Redis key (should be just the total number)
+            expect(mockRedisClient.set).toHaveBeenCalledWith(
+                'vpp:capacity:regional',
+                expect.stringContaining('"CAISO":150')
+            );
         });
     });
 });
