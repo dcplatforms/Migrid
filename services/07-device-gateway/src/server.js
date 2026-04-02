@@ -92,6 +92,11 @@ app.post('/iso15118/start-charge', authenticateInternal, async (req, res) => {
     const chargerRes = await pool.query('SELECT id FROM chargers WHERE serial_number = $1', [evse_id]);
     const charger_id = chargerRes.rows[0]?.id;
 
+    // Cache resource type in Redis for high-fidelity telemetry performance
+    const resourceRes = await pool.query('SELECT resource_type FROM vpp_resources WHERE vehicle_id = $1', [vehicle_id]);
+    const resourceType = resourceRes.rows[0]?.resource_type || 'EV';
+    await redis.set(`charger_resource:${evse_id}`, resourceType, 'EX', 86400); // 24h cache
+
     await pool.query(
       'INSERT INTO charging_sessions (vehicle_id, charger_id, start_time, start_soc) VALUES ($1, $2, NOW(), (SELECT current_soc FROM vehicles WHERE id = $1))',
       [vehicle_id, charger_id]
@@ -119,7 +124,11 @@ app.post('/iso15118/stop-charge', authenticateInternal, async (req, res) => {
       );
       await pool.query('UPDATE vehicles SET is_plugged_in = false WHERE id = $1', [vehicle_id]);
 
-      const isoRegion = await redis.get(`charger_region:${evse_id}`) || 'CAISO';
+      // Cleanup resource cache
+      await redis.del(`charger_resource:${evse_id}`);
+
+      const rawRegion = await redis.get(`charger_region:${evse_id}`) || 'CAISO';
+      const isoRegion = rawRegion.toUpperCase().replace(/-/g, '');
 
       await publishSessionEvent('SESSION_COMPLETED', {
         sessionId: session.id,
@@ -168,7 +177,8 @@ async function sendSetChargingProfile(chargePointId, limitKw, mode) {
     const connection = localConnections.get(chargePointId);
     if (!connection || connection.ws.readyState !== WebSocket.OPEN) return;
 
-    const isoRegion = await redis.get(`charger_region:${chargePointId}`) || 'CAISO';
+    const rawRegion = await redis.get(`charger_region:${chargePointId}`) || 'CAISO';
+    const isoRegion = rawRegion.toUpperCase().replace(/-/g, '');
     const gridLock = await redis.get(`l4:grid:lock:${isoRegion}`);
     if (gridLock === '1' || gridLock === 'true') {
         console.warn(`🛑 [L7] Control Signal HALTED for ${chargePointId}. L4 GRID LOCK in ${isoRegion} is ACTIVE.`);
@@ -249,7 +259,8 @@ wss.on('connection', async (ws, request, chargePointId, protocol) => {
     const podId = process.env.POD_ID || 'gateway-instance-1';
 
     const chargerRes = await pool.query('SELECT iso_region FROM chargers WHERE serial_number = $1', [chargePointId]);
-    const isoRegion = chargerRes.rows[0]?.iso_region || 'CAISO';
+    const rawRegion = chargerRes.rows[0]?.iso_region || 'CAISO';
+    const isoRegion = rawRegion.toUpperCase().replace(/-/g, '');
 
     localConnections.set(chargePointId, { ws, protocol, isoRegion });
     await registerConnection(chargePointId, podId, isoRegion);
