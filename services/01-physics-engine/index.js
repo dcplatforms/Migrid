@@ -68,6 +68,31 @@ async function connectServices() {
 }
 
 /**
+ * [L1-118] Calculate Data Confidence Score for L11 ML Engine
+ * @param {number} streak - Current sentinel streak
+ * @param {string} lastSync - ISO string of last sync
+ * @returns {number} Confidence score (0.0000 to 1.0000)
+ */
+function calculateConfidenceScore(streak, lastSync) {
+  let score = 0.5; // Base confidence
+
+  // Streak bonus: 0.1 per streak point, max 0.4 (total 0.9)
+  score += Math.min(0.4, (streak || 0) * 0.1);
+
+  // Frequency bonus: if synced recently (within last 24h), add 0.1
+  if (lastSync) {
+    const lastSyncDate = new Date(lastSync);
+    const now = new Date();
+    const diffHours = (now - lastSyncDate) / (1000 * 60 * 60);
+    if (diffHours < 24) {
+      score += 0.1;
+    }
+  }
+
+  return parseFloat(Math.min(1.0, score).toFixed(4));
+}
+
+/**
  * Helper: Standardize ISO region naming for cross-layer consistency
  */
 function normalizeIso(iso) {
@@ -145,6 +170,15 @@ async function handlePhysicsAlert(msg) {
     checkScarcityMode();
   }
 
+  // [L1-118] Fetch streak to calculate confidence score for real-time alerts
+  let currentStreak = 0;
+  if (payload.vehicle_id) {
+    const streakKey = `l1:streak:sentinel:${payload.vehicle_id}`;
+    const streakVal = await redisClient.get(streakKey);
+    currentStreak = parseInt(streakVal || '0');
+  }
+  const confidenceScore = calculateConfidenceScore(currentStreak, payload.timestamp || new Date().toISOString());
+
   // 1. Verify the Physics: Set Safety Lock in Redis for critical violations
   if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
     try {
@@ -161,6 +195,7 @@ async function handlePhysicsAlert(msg) {
         physics_score: physicsScore.toFixed(4),
         is_high_fidelity: isHighFidelity,
         is_sentinel_fidelity: isSentinelFidelity,
+        confidence_score: confidenceScore,
         current_soc: payload.current_soc,
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
@@ -201,6 +236,7 @@ async function handlePhysicsAlert(msg) {
       physics_score: physicsScore.toFixed(4),
       is_high_fidelity: isHighFidelity,
       is_sentinel_fidelity: isSentinelFidelity,
+      confidence_score: confidenceScore,
       billing_mode: payload.billing_mode,
       vpp_active: payload.vpp_active,
       v2g_active: payload.v2g_active,
@@ -386,13 +422,39 @@ async function syncDigitalTwin() {
       const iso = normalizeIso(vehicle.iso);
       const key = `l1:${iso}:vehicle:${vehicle.id}`;
 
+      // [L1-118] Implement Data Confidence Score for L11 ML Engine
+      const streakKey = `l1:streak:sentinel:${vehicle.id}`;
+      const streakVal = await redisClient.get(streakKey);
+      const streak = parseInt(streakVal || '0');
+
+      // Fetch last known sync state to determine frequency
+      const existingDataRaw = await redisClient.get(key);
+      let lastSync = null;
+      if (existingDataRaw) {
+        const existingData = JSON.parse(existingDataRaw);
+        lastSync = existingData.last_sync;
+      }
+
+      const confidenceScore = calculateConfidenceScore(streak, lastSync);
+
+      // [L7 Fallback] If resource_type is missing or default, check L7's Redis cache
+      let resourceType = vehicle.resource_type;
+      if (!resourceType || resourceType === 'EV') {
+        const cachedResource = await redisClient.get(`charger_resource:${vehicle.id}`);
+        if (cachedResource) {
+          resourceType = cachedResource;
+        }
+      }
+
       const physicsScore = parseFloat(vehicle.physics_score || 1.0);
 
       await redisClient.setEx(key, 60, JSON.stringify({
         ...vehicle,
+        resource_type: resourceType,
         physics_score: physicsScore,
         is_high_fidelity: physicsScore > 0.95,
         is_sentinel_fidelity: physicsScore > 0.99,
+        confidence_score: confidenceScore,
         last_sync: new Date().toISOString()
       }));
     }

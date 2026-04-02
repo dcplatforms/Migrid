@@ -3,6 +3,7 @@ global.mockProducerSend = jest.fn();
 global.mockRedisSetEx = jest.fn();
 global.mockRedisIncr = jest.fn();
 global.mockRedisSet = jest.fn();
+global.mockRedisGet = jest.fn();
 global.mockRedisRPop = jest.fn();
 global.mockRedisTtl = jest.fn();
 global.mockPgQuery = jest.fn();
@@ -44,6 +45,7 @@ jest.mock('redis', () => ({
         return Promise.resolve(1);
     }),
     expire: jest.fn().mockResolvedValue(true),
+    get: jest.fn().mockImplementation((key) => global.mockRedisGet(key)),
     set: jest.fn().mockImplementation((key, value) => {
         global.mockRedisSet(key, value);
         return Promise.resolve('OK');
@@ -413,6 +415,25 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.is_high_fidelity).toBe(true);
   });
 
+  test('[L1-118] should include confidence_score in Kafka alert based on streak', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'SESSION_COMPLETED',
+        vehicle_id: 'vehicle-conf-1',
+        efficiency_pct: 99.5,
+        timestamp: new Date().toISOString()
+      })
+    };
+
+    // Mock streak = 3. Confidence = 0.5 (base) + 0.3 (streak) + 0.1 (recent sync) = 0.9
+    global.mockRedisGet.mockResolvedValueOnce('3');
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.confidence_score).toBe(0.9);
+  });
+
   test('should increment sentinel streak for score > 0.99', async () => {
     const msg = {
       payload: JSON.stringify({
@@ -547,6 +568,34 @@ describe('L1 Physics Engine Digital Twin Sync', () => {
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:ERCOT:vehicle:v-ercot', 60, expect.stringContaining('"resource_type":"BESS"'));
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:ENTSOE:vehicle:v-entsoe', 60, expect.stringContaining('"id":"v-entsoe"'));
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:ENTSOE:vehicle:v-entsoe', 60, expect.stringContaining('"resource_type":"EV"'));
+  });
+
+  test('[L1-118] should use L7 Redis fallback for resource_type and calculate confidence during sync', async () => {
+    global.mockPgQuery.mockResolvedValue({
+      rows: [
+        { id: 'v-fallback', fleet_id: 'f1', iso: 'CAISO', resource_type: 'EV' }
+      ]
+    });
+
+    // Mock L7 cache
+    global.mockRedisGet
+      .mockResolvedValueOnce('5') // Streak for vehicle
+      .mockResolvedValueOnce(null) // Existing data for lastSync
+      .mockResolvedValueOnce('BESS'); // L7 resource_type fallback
+
+    await physicsEngine.syncDigitalTwin();
+
+    // Confidence = 0.5 (base) + 0.4 (max streak bonus) = 0.9 (no lastSync bonus)
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith(
+      'l1:CAISO:vehicle:v-fallback',
+      60,
+      expect.stringContaining('"resource_type":"BESS"')
+    );
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith(
+      'l1:CAISO:vehicle:v-fallback',
+      60,
+      expect.stringContaining('"confidence_score":0.9')
+    );
   });
 });
 
