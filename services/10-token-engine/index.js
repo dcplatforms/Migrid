@@ -3,6 +3,7 @@ const { Kafka } = require('kafkajs');
 const axios = require('axios');
 const express = require('express');
 const Decimal = require('decimal.js');
+const redis = require('redis');
 
 const app = express();
 const port = process.env.PORT || 3010;
@@ -10,19 +11,15 @@ const port = process.env.PORT || 3010;
 const pgClient = new Client({ connectionString: process.env.DATABASE_URL });
 const kafka = new Kafka({
   clientId: 'token-engine',
-  brokers: [process.env.KAFKA_BROKER || 'localhost:9092']
+  brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(',')
+});
+
+// Redis connection for market price context (Sync with L6)
+const redisClient = redis.createClient({
+  url: process.env.REDIS_URL || 'redis://localhost:6379'
 });
 
 const consumer = kafka.consumer({ groupId: 'token-engine-group' });
-
-// --- In-Memory Price Cache ---
-const priceCache = {
-  CAISO: { price: 45.0, timestamp: new Date() },
-  PJM: { price: 45.0, timestamp: new Date() },
-  ERCOT: { price: 45.0, timestamp: new Date() },
-  NORDPOOL: { price: 45.0, timestamp: new Date() },
-  ENTSOE: { price: 45.0, timestamp: new Date() }
-};
 
 // Thresholds for Dynamic Multipliers (surplus/scarcity) - Configurable via ENV
 const LMP_THRESHOLD_SURPLUS = new Decimal(process.env.LMP_THRESHOLD_SURPLUS || '30.0');
@@ -88,8 +85,16 @@ async function updateRewardTransactionStatus(logId, newStatus, openWalletTransac
 
 function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
   const iso = isoRaw.toUpperCase().replace(/-/g, '');
-  const priceData = priceCache[iso];
-  const latestPrice = priceData ? new Decimal(priceData.price) : new Decimal(50.0);
+  let latestPrice = new Decimal(50.0);
+
+  try {
+    const profitabilityStr = await redisClient.hGet('market:profitability', iso);
+    if (profitabilityStr) {
+      latestPrice = new Decimal(profitabilityStr);
+    }
+  } catch (err) {
+    console.error(`[L10] Error fetching market price from Redis for ${iso}:`, err.message);
+  }
 
   const isCharging = actionType === 'session_completed' || actionType === 'green_charging';
 
@@ -129,39 +134,43 @@ async function start() {
     await pgClient.connect();
     console.log('✅ [L10 Token Engine] Connected to Ledger.');
 
+    await redisClient.connect();
+    console.log('✅ [L10 Token Engine] Connected to Redis.');
+
     await consumer.connect();
     await consumer.subscribe({ topics: ['driver_actions', 'MARKET_PRICE_UPDATED'], fromBeginning: true });
 
-    app.listen(port, () => {
-      console.log(`✅ [L10 Token Engine] Health check server running on port ${port}`);
-    });
+    if (require.main === module) {
+      app.listen(port, () => {
+        console.log(`✅ [L10 Token Engine] Health check server running on port ${port}`);
+      });
+    }
 
     await consumer.run({
       eachMessage: async ({ topic, partition, message }) => {
-        const payload = JSON.parse(message.value.toString());
+        try {
+          const payload = JSON.parse(message.value.toString());
 
-        if (topic === 'MARKET_PRICE_UPDATED') {
-          const iso = payload.iso.toUpperCase().replace(/-/g, '');
-          console.log(`[L10 Market Watch] Received price update for ${iso}: $${payload.price_per_mwh}/MWh`);
-          priceCache[iso] = {
-            price: payload.price_per_mwh,
-            timestamp: new Date(payload.timestamp || Date.now())
-          };
-          return;
-        }
+          if (topic === 'MARKET_PRICE_UPDATED') {
+            const iso = payload.iso.toUpperCase().replace(/-/g, '');
+            const price = payload.profitability_index || payload.price_per_mwh;
+            console.log(`[L10 Market Watch] Received price update for ${iso}: $${price}/MWh`);
+            await redisClient.hSet('market:profitability', iso, price.toString());
+            return;
+          }
 
-        console.log(`⚡ Received message from ${topic}:`, payload);
+          console.log(`⚡ Received message from ${topic}:`, payload);
 
         const { driver_id, action_type, source_value, event_id, iso: payloadIso, physics_score, is_vpp_event, isVppEvent } = payload;
         const vppAligned = !!(is_vpp_event || isVppEvent);
 
-        // 1. Ensure Driver Wallet Exists (and get address)
-        const driverWallet = await getOrCreateDriverWallet(driver_id);
-        if (!driverWallet) {
-          console.error(`❌ Failed to get or create wallet for driver: ${driver_id}`);
-          return;
-        }
-        const iso = (payloadIso || driverWallet.iso || 'CAISO').toUpperCase().replace(/-/g, '');
+          // 1. Ensure Driver Wallet Exists (and get address)
+          const driverWallet = await getOrCreateDriverWallet(driver_id);
+          if (!driverWallet) {
+            console.error(`❌ Failed to get or create wallet for driver: ${driver_id}`);
+            return;
+          }
+          const iso = (payloadIso || driverWallet.iso || 'CAISO').toUpperCase().replace(/-/g, '');
 
         let pointsAwarded = new Decimal(0);
         let rule_id;
@@ -204,12 +213,12 @@ async function start() {
             return;
           }
 
-          const rule = await getRewardRule(action_type);
-          if (!rule) {
-            console.warn(`⚠️ No active reward rule found for action type: ${action_type}`);
-            return;
-          }
-          rule_id = rule.rule_id;
+            const rule = await getRewardRule(action_type);
+            if (!rule) {
+              console.warn(`⚠️ No active reward rule found for action type: ${action_type}`);
+              return;
+            }
+            rule_id = rule.rule_id;
 
           // 2. Calculate Reward with Dynamic Boosting (Energy-based)
           const marketMultiplier = getDynamicMultiplier(iso, action_type, vppAligned);
@@ -219,10 +228,10 @@ async function start() {
           console.log(`[L10] Reward calculated: ${pointsAwarded.toNumber()} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Market Mult: ${multiplier})`);
         }
 
-        if (pointsAwarded.isZero()) {
-          console.log(`[L10] Reward is zero for event ${event_id}, skipping.`);
-          return;
-        }
+          if (pointsAwarded.isZero()) {
+            console.log(`[L10] Reward is zero for event ${event_id}, skipping.`);
+            return;
+          }
 
         // 4. Log the Reward (pending)
         const rewardLog = await logRewardTransaction(
@@ -269,7 +278,8 @@ process.on('SIGINT', async () => {
   console.log('👋 [L10 Token Engine] Shutting down...');
   await consumer.disconnect();
   await pgClient.end();
+  await redisClient.quit();
   process.exit(0);
 });
 
-module.exports = { getDynamicMultiplier, priceCache, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY };
+module.exports = { app, getDynamicMultiplier, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY, redisClient };

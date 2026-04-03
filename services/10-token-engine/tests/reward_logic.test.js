@@ -1,18 +1,22 @@
 const Decimal = require('decimal.js');
-const { getDynamicMultiplier, priceCache, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY } = require('../index');
+const { getDynamicMultiplier, redisClient } = require('../index');
 
-// Setup mock prices for testing
-priceCache.CAISO = { price: 20.0 }; // Surplus
-priceCache.PJM = { price: 120.0 }; // Scarcity
-priceCache.ERCOT = { price: 50.0 }; // Normal
+// Mock Redis client for testing
+jest.mock('redis', () => ({
+  createClient: jest.fn(() => ({
+    connect: jest.fn(),
+    on: jest.fn(),
+    hGet: jest.fn(),
+    hSet: jest.fn(),
+    get: jest.fn(),
+    set: jest.fn(),
+    quit: jest.fn()
+  }))
+}));
 
 describe('L10 Token Engine - Reward Logic', () => {
   beforeEach(() => {
-    // Reset priceCache for tests
-    priceCache['CAISO'] = { price: 20.0 }; // Surplus
-    priceCache['PJM'] = { price: 120.0 }; // Scarcity
-    priceCache['ERCOT'] = { price: 50.0 }; // Normal
-    priceCache['ENTSOE'] = { price: 25.0 }; // European Surplus
+    jest.clearAllMocks();
   });
 
   test('Charging during surplus should receive 1.5x multiplier', () => {
@@ -55,9 +59,11 @@ describe('L10 Token Engine - Reward Logic', () => {
 
     const { multiplier: entsoeMult } = getDynamicMultiplier('ENTSO-E', 'session_completed');
     expect(entsoeMult.toNumber()).toBe(1.5);
+    expect(redisClient.hGet).toHaveBeenLastCalledWith('market:profitability', 'ENTSOE');
 
     const { multiplier: nordpoolMult } = getDynamicMultiplier('NordPool', 'v2g_discharge');
     expect(nordpoolMult.toNumber()).toBe(2.0);
+    expect(redisClient.hGet).toHaveBeenLastCalledWith('market:profitability', 'NORDPOOL');
   });
 
   test('Decimal precision check', () => {
