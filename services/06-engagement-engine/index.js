@@ -448,6 +448,7 @@ async function processChargingEvent(event) {
             iso: iso,
             physics_score: physics_score,
             is_high_fidelity: isHighFidelity,
+            is_vpp_event: !!(event.isVPPEvent || event.is_vpp_event),
             multiplier_reason: multiplierReason
           })
         }
@@ -463,6 +464,7 @@ async function processChargingEvent(event) {
             iso: iso,
             physics_score: physics_score,
             is_high_fidelity: isHighFidelity,
+            is_vpp_event: !!(event.isVPPEvent || event.is_vpp_event),
             multiplier_reason: multiplierReason
           })
         });

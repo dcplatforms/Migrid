@@ -30,6 +30,16 @@ describe('L10 Token Engine - Reward Logic', () => {
     expect(mult.toNumber()).toBe(1.0);
   });
 
+  test('Charging during scarcity without VPP alignment should receive 0.5x penalty', () => {
+    const mult = getDynamicMultiplier('PJM', 'session_completed', false);
+    expect(mult.toNumber()).toBe(0.5);
+  });
+
+  test('Charging during scarcity with VPP alignment should receive 2.0x bonus', () => {
+    const mult = getDynamicMultiplier('PJM', 'session_completed', true);
+    expect(mult.toNumber()).toBe(2.0);
+  });
+
   test('Multi-region support (ENTSOE, NORDPOOL) with normalization', () => {
     priceCache.ENTSOE = { price: 10.0 };
     priceCache.NORDPOOL = { price: 150.0 };
