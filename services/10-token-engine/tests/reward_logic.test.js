@@ -1,14 +1,17 @@
 const Decimal = require('decimal.js');
-const { getDynamicMultiplier, redisClient, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY } = require('../index');
+const { getDynamicMultiplier, redisClient } = require('../index');
 
-// Mock Redis Client
+// Mock Redis client for testing
 jest.mock('redis', () => ({
-  createClient: jest.fn().mockReturnValue({
-    connect: jest.fn().mockResolvedValue(),
+  createClient: jest.fn(() => ({
+    connect: jest.fn(),
     on: jest.fn(),
     hGet: jest.fn(),
-    quit: jest.fn().mockResolvedValue()
-  })
+    hSet: jest.fn(),
+    get: jest.fn(),
+    set: jest.fn(),
+    quit: jest.fn()
+  }))
 }));
 
 describe('L10 Token Engine - Reward Logic v4.3.0', () => {
@@ -16,31 +19,38 @@ describe('L10 Token Engine - Reward Logic v4.3.0', () => {
     jest.clearAllMocks();
   });
 
-  test('Charging during surplus should receive 1.5x multiplier', async () => {
-    // Mock Redis returning surplus price ($20)
-    redisClient.hGet.mockResolvedValue('20.0');
-
-    const result = await getDynamicMultiplier('CAISO', 'session_completed');
-    expect(result.multiplier.toNumber()).toBe(1.5);
-    expect(result.reason).toBe('Grid Surplus Bonus (1.5x)');
+  test('Charging during surplus should receive 1.5x multiplier', () => {
+    const { multiplier, reason } = getDynamicMultiplier('CAISO', 'session_completed');
+    expect(multiplier.toNumber()).toBe(1.5);
+    expect(reason).toBe('Grid Surplus Bonus (1.5x)');
   });
 
-  test('V2G discharge during scarcity should receive 2.0x multiplier', async () => {
-    // Mock Redis returning scarcity price ($120)
-    redisClient.hGet.mockResolvedValue('120.0');
-
-    const result = await getDynamicMultiplier('PJM', 'v2g_discharge');
-    expect(result.multiplier.toNumber()).toBe(2.0);
-    expect(result.reason).toBe('V2G Scarcity Bonus (2.0x)');
+  test('Green charging during surplus should receive 1.5x multiplier (Alignment)', () => {
+    const { multiplier, reason } = getDynamicMultiplier('CAISO', 'green_charging');
+    expect(multiplier.toNumber()).toBe(1.5);
+    expect(reason).toBe('Grid Surplus Bonus (1.5x)');
   });
 
-  test('Charging during scarcity should receive 0.5x penalty', async () => {
-    // Mock Redis returning scarcity price ($120)
-    redisClient.hGet.mockResolvedValue('120.0');
+  test('V2G discharge during scarcity should receive 2.0x multiplier', () => {
+    const { multiplier, reason } = getDynamicMultiplier('PJM', 'v2g_discharge');
+    expect(multiplier.toNumber()).toBe(2.0);
+    expect(reason).toBe('High Scarcity Reward (2.0x)');
+  });
 
-    const result = await getDynamicMultiplier('ERCOT', 'session_completed');
-    expect(result.multiplier.toNumber()).toBe(0.5);
-    expect(result.reason).toBe('High Scarcity Surcharge (0.5x)');
+  test('Standard charging should receive 1.0x multiplier', () => {
+    const { multiplier, reason } = getDynamicMultiplier('ERCOT', 'session_completed');
+    expect(multiplier.toNumber()).toBe(1.0);
+    expect(reason).toBe('Standard Reward');
+  });
+
+  test('Charging during scarcity without VPP alignment should receive 0.5x penalty', () => {
+    const mult = getDynamicMultiplier('PJM', 'session_completed', false);
+    expect(mult.toNumber()).toBe(0.5);
+  });
+
+  test('Charging during scarcity with VPP alignment should receive 2.0x bonus', () => {
+    const mult = getDynamicMultiplier('PJM', 'session_completed', true);
+    expect(mult.toNumber()).toBe(2.0);
   });
 
   test('Standard charging should receive 1.0x multiplier', async () => {
@@ -52,16 +62,13 @@ describe('L10 Token Engine - Reward Logic v4.3.0', () => {
     expect(result.reason).toBe('Standard');
   });
 
-  test('Multi-region support (ENTSOE) with normalization', async () => {
-    // Mock Redis for ENTSOE
-    redisClient.hGet.mockImplementation((key, field) => {
-      if (field === 'ENTSOE') return Promise.resolve('25.0');
-      return Promise.resolve('50.0');
-    });
+    const { multiplier: entsoeMult } = getDynamicMultiplier('ENTSO-E', 'session_completed');
+    expect(entsoeMult.toNumber()).toBe(1.5);
+    expect(redisClient.hGet).toHaveBeenLastCalledWith('market:profitability', 'ENTSOE');
 
-    const result = await getDynamicMultiplier('ENTSO-E', 'session_completed');
-    expect(result.multiplier.toNumber()).toBe(1.5);
-    expect(result.reason).toBe('Grid Surplus Bonus (1.5x)');
+    const { multiplier: nordpoolMult } = getDynamicMultiplier('NordPool', 'v2g_discharge');
+    expect(nordpoolMult.toNumber()).toBe(2.0);
+    expect(redisClient.hGet).toHaveBeenLastCalledWith('market:profitability', 'NORDPOOL');
   });
 
   test('Decimal precision check', () => {
