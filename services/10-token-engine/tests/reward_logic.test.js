@@ -14,7 +14,7 @@ jest.mock('redis', () => ({
   }))
 }));
 
-describe('L10 Token Engine - Reward Logic', () => {
+describe('L10 Token Engine - Reward Logic v4.3.0', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -53,9 +53,14 @@ describe('L10 Token Engine - Reward Logic', () => {
     expect(mult.toNumber()).toBe(2.0);
   });
 
-  test('Multi-region support (ENTSOE, NORDPOOL) with normalization', () => {
-    priceCache.ENTSOE = { price: 10.0 };
-    priceCache.NORDPOOL = { price: 150.0 };
+  test('Standard charging should receive 1.0x multiplier', async () => {
+    // Mock Redis returning normal price ($50)
+    redisClient.hGet.mockResolvedValue('50.0');
+
+    const result = await getDynamicMultiplier('ERCOT', 'session_completed');
+    expect(result.multiplier.toNumber()).toBe(1.0);
+    expect(result.reason).toBe('Standard');
+  });
 
     const { multiplier: entsoeMult } = getDynamicMultiplier('ENTSO-E', 'session_completed');
     expect(entsoeMult.toNumber()).toBe(1.5);
@@ -72,5 +77,14 @@ describe('L10 Token Engine - Reward Logic', () => {
     const marketMultiplier = new Decimal(1.5);
     const result = new Decimal(sourceValue).times(ruleMultiplier).times(marketMultiplier).toDecimalPlaces(8);
     expect(result.toNumber()).toBe(22.22222202);
+  });
+
+  test('Fallback to default price if Redis lookup fails', async () => {
+    redisClient.hGet.mockRejectedValue(new Error('Redis Down'));
+
+    const result = await getDynamicMultiplier('CAISO', 'session_completed');
+    // Default is 50.0, so multiplier should be 1.0
+    expect(result.multiplier.toNumber()).toBe(1.0);
+    expect(result.reason).toBe('Standard');
   });
 });

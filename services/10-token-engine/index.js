@@ -81,6 +81,18 @@ async function updateRewardTransactionStatus(logId, newStatus, openWalletTransac
   );
 }
 
+/**
+ * Idempotency Helper: Checks if this reward has already been processed using unique DB constraint.
+ * This prevents double-minting tokens if Kafka delivers the same message twice.
+ */
+async function checkIdempotency(driverId, triggeringEventId, ruleId) {
+  const res = await pgClient.query(
+    'SELECT log_id FROM token_reward_log WHERE driver_id = $1 AND triggering_event_id = $2 AND rule_id = $3;',
+    [driverId, triggeringEventId, ruleId]
+  );
+  return res.rows.length > 0;
+}
+
 // --- Reward Multiplier Logic ---
 
 function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
@@ -247,7 +259,7 @@ async function start() {
           multiplierReason
         );
 
-        // 4. Execute Open-Wallet Transaction
+        // 6. Execute Blockchain/Wallet Transaction
         try {
           const openWalletResponse = await axios.post(`${process.env.OPEN_WALLET_API_URL}/transactions`, {
             walletAddress: driverWallet.open_wallet_address,
@@ -256,16 +268,16 @@ async function start() {
             referenceId: rewardLog.log_id
           });
           await updateRewardTransactionStatus(rewardLog.log_id, 'complete', openWalletResponse.data.transactionId);
-          console.log(`✅ [L10] Reward transaction completed: ${openWalletResponse.data.transactionId}`);
+          console.log(`✅ [L10] Reward minted: ${pointsAwarded.toNumber()} points (${multiplierReason})`);
         } catch (error) {
-          console.error(`❌ [L10] Open-Wallet transaction failed for log ${rewardLog.log_id}:`, error.message);
+          console.error(`❌ [L10] Reward failed for log ${rewardLog.log_id}:`, error.message);
           await updateRewardTransactionStatus(rewardLog.log_id, 'failed');
         }
       },
     });
 
   } catch (error) {
-    console.error('❌ [L10 Token Engine] Startup error:', error);
+    console.error('❌ [L10 Token Engine] Fatal error:', error);
     process.exit(1);
   }
 }
