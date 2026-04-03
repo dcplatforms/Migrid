@@ -1,44 +1,62 @@
 const Decimal = require('decimal.js');
-const { getDynamicMultiplier, priceCache, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY } = require('../index');
+const { getDynamicMultiplier, redisClient } = require('../index');
 
-// Setup mock prices for testing
-priceCache.CAISO = { price: 20.0 }; // Surplus
-priceCache.PJM = { price: 120.0 }; // Scarcity
-priceCache.ERCOT = { price: 50.0 }; // Normal
+// Mock Redis client for testing
+jest.mock('redis', () => ({
+  createClient: jest.fn(() => ({
+    connect: jest.fn(),
+    on: jest.fn(),
+    hGet: jest.fn(),
+    hSet: jest.fn(),
+    get: jest.fn(),
+    set: jest.fn(),
+    quit: jest.fn()
+  }))
+}));
 
 describe('L10 Token Engine - Reward Logic', () => {
   beforeEach(() => {
-    // Reset priceCache for tests
-    priceCache['CAISO'] = { price: 20.0 }; // Surplus
-    priceCache['PJM'] = { price: 120.0 }; // Scarcity
-    priceCache['ERCOT'] = { price: 50.0 }; // Normal
-    priceCache['ENTSOE'] = { price: 25.0 }; // European Surplus
+    jest.clearAllMocks();
   });
 
-  test('Charging during surplus should receive 1.5x multiplier', () => {
-    const mult = getDynamicMultiplier('CAISO', 'session_completed');
+  test('Charging during surplus should receive 1.5x multiplier', async () => {
+    // Mock Redis returning surplus price
+    redisClient.hGet.mockResolvedValue('20.0');
+
+    const mult = await getDynamicMultiplier('CAISO', 'session_completed');
     expect(mult.toNumber()).toBe(1.5);
+    expect(redisClient.hGet).toHaveBeenCalledWith('market:profitability', 'CAISO');
   });
 
-  test('V2G discharge during scarcity should receive 2.0x multiplier', () => {
-    const mult = getDynamicMultiplier('PJM', 'v2g_discharge');
+  test('V2G discharge during scarcity should receive 2.0x multiplier', async () => {
+    // Mock Redis returning scarcity price
+    redisClient.hGet.mockResolvedValue('120.0');
+
+    const mult = await getDynamicMultiplier('PJM', 'v2g_discharge');
     expect(mult.toNumber()).toBe(2.0);
+    expect(redisClient.hGet).toHaveBeenCalledWith('market:profitability', 'PJM');
   });
 
-  test('Standard charging should receive 1.0x multiplier', () => {
-    const mult = getDynamicMultiplier('ERCOT', 'session_completed');
+  test('Standard charging should receive 1.0x multiplier', async () => {
+    // Mock Redis returning normal price
+    redisClient.hGet.mockResolvedValue('50.0');
+
+    const mult = await getDynamicMultiplier('ERCOT', 'session_completed');
     expect(mult.toNumber()).toBe(1.0);
   });
 
-  test('Multi-region support (ENTSOE, NORDPOOL) with normalization', () => {
-    priceCache.ENTSOE = { price: 10.0 };
-    priceCache.NORDPOOL = { price: 150.0 };
-
-    const entsoeMult = getDynamicMultiplier('ENTSO-E', 'session_completed');
+  test('Multi-region support (ENTSOE, NORDPOOL) with normalization', async () => {
+    // ENTSOE Surplus
+    redisClient.hGet.mockResolvedValueOnce('10.0');
+    const entsoeMult = await getDynamicMultiplier('ENTSO-E', 'session_completed');
     expect(entsoeMult.toNumber()).toBe(1.5);
+    expect(redisClient.hGet).toHaveBeenLastCalledWith('market:profitability', 'ENTSOE');
 
-    const nordpoolMult = getDynamicMultiplier('NordPool', 'v2g_discharge');
+    // NORDPOOL Scarcity
+    redisClient.hGet.mockResolvedValueOnce('150.0');
+    const nordpoolMult = await getDynamicMultiplier('NordPool', 'v2g_discharge');
     expect(nordpoolMult.toNumber()).toBe(2.0);
+    expect(redisClient.hGet).toHaveBeenLastCalledWith('market:profitability', 'NORDPOOL');
   });
 
   test('Decimal precision check', () => {
