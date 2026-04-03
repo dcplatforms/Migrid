@@ -16,28 +16,37 @@ describe('L10 Token Engine - Reward Logic', () => {
   });
 
   test('Charging during surplus should receive 1.5x multiplier', () => {
-    const mult = getDynamicMultiplier('CAISO', 'session_completed');
-    expect(mult.toNumber()).toBe(1.5);
+    const { multiplier, reason } = getDynamicMultiplier('CAISO', 'session_completed');
+    expect(multiplier.toNumber()).toBe(1.5);
+    expect(reason).toBe('Grid Surplus Bonus (1.5x)');
+  });
+
+  test('Green charging during surplus should receive 1.5x multiplier (Alignment)', () => {
+    const { multiplier, reason } = getDynamicMultiplier('CAISO', 'green_charging');
+    expect(multiplier.toNumber()).toBe(1.5);
+    expect(reason).toBe('Grid Surplus Bonus (1.5x)');
   });
 
   test('V2G discharge during scarcity should receive 2.0x multiplier', () => {
-    const mult = getDynamicMultiplier('PJM', 'v2g_discharge');
-    expect(mult.toNumber()).toBe(2.0);
+    const { multiplier, reason } = getDynamicMultiplier('PJM', 'v2g_discharge');
+    expect(multiplier.toNumber()).toBe(2.0);
+    expect(reason).toBe('High Scarcity Reward (2.0x)');
   });
 
   test('Standard charging should receive 1.0x multiplier', () => {
-    const mult = getDynamicMultiplier('ERCOT', 'session_completed');
-    expect(mult.toNumber()).toBe(1.0);
+    const { multiplier, reason } = getDynamicMultiplier('ERCOT', 'session_completed');
+    expect(multiplier.toNumber()).toBe(1.0);
+    expect(reason).toBe('Standard Reward');
   });
 
   test('Multi-region support (ENTSOE, NORDPOOL) with normalization', () => {
     priceCache.ENTSOE = { price: 10.0 };
     priceCache.NORDPOOL = { price: 150.0 };
 
-    const entsoeMult = getDynamicMultiplier('ENTSO-E', 'session_completed');
+    const { multiplier: entsoeMult } = getDynamicMultiplier('ENTSO-E', 'session_completed');
     expect(entsoeMult.toNumber()).toBe(1.5);
 
-    const nordpoolMult = getDynamicMultiplier('NordPool', 'v2g_discharge');
+    const { multiplier: nordpoolMult } = getDynamicMultiplier('NordPool', 'v2g_discharge');
     expect(nordpoolMult.toNumber()).toBe(2.0);
   });
 
