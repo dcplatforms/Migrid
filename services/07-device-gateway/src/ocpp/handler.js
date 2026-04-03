@@ -1,6 +1,7 @@
 const { publishTelemetry, publishSessionEvent } = require('../events/producer');
 const { validateSchema } = require('./validators');
 const config = require('../config');
+const { redis } = require('../state/connectionMgr');
 const { Pool } = require('pg');
 
 const pool = new Pool({
@@ -112,7 +113,31 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                 break;
 
             case 'TransactionEvent':
+                if (payload.eventType === 'Started') {
+                    // Cache resource type for high-fidelity telemetry performance
+                    try {
+                        const idToken = payload.idToken?.idToken;
+                        if (idToken) {
+                            const resourceRes = await pool.query(`
+                                SELECT vr.resource_type
+                                FROM id_tokens it
+                                JOIN vehicles v ON it.token_value = v.vin -- Assuming vin link if no direct vehicle_id
+                                JOIN vpp_resources vr ON v.id = vr.vehicle_id
+                                WHERE it.token_value = $1 LIMIT 1
+                            `, [idToken]);
+
+                            const resourceType = resourceRes.rows[0]?.resource_type || 'EV';
+                            await redis.set(`charger_resource:${chargePointId}`, resourceType, 'EX', 86400);
+                        }
+                    } catch (e) {
+                        console.error('[L7] Error caching resource for TransactionEvent Started', e.message);
+                    }
+                }
+
                 if (payload.eventType === 'Ended') {
+                    // Cleanup resource cache
+                    await redis.del(`charger_resource:${chargePointId}`);
+
                     // Extract energy dispensed from meterValue if available
                     let energyDispensed = 0;
                     try {
