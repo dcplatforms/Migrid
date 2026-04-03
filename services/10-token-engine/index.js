@@ -86,7 +86,7 @@ async function updateRewardTransactionStatus(logId, newStatus, openWalletTransac
 
 // --- Reward Multiplier Logic ---
 
-function getDynamicMultiplier(isoRaw, actionType) {
+function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
   const iso = isoRaw.toUpperCase().replace(/-/g, '');
   const priceData = priceCache[iso];
   const latestPrice = priceData ? new Decimal(priceData.price) : new Decimal(50.0);
@@ -98,7 +98,15 @@ function getDynamicMultiplier(isoRaw, actionType) {
     return { multiplier: new Decimal(1.5), reason: 'Grid Surplus Bonus (1.5x)' };
   } else if (actionType === 'v2g_discharge' && latestPrice.gt(LMP_THRESHOLD_SCARCITY)) {
     console.log(`[L10 Strategy] Scarcity detected in ${iso} ($${latestPrice}). Applying 2.0x bonus for grid support.`);
-    return { multiplier: new Decimal(2.0), reason: 'High Scarcity Reward (2.0x)' };
+    return new Decimal(2.0);
+  } else if (isCharging && latestPrice.gt(LMP_THRESHOLD_SCARCITY)) {
+    if (isVppEvent) {
+      console.log(`[L10 Strategy] Scarcity detected in ${iso} ($${latestPrice}) during VPP event. Applying 2.0x bonus for helpful charging.`);
+      return new Decimal(2.0);
+    } else {
+      console.log(`[L10 Strategy] Scarcity detected in ${iso} ($${latestPrice}) without VPP alignment. Applying 0.5x penalty for harmful charging.`);
+      return new Decimal(0.5);
+    }
   }
 
   return { multiplier: new Decimal(1.0), reason: 'Standard Reward' };
@@ -144,7 +152,8 @@ async function start() {
 
         console.log(`⚡ Received message from ${topic}:`, payload);
 
-        const { driver_id, action_type, source_value, event_id, iso: payloadIso, physics_score, is_high_fidelity } = payload;
+        const { driver_id, action_type, source_value, event_id, iso: payloadIso, physics_score, is_vpp_event, isVppEvent } = payload;
+        const vppAligned = !!(is_vpp_event || isVppEvent);
 
         // 1. Ensure Driver Wallet Exists (and get address)
         const driverWallet = await getOrCreateDriverWallet(driver_id);
@@ -183,18 +192,27 @@ async function start() {
           // Proof of Physics Gate: Energy-based rewards must have verified physics
           if (physics_score !== undefined && physics_score !== null) {
             const score = parseFloat(physics_score);
+            const isHighFidelity = !!(payload.is_high_fidelity || payload.isHighFidelity);
+            const fidelityStatus = isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD';
+
             if (score <= 0.0) {
-              console.warn(`[L10 Audit] Rejected reward for event ${event_id}: Physics Score too low (${score}).`);
+              console.warn(`[L10 Audit] [${fidelityStatus}] Rejected reward for event ${event_id}: Physics Score too low (${score}). Driver: ${driver_id}`);
               return;
             }
           } else {
-            console.warn(`[L10 Audit] Rejected energy-based reward for event ${event_id}: Physics Score missing.`);
+            console.warn(`[L10 Audit] Rejected energy-based reward for event ${event_id}: Physics Score missing. Driver: ${driver_id}`);
             return;
           }
 
-          // 3. Calculate Reward with Dynamic Boosting (Energy-based)
-          const { multiplier, reason } = getDynamicMultiplier(iso, action_type);
-          multiplierReason = reason;
+          const rule = await getRewardRule(action_type);
+          if (!rule) {
+            console.warn(`⚠️ No active reward rule found for action type: ${action_type}`);
+            return;
+          }
+          rule_id = rule.rule_id;
+
+          // 2. Calculate Reward with Dynamic Boosting (Energy-based)
+          const marketMultiplier = getDynamicMultiplier(iso, action_type, vppAligned);
           const baseReward = new Decimal(source_value || 0).times(rule.reward_multiplier);
           pointsAwarded = baseReward.times(multiplier).toDecimalPlaces(8);
 
