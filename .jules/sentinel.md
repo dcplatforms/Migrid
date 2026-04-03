@@ -24,3 +24,8 @@
 **Vulnerability:** Insecure Direct Object Reference (IDOR) in the V2G dispatch endpoint.
 **Learning:** The `POST /dispatch/v2g` endpoint allowed any authenticated user to trigger a discharge on any charger by its `chargePointId` (serial number) because it lacked a fleet ownership check in the database query.
 **Prevention:** Sensitive control endpoints must cross-reference the target resource's owner (e.g., `fleet_id`) against the user's authenticated context before executing high-impact actions like power dispatch.
+
+## 2026-04-22 - [Kafka Consumer Availability Risk]
+**Vulnerability:** Missing high-level error handling in Kafka `eachMessage` handlers.
+**Learning:** A single malformed JSON payload or unhandled exception in the message processing logic would crash the entire consumer, leading to a denial of service for the reward engine.
+**Prevention:** Always wrap the body of `eachMessage` handlers in a `try...catch` block to log errors and allow the consumer to continue processing subsequent messages.
