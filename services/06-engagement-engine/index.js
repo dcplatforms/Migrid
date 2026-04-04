@@ -121,7 +121,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-      version: '5.7.0', // Weekly Update: Sentinel & BESS Alignment
+      version: '5.8.0', // Weekly Mission: Data Confidence & ML Readiness
     status: 'healthy',
     layer: 'L6'
   });
@@ -328,17 +328,32 @@ async function processChargingEvent(event) {
 
   if ((type === 'SESSION_COMPLETED' || type === 'session_completed' || event.energyDispensedKwh) && isValid) {
     const isFinal = type === 'SESSION_COMPLETED' || type === 'session_completed';
+    const vehicleId = event.vehicle_id || event.vehicleId;
 
     // Calculate physics_score and isHighFidelity if not already provided
     let physics_score = 1.0;
     let isHighFidelity = true;
     let isLowVariance = true;
+    let confidence_score = 0.5; // Default confidence
 
     // Use event-provided score if available (Backward compatibility for camelCase)
     if (event.physics_score !== undefined) physics_score = parseFloat(event.physics_score);
     else if (event.physicsScore !== undefined) physics_score = parseFloat(event.physicsScore);
 
     isHighFidelity = physics_score > 0.95;
+
+    // [L6-118] Fetch Data Confidence Score from L1 Digital Twin for ML Engine Audit
+    if (vehicleId) {
+      try {
+        const digitalTwinRaw = await redisClient.get(`l1:${iso}:vehicle:${vehicleId}`);
+        if (digitalTwinRaw) {
+          const digitalTwin = JSON.parse(digitalTwinRaw);
+          confidence_score = parseFloat(digitalTwin.confidence_score || 0.5);
+        }
+      } catch (redisErr) {
+        console.error(`[L6] Error fetching L1 confidence score for vehicle ${vehicleId}:`, redisErr.message);
+      }
+    }
 
     if (isFinal) {
       const sessionData = await pool.query(`
@@ -362,7 +377,8 @@ async function processChargingEvent(event) {
       await checkFirstSessionAchievement(driverId);
       await updateStreaks(driverId);
       await checkSustainabilityChampion(driverId);
-      await checkSentinelOfTheGridAchievement(driverId, event.vehicle_id || event.vehicleId);
+      await checkSentinelOfTheGridAchievement(driverId, vehicleId);
+      await checkHighConfidenceAchievement(driverId, vehicleId);
 
       // Market Master is awarded only on session completion to ensure it's session-based
       await checkMarketMasterAchievement(driverId, iso, sessionId);
@@ -370,12 +386,21 @@ async function processChargingEvent(event) {
 
       // Phase 6 AI Readiness: Check for ML Contributor (High-fidelity data)
       if (isLowVariance) {
-        await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'low_variance_session', JSON.stringify({ sessionId, variance, physics_score })]);
+        await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'low_variance_session', JSON.stringify({ sessionId, variance, physics_score, confidence_score })]);
         await checkMLContributorAchievement(driverId);
         await checkEnergyArchitectAchievement(driverId);
         await checkL11DataGuardianAchievement(driverId);
         await checkPhysicsSentinelAchievement(driverId);
         await updateChallengeProgress(driverId, 'low_variance_charging');
+
+        // [L6-118] ML Data Pioneer: Specifically for very high fidelity data
+        if (physics_score > 0.98) {
+          await updateChallengeProgress(driverId, 'ml_data_pioneer');
+        }
+      }
+
+      if (confidence_score > 0.9) {
+        await updateChallengeProgress(driverId, 'high_confidence_charging');
       }
     }
 
@@ -432,6 +457,7 @@ async function processChargingEvent(event) {
           session_id: sessionId,
           points,
           physics_score: physics_score.toFixed(4),
+          confidence_score: confidence_score.toFixed(4),
           fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD',
           multiplier_reason: multiplierReason
         }
@@ -447,6 +473,7 @@ async function processChargingEvent(event) {
             event_id: sessionId,
             iso: iso,
             physics_score: physics_score,
+            confidence_score: confidence_score,
             is_high_fidelity: isHighFidelity,
             is_vpp_event: !!(event.isVPPEvent || event.is_vpp_event),
             multiplier_reason: multiplierReason
@@ -463,6 +490,7 @@ async function processChargingEvent(event) {
             event_id: sessionId,
             iso: iso,
             physics_score: physics_score,
+            confidence_score: confidence_score,
             is_high_fidelity: isHighFidelity,
             is_vpp_event: !!(event.isVPPEvent || event.is_vpp_event),
             multiplier_reason: multiplierReason
@@ -1137,6 +1165,29 @@ async function checkSentinelOfTheGridAchievement(driver_id, vehicle_id) {
   }
 }
 
+async function checkHighConfidenceAchievement(driver_id, vehicle_id) {
+  if (!vehicle_id) return;
+  try {
+    const driverData = await pool.query('SELECT f.iso FROM drivers d JOIN fleets f ON d.fleet_id = f.id WHERE d.id = $1', [driver_id]);
+    const iso = (driverData.rows[0]?.iso || 'CAISO').toUpperCase().replace(/-/g, '');
+
+    const digitalTwinRaw = await redisClient.get(`l1:${iso}:vehicle:${vehicle_id}`);
+    if (!digitalTwinRaw) return;
+
+    const digitalTwin = JSON.parse(digitalTwinRaw);
+    const confidence = parseFloat(digitalTwin.confidence_score || 0);
+
+    if (confidence >= 0.95) {
+      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'High-Confidence Contributor'");
+      if (achievement.rows.length > 0) {
+        await awardAchievement(driver_id, achievement.rows[0].id);
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking High-Confidence achievement:', error);
+  }
+}
+
 async function checkSustainabilityChampion(driver_id) {
   // 100% Compliance Check: Verify at least one valid session for each of the last 30 consecutive days.
   // This enforces the "Green Audit" (<15% variance) via the L1-verified 'is_valid' flag.
@@ -1357,4 +1408,12 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
-module.exports = { app, server, pool, redisClient };
+module.exports = {
+  app,
+  server,
+  pool,
+  redisClient,
+  processChargingEvent,
+  checkHighConfidenceAchievement,
+  updateChallengeProgress
+};
