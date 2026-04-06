@@ -303,4 +303,49 @@ describe('BiddingOptimizer', () => {
 
     consoleSpy.mockRestore();
   });
+
+  test('should prioritize L3 v3.3.0 high-fidelity capacity breakdown', async () => {
+    const hfData = JSON.stringify({
+      'CAISO': { total: 2000, ev: 1500, bess: 500, is_high_fidelity: true }
+    });
+
+    mockRedisClient.get.mockImplementation((key) => {
+      if (key === 'vpp:capacity:regional:high_fidelity') return Promise.resolve(hfData);
+      return Promise.resolve(null);
+    });
+
+    mockPricingService.getDayAheadForecast.mockResolvedValue([
+      { location: 'LOC1', price_per_mwh: 100.00, timestamp: new Date() }
+    ]);
+
+    const { bids, audit } = await optimizer.generateDayAheadBids('CAISO');
+
+    expect(bids[0]).toContain('38=2.00'); // Total 2000kW = 2.0MW
+    expect(audit.capacity_fidelity).toBe('HIGH_FIDELITY');
+    expect(audit.audit_context.ev_capacity_kw).toBe(1500);
+    expect(audit.audit_context.bess_capacity_kw).toBe(500);
+    expect(audit.audit_context.v3_capacity_fidelity).toBe(true);
+  });
+
+  test('should correctly fall back to legacy regional data if high-fidelity is missing', async () => {
+    const legacyData = JSON.stringify({
+      'PJM': 750 // 0.75 MW
+    });
+
+    mockRedisClient.get.mockImplementation((key) => {
+      if (key === 'vpp:capacity:regional:high_fidelity') return Promise.resolve(null);
+      if (key === 'vpp:capacity:regional') return Promise.resolve(legacyData);
+      return Promise.resolve(null);
+    });
+
+    mockPricingService.getDayAheadForecast.mockResolvedValue([
+      { location: 'LOC1', price_per_mwh: 100.00, timestamp: new Date() }
+    ]);
+
+    const { bids, audit } = await optimizer.generateDayAheadBids('PJM');
+
+    expect(bids[0]).toContain('38=0.75');
+    expect(audit.audit_context.ev_capacity_kw).toBe(750);
+    expect(audit.audit_context.bess_capacity_kw).toBe(0);
+  });
 });
