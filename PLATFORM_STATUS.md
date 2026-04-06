@@ -279,7 +279,7 @@ High-velocity engineering updates across the stack:
 - [✓] **L6 Engagement Engine (v5.3.2)**: Deployed **ENTSO-E Pioneer** and **Sustainability Refinement**; regional challenges reached 90% completion.
 - [✓] **L3 VPP Aggregator (v3.3.0)**: Completed **Fuse Rule 2.0** and high-frequency **Redis Capacity Cache** for L4 bidding optimization.
 - [✓] **L4 Market Gateway (v3.7.0)**: Activated **Nord Pool & ERCOT** adapters, **Bidding Auditability** (FIX-PROT-AUDIT), and **Regional Grid Lock** scanning.
-- [✓] **L6 Engagement Engine (v5.5.0)**: Deployed **ENTSO-E Pioneer**, **Sustainability Refinement**, and **Scarcity Savior**; regional challenges reached 100% completion.
+- [✓] **L6 Engagement Engine (v5.6.0)**: Weekly Sync: Consolidated Kafka producers, ISO normalization for regional achievements, and "Proof of Physics" alignment for L10.
 - [✓] **L7 Device Gateway**: Native **OCPP 2.1 V2X** support active; ISO 15118 Certificate Exchange reached 75% completion.
 
 </details>
@@ -801,15 +801,15 @@ done
 | Layer | Service | Version | Status |
 | :--- | :--- | :--- | :--- |
 | **L1** | Physics Engine | `10.1.0` | ✅ Operational |
-| **L2** | Grid Signal | `2.4.2` | ✅ Operational |
+| **L2** | Grid Signal | `2.4.4` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.0` | ✅ Operational |
 | **L4** | Market Gateway | `3.7.0` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
-| **L6** | Engagement Engine | `5.5.0` | ✅ Operational |
+| **L6** | Engagement Engine | `5.6.0` | ✅ Operational |
 | **L7** | Device Gateway | `5.5.0` | ✅ Operational |
 | **L8** | Energy Manager | `2.1.0` | ✅ Operational |
 | **L9** | Commerce Engine | `5.1.0` | ✅ Operational |
-| **L10**| Token Engine | `4.2.0` | ✅ Operational |
+| **L10**| Token Engine | `4.3.0` | ✅ Operational |
 | **L11**| ML Engine | `0.1.0` | ✅ Operational |
 
 ---
@@ -817,9 +817,9 @@ done
 ## Latest Release Wins (March 2026)
 
 - **L4 Market Gateway (v3.7.0)**: Activated **Nord Pool & ERCOT** adapters, **Bidding Auditability** (FIX-PROT-AUDIT), and **Regional Grid Lock** observability.
-- **L6 Engagement Engine (v5.5.0)**: Deployed **Sustainability Champion**, **L11 Data Guardian**, and **Scarcity Savior**; regional challenges 100% complete.
+- **L6 Engagement Engine (v5.6.0)**: Weekly Sync: Consolidated Kafka producers, ISO normalization for regional achievements, and "Proof of Physics" alignment for L10.
 - **L7 Device Gateway (v5.5.0)**: Hardened **ISO 15118-20 Certificate Exchange** (85%), **EMAID** token handling, and native **OCPP 2.1 V2X** support.
-- **L10 Token Engine (v4.2.0)**: Deployed **Dynamic Multipliers** (1.5x Grid Surplus / 2.0x V2G Scarcity) and consolidated regional price updates.
+- **L10 Token Engine (v4.3.0)**: Deployed **Dynamic Multipliers** (1.5x Grid Surplus / 2.0x V2G Scarcity), hardened reward idempotency, and integrated high-fidelity physics auditing.
 - **L1 Physics Engine (v10.1.0)**: Finalized **High-Fidelity Reconciliation**, **Regional Digital Twin Keys**, and **Automated Scarcity Mode** to protect the Fuse Rule during high-volatility events.
 - **L2 Grid Signal (v2.4.1)**: Hardened **Regional Market Context** tracking, ISO normalization, and **Historical Event Export** for L11 training pipelines.
 - **L3 VPP Aggregator (v3.3.0)**: Deployed **High-Fidelity Regional Capacity** tracking and **Fuse Rule 2.0** with Redis caching.

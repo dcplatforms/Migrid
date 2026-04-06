@@ -92,7 +92,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.4.2',
+    version: '2.4.4',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -102,151 +102,50 @@ app.get('/health', (req, res) => {
 /**
  * Get OpenADR 3.0 Reports (VEN)
  * Returns recent grid events for compliance and auditing
- * Enhanced with Market Context from L4 and Safety Context from L1
+ * [L2 v2.4.3] Optimized: Utilizes unified context for sub-50ms reporting
  */
 app.get('/openadr/v3/reports', async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT event_id, event_type, status, received_at FROM grid_events ORDER BY received_at DESC LIMIT 50'
-    );
+    const [result, unifiedContextRaw, safetyLock, safetyContextRaw, gridLock, marketContextRaw, regionalCapacityRaw] = await Promise.all([
+      pool.query('SELECT event_id, event_type, status, received_at FROM grid_events ORDER BY received_at DESC LIMIT 50'),
+      redisClient.get('l2:unified:context'),
+      redisClient.get(SAFETY_LOCK_KEY),
+      redisClient.get(`${SAFETY_LOCK_KEY}:context`),
+      redisClient.get('l4:grid:lock'),
+      redisClient.get('market:latest:context'),
+      redisClient.get('vpp:capacity:regional')
+    ]);
 
-    // Fetch latest market context from Redis (provided by L4)
-    const marketContextRaw = await redisClient.get('market:latest:context');
+    const unifiedContext = unifiedContextRaw ? JSON.parse(unifiedContextRaw) : {
+      digital_twin: {},
+      regional_markets: {},
+      regional_locks: {},
+      site_statuses: {},
+      regional_capacity: {},
+      confidence_score: 1.0
+    };
+
     const marketContext = marketContextRaw ? JSON.parse(marketContextRaw) : null;
-
-    // Phase 5 Enhancement: Fetch regional capacity aggregation (from L3)
-    const regionalCapacityRaw = await redisClient.get('vpp:capacity:regional');
-    const regionalCapacity = regionalCapacityRaw ? JSON.parse(regionalCapacityRaw) : {};
-
-    // Phase 5 Enhancement: Aggregate all regional market contexts (Optimized with SCAN and MGET)
-    const regionalMarkets = {};
-    let cursor = '0';
-    const marketKeys = [];
-    do {
-      const result = await redisClient.scan(cursor, { MATCH: 'market:context:*', COUNT: 100 });
-      cursor = result.cursor;
-      if (result.keys && result.keys.length > 0) {
-        marketKeys.push(...result.keys);
-      }
-    } while (cursor !== 0 && cursor !== '0');
-
-    if (marketKeys.length > 0) {
-      const marketValues = await redisClient.mGet(marketKeys);
-      marketKeys.forEach((key, index) => {
-        // Normalize ISO: uppercase and remove hyphens (e.g., ENTSO-E -> ENTSOE)
-        const iso = key.split(':').pop().toUpperCase().replace(/-/g, '');
-        const value = marketValues[index];
-        if (value) {
-          regionalMarkets[iso] = JSON.parse(value);
-        }
-      });
-    }
-
-    // Fetch latest safety context from Redis (provided by L1)
-    const safetyLock = await redisClient.get(SAFETY_LOCK_KEY);
-    const safetyContextRaw = await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
     const safetyContext = safetyContextRaw ? JSON.parse(safetyContextRaw) : null;
-
-    // Phase 5 Enhancement: Aggregate Regional Digital Twin Statistics (from L1)
-    const regionalDigitalTwin = {};
-    let dtCursor = '0';
-    do {
-      const result = await redisClient.scan(dtCursor, { MATCH: 'l1:*:vehicle:*', COUNT: 100 });
-      dtCursor = result.cursor;
-      if (result.keys && result.keys.length > 0) {
-        const values = await redisClient.mGet(result.keys);
-        result.keys.forEach((key, index) => {
-          const parts = key.split(':');
-          const iso = parts[1].toUpperCase().replace(/-/g, '');
-          const data = values[index] ? JSON.parse(values[index]) : null;
-
-          if (!regionalDigitalTwin[iso]) {
-            regionalDigitalTwin[iso] = { vehicle_count: 0, high_fidelity_count: 0 };
-          }
-          regionalDigitalTwin[iso].vehicle_count++;
-          // High Fidelity check: based on physics_score or presence of metadata
-          if (data && data.physics_score > 0.95) {
-            regionalDigitalTwin[iso].high_fidelity_count++;
-          }
-        });
-      }
-    } while (dtCursor !== 0 && dtCursor !== '0');
-
-    // Fetch grid lock status (provided by L4)
-    const gridLock = await redisClient.get('l4:grid:lock');
-
-    // [L2 v2.4.2] Optimized: Serve regional stats from Redis cache (Background task)
-    const regionalStatsRaw = await redisClient.get('l2:regional:stats');
-    const regionalStats = regionalStatsRaw ? JSON.parse(regionalStatsRaw) : {};
-
-    // Consistently fetch L8 Site Statuses and Safe Mode status
-    const siteStatuses = {};
-
-    try {
-      // 1. Fetch site statuses (OPERATIONAL, METER_OFFLINE, etc.)
-      let statusCursor = '0';
-      do {
-        const result = await redisClient.scan(statusCursor, { MATCH: 'l8:site:status:*', COUNT: 100 });
-        statusCursor = result.cursor;
-        if (result.keys && result.keys.length > 0) {
-          const values = await redisClient.mGet(result.keys);
-          result.keys.forEach((key, index) => {
-            const siteId = key.split(':').pop();
-            siteStatuses[siteId] = values[index];
-          });
-        }
-      } while (statusCursor !== 0 && statusCursor !== '0');
-
-      // 2. Overlay Safe Mode status (Phase 5 Forward Engineering - Optimized with SMEMBERS)
-      const safeModeSites = await redisClient.sMembers('l3:vpp:safemode_sites');
-      if (safeModeSites && safeModeSites.length > 0) {
-        safeModeSites.forEach(siteId => {
-          siteStatuses[siteId] = 'SAFE_MODE';
-        });
-      }
-    } catch (redisError) {
-      console.error('[L2 Grid Signal] Redis Scan Error (Site Status):', redisError.message);
-    }
-
-    // Fetch regional grid locks (Optimized with SCAN and MGET)
-    const regionalLocks = {};
-    let lockCursor = '0';
-    const lockKeys = [];
-    do {
-      const result = await redisClient.scan(lockCursor, { MATCH: 'l4:grid:lock:*', COUNT: 100 });
-      lockCursor = result.cursor;
-      if (result.keys && result.keys.length > 0) {
-        lockKeys.push(...result.keys);
-      }
-    } while (lockCursor !== 0 && lockCursor !== '0');
-
-    if (lockKeys.length > 0) {
-      const lockValues = await redisClient.mGet(lockKeys);
-      lockKeys.forEach((key, index) => {
-        const region = key.split(':').pop().toUpperCase().replace(/-/g, '');
-        const value = lockValues[index];
-        if (value === '1' || value === 'true') {
-          regionalLocks[region] = true;
-        }
-      });
-    }
+    const regionalCapacity = regionalCapacityRaw ? JSON.parse(regionalCapacityRaw) : {};
 
     res.json({
       reports: result.rows,
       market_context: marketContext,
-      regional_markets: regionalMarkets,
-      regional_capacity: regionalCapacity,
-      regional_stats: regionalStats,
+      regional_markets: unifiedContext.regional_markets,
+      regional_capacity: Object.keys(unifiedContext.regional_capacity).length > 0 ? unifiedContext.regional_capacity : regionalCapacity,
+      regional_stats: unifiedContext.digital_twin,
       safety_lock: {
         active: safetyLock === '1' || safetyLock === 'true',
         context: safetyContext
       },
       grid_lock: {
         active: gridLock === '1' || gridLock === 'true',
-        regional: regionalLocks
+        regional: unifiedContext.regional_locks
       },
-      digital_twin: regionalDigitalTwin,
-      site_statuses: siteStatuses,
+      confidence_score: unifiedContext.confidence_score,
+      digital_twin: unifiedContext.digital_twin,
+      site_statuses: unifiedContext.site_statuses,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -355,9 +254,14 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
       const safetyContextRaw = await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
       const safetyContext = safetyContextRaw ? JSON.parse(safetyContextRaw) : {};
 
-      // [L2-v2.4.2] Enhanced High-Fidelity Kafka Broadcast
+      // [L2-v2.4.4] Enhanced High-Fidelity Kafka Broadcast with Confidence & Regional Context
       const physicsScore = parseFloat(safetyContext.physics_score || '1.0000');
       const fidelityStatus = physicsScore > 0.95 ? 'HIGH_FIDELITY' : 'STANDARD';
+
+      // Fetch high-fidelity capacity snapshot for this region if available
+      const unifiedContextRaw = await redisClient.get('l2:unified:context');
+      const unifiedContext = unifiedContextRaw ? JSON.parse(unifiedContextRaw) : null;
+      const regionalCapacity = unifiedContext?.regional_capacity?.[isoRegion] || null;
 
       await producer.send({
         topic: 'grid_signals',
@@ -371,10 +275,12 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
             site_status: siteStatus || 'OPERATIONAL',
             v2g_requested: v2gRequested,
             iso_region: isoRegion,
+            regional_capacity: regionalCapacity, // L2 v2.4.4: Regional capacity breakdown (Total/EV/BESS)
             market_price_at_session: event.metadata?.market_price_at_session ?? (marketMetadata.price_per_mwh ?? 0), // L2 v2.4.1: Nullish coalescing for 0-price preservation
             profitability_index: marketMetadata.profitability_index,
             degradation_cost_mwh: marketMetadata.degradation_cost_mwh,
             physics_score: physicsScore,
+            confidence_score: physicsScore, // L2 v2.4.4: Explicit confidence score for L11
             fidelity_status: fidelityStatus,
             metadata: event.metadata || {}, // L2 v2.4.1: Full metadata preservation (OpenADR 3.1.0)
             billing_mode: event.metadata?.billing_mode,
@@ -429,40 +335,126 @@ app.get('/data/training/events', authenticateToken, async (req, res) => {
 });
 
 /**
- * Background task: Aggregate regional digital twin stats for sub-500ms reporting
+ * Background task: Aggregate regional stats and contexts for sub-500ms reporting
+ * [L2 v2.4.3] Unified Context Aggregation for AI Readiness
  */
 const updateRegionalStats = async () => {
-  const stats = {};
+  const context = {
+    digital_twin: {},
+    regional_markets: {},
+    regional_locks: {},
+    site_statuses: {},
+    regional_capacity: {}
+  };
+
   try {
+    // 1. Aggregate Regional Digital Twin Statistics (from L1)
     let twinCursor = '0';
     do {
-      // [L1-107] Keys follow l1:{ISO}:vehicle:{ID}
-      const result = await redisClient.scan(twinCursor, { MATCH: 'l1:*', COUNT: 100 });
+      const result = await redisClient.scan(twinCursor, { MATCH: 'l1:*:vehicle:*', COUNT: 100 });
       twinCursor = result.cursor;
       if (result.keys && result.keys.length > 0) {
         const values = await redisClient.mGet(result.keys);
         result.keys.forEach((key, index) => {
           const parts = key.split(':');
-          if (parts.length >= 3 && parts[0] === 'l1' && parts[2] === 'vehicle') {
-            const iso = parts[1].toUpperCase().replace(/-/g, '');
-            const vehicle = JSON.parse(values[index] || '{}');
+          const iso = parts[1].toUpperCase().replace(/-/g, '');
+          const data = values[index] ? JSON.parse(values[index]) : null;
 
-            if (!stats[iso]) {
-              stats[iso] = { vehicle_count: 0, high_fidelity_count: 0 };
+          if (!context.digital_twin[iso]) {
+            context.digital_twin[iso] = { vehicle_count: 0, high_fidelity_count: 0, ev_count: 0, bess_count: 0 };
+          }
+          context.digital_twin[iso].vehicle_count++;
+          if (data) {
+            if (data.is_high_fidelity || data.physics_score > 0.95) {
+              context.digital_twin[iso].high_fidelity_count++;
             }
-            stats[iso].vehicle_count++;
-            if (vehicle.is_high_fidelity || (vehicle.physics_score > 0.95)) {
-              stats[iso].high_fidelity_count++;
-            }
+            if (data.resource_type === 'EV') context.digital_twin[iso].ev_count++;
+            if (data.resource_type === 'BESS') context.digital_twin[iso].bess_count++;
           }
         });
       }
     } while (twinCursor !== 0 && twinCursor !== '0');
 
-    // Cache results for 30s to meet SLA
-    await redisClient.setEx('l2:regional:stats', 30, JSON.stringify(stats));
+    // 2. Aggregate all regional market contexts (from L4)
+    let marketCursor = '0';
+    do {
+      const result = await redisClient.scan(marketCursor, { MATCH: 'market:context:*', COUNT: 100 });
+      marketCursor = result.cursor;
+      if (result.keys && result.keys.length > 0) {
+        const values = await redisClient.mGet(result.keys);
+        result.keys.forEach((key, index) => {
+          const iso = key.split(':').pop().toUpperCase().replace(/-/g, '');
+          if (values[index]) {
+            context.regional_markets[iso] = JSON.parse(values[index]);
+          }
+        });
+      }
+    } while (marketCursor !== 0 && marketCursor !== '0');
+
+    // 3. Aggregate regional grid locks (from L4)
+    let lockCursor = '0';
+    do {
+      const result = await redisClient.scan(lockCursor, { MATCH: 'l4:grid:lock:*', COUNT: 100 });
+      lockCursor = result.cursor;
+      if (result.keys && result.keys.length > 0) {
+        const values = await redisClient.mGet(result.keys);
+        result.keys.forEach((key, index) => {
+          const iso = key.split(':').pop().toUpperCase().replace(/-/g, '');
+          if (values[index] === '1' || values[index] === 'true') {
+            context.regional_locks[iso] = true;
+          }
+        });
+      }
+    } while (lockCursor !== 0 && lockCursor !== '0');
+
+    // 4. Aggregate Site Statuses and Safe Mode (from L8 and L3)
+    let statusCursor = '0';
+    do {
+      const result = await redisClient.scan(statusCursor, { MATCH: 'l8:site:status:*', COUNT: 100 });
+      statusCursor = result.cursor;
+      if (result.keys && result.keys.length > 0) {
+        const values = await redisClient.mGet(result.keys);
+        result.keys.forEach((key, index) => {
+          const siteId = key.split(':').pop();
+          context.site_statuses[siteId] = values[index];
+        });
+      }
+    } while (statusCursor !== 0 && statusCursor !== '0');
+
+    const safeModeSites = await redisClient.sMembers('l3:vpp:safemode_sites');
+    if (safeModeSites && safeModeSites.length > 0) {
+      safeModeSites.forEach(siteId => {
+        context.site_statuses[siteId] = 'SAFE_MODE';
+      });
+    }
+
+    // 5. Fetch high-fidelity regional capacity aggregation (from L3)
+    const regionalCapacityRaw = await redisClient.get('vpp:capacity:regional:high_fidelity') || await redisClient.get('vpp:capacity:regional');
+    if (regionalCapacityRaw) {
+      context.regional_capacity = JSON.parse(regionalCapacityRaw);
+    } else if (legacyRegionalCapacityRaw) {
+      context.regional_capacity = JSON.parse(legacyRegionalCapacityRaw);
+    }
+
+    // 6. Aggregate Physics Confidence Score (from L1)
+    const safetyContextRaw = await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
+    if (safetyContextRaw) {
+      try {
+        const safetyContext = JSON.parse(safetyContextRaw);
+        if (safetyContext.physics_score) {
+          context.confidence_score = parseFloat(safetyContext.physics_score);
+        }
+      } catch (e) {}
+    } else {
+      context.confidence_score = 1.0; // Default to full confidence if no locks/alerts
+    }
+
+    // Cache unified results for 30s to meet sub-500ms SLA
+    await redisClient.setEx('l2:unified:context', 30, JSON.stringify(context));
+    // Legacy support for digital twin stats
+    await redisClient.setEx('l2:regional:stats', 30, JSON.stringify(context.digital_twin));
   } catch (error) {
-    console.error('[L2 Grid Signal] Regional Stats Background Task Error:', error.message);
+    console.error('[L2 Grid Signal] Unified Context Background Task Error:', error.message);
   }
 };
 
@@ -497,16 +489,18 @@ async function startSafetyConsumer() {
           await redisClient.setEx(`l8:site:status:${site_id}`, 3600, 'OPERATIONAL');
         }
       } else if (topic === 'migrid.physics.alerts') {
-        // PHYSICS RULE: Trigger lock if CRITICAL/FRAUD OR if variance exceeds 15%
+        // PHYSICS RULE: Trigger lock if CRITICAL/FRAUD OR if variance exceeds thresholds
+        // [L2 v2.4.4] BESS Invariant: 10% variance threshold; EV Invariant: 15% threshold.
         const isCritical = payload.severity === 'CRITICAL' || payload.severity === 'FRAUD';
-        const isHighVariance = payload.variance_pct > 15;
+        const varianceThreshold = payload.resource_type === 'BESS' ? 10 : 15;
+        const isHighVariance = payload.variance_pct > varianceThreshold;
 
         if (isHighVariance || isCritical) {
           const reason = isHighVariance ? 'HIGH_VARIANCE_THRESHOLD' : payload.event_type;
 
-          // CORE INVARIANT: Respect <15% variance threshold from L1 Physics Engine
+          // CORE INVARIANT: Respect physics variance thresholds from L1 Physics Engine
           if (isHighVariance) {
-            console.error(`🚨 [L2] CRITICAL INVARIANT VIOLATION: Variance (${payload.variance_pct}%) exceeds 15% threshold on Site ${payload.site_id}. Locking grid dispatch.`);
+            console.error(`🚨 [L2] CRITICAL INVARIANT VIOLATION: Variance (${payload.variance_pct}%) exceeds ${varianceThreshold}% threshold for ${payload.resource_type || 'EV'} on Site ${payload.site_id}. Locking grid dispatch.`);
           } else {
             console.error(`🚨 [L2] L1 SAFETY ALERT: ${reason} on Site ${payload.site_id}. Region: ${payload.iso_region}. Locking grid dispatch.`);
           }
@@ -521,6 +515,7 @@ async function startSafetyConsumer() {
           await redisClient.setEx(`${SAFETY_LOCK_KEY}:context`, 900, JSON.stringify({
             ...payload,
             reason,
+            message: isHighVariance ? `Variance (${payload.variance_pct}%) exceeds ${varianceThreshold}% threshold for ${payload.resource_type || 'EV'}` : undefined,
             billing_mode: payload.billing_mode,
             vpp_active: payload.vpp_active,
             v2g_active: payload.v2g_active,

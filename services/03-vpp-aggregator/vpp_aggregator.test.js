@@ -231,6 +231,41 @@ describe('L3 VPP Aggregator Service', () => {
             expect(response.body.status).toBe('DISPATCHED');
             expect(mockProducer.send).toHaveBeenCalled();
         });
+
+    test('updateGlobalCapacity should correctly aggregate regional EV/BESS data (v3.3.0 Bugfix)', async () => {
+        mockRedisClient.get.mockResolvedValue(null); // No safety locks
+        mockRedisClient.sMembers.mockResolvedValue([]); // No safe mode sites
+
+        mockPool.query.mockResolvedValue({
+            rows: [
+                { region: 'CAISO', resource_type: 'EV', raw_capacity_kwh: 100 },
+                { region: 'CAISO', resource_type: 'BESS', raw_capacity_kwh: 50 },
+                { region: 'ERCOT', resource_type: 'EV', raw_capacity_kwh: 200 }
+            ]
+        });
+
+        await updateGlobalCapacity();
+
+        // Verify total capacity: 100 + 50 + 200 = 350
+        expect(mockRedisClient.set).toHaveBeenCalledWith('vpp:capacity:available', '350');
+
+        // Verify high-fidelity regional capacity object
+        const highFidelityCall = mockRedisClient.set.mock.calls.find(call => call[0] === 'vpp:capacity:regional:high_fidelity');
+        const highFidelityData = JSON.parse(highFidelityCall[1]);
+
+        expect(highFidelityData.CAISO.total).toBe(150);
+        expect(highFidelityData.CAISO.ev).toBe(100);
+        expect(highFidelityData.CAISO.bess).toBe(50);
+        expect(highFidelityData.ERCOT.total).toBe(200);
+        expect(highFidelityData.ERCOT.ev).toBe(200);
+        expect(highFidelityData.ERCOT.bess).toBe(0);
+
+        // Verify legacy flat mapping for L4 compatibility
+        const legacyCall = mockRedisClient.set.mock.calls.find(call => call[0] === 'vpp:capacity:regional');
+        const legacyData = JSON.parse(legacyCall[1]);
+        expect(legacyData.CAISO).toBe(150);
+        expect(legacyData.ERCOT).toBe(200);
+    });
     });
 
     describe('updateGlobalCapacity', () => {

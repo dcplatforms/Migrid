@@ -293,20 +293,17 @@ const updateGlobalCapacity = async () => {
       const regionStr = row.region || 'SYSTEM_WIDE';
       const normalizedRegion = regionStr.toUpperCase().replace(/-/g, '');
       const deratedCapacity = parseFloat(row.raw_capacity_kwh || 0) * physicsMultiplier;
+      const resourceType = row.resource_type || 'EV';
 
       totalCapacity += deratedCapacity;
 
-      // High-Fidelity Breakdown: Track EV and BESS separately per region
       if (!regionalCapacity[normalizedRegion]) {
-        regionalCapacity[normalizedRegion] = { total: 0, ev: 0, bess: 0 };
+        regionalCapacity[normalizedRegion] = { total: 0, ev: 0, bess: 0, is_high_fidelity: isHighFidelity };
       }
 
       regionalCapacity[normalizedRegion].total += deratedCapacity;
-      if (row.resource_type === 'BESS') {
-        regionalCapacity[normalizedRegion].bess += deratedCapacity;
-      } else {
-        regionalCapacity[normalizedRegion].ev += deratedCapacity;
-      }
+      if (resourceType === 'EV') regionalCapacity[normalizedRegion].ev += deratedCapacity;
+      if (resourceType === 'BESS') regionalCapacity[normalizedRegion].bess += deratedCapacity;
     });
 
     await redisClient.set('vpp:capacity:available', totalCapacity.toString());

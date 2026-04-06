@@ -139,7 +139,7 @@ describe('L2 Grid Signal Service', () => {
     expect(sentValue.billing_mode).toBe('V2G_OPTIMIZED');
   });
 
-  test('POST /openadr/v3/events should include physics_score in broadcast (Phase 5)', async () => {
+  test('POST /openadr/v3/events should include physics_score and confidence_score in broadcast (v2.4.4)', async () => {
     redisClient.get.mockImplementation((key) => {
       if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({ physics_score: '0.9850' }));
       return Promise.resolve(null);
@@ -156,6 +156,7 @@ describe('L2 Grid Signal Service', () => {
     expect(response.status).toBe(202);
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
     expect(sentValue.physics_score).toBe(0.9850);
+    expect(sentValue.confidence_score).toBe(0.9850);
     expect(sentValue.fidelity_status).toBe('HIGH_FIDELITY');
   });
 
@@ -296,14 +297,21 @@ describe('L2 Grid Signal Service', () => {
   });
 
   test('GET /openadr/v3/reports should return regional market contexts', async () => {
-    const mockCaisoContext = { iso: 'CAISO', price_per_mwh: 45.5 };
-    const mockErcotContext = { iso: 'ERCOT', price_per_mwh: 120.0 };
+    const mockUnifiedContext = {
+      digital_twin: {},
+      regional_markets: {
+        CAISO: { iso: 'CAISO', price_per_mwh: 45.5 },
+        ERCOT: { iso: 'ERCOT', price_per_mwh: 120.0 }
+      },
+      regional_locks: {},
+      site_statuses: {},
+      regional_capacity: {}
+    };
 
-    redisClient.scan.mockResolvedValue({ cursor: 0, keys: ['market:context:CAISO', 'market:context:ERCOT'] });
-    redisClient.mGet.mockResolvedValue([
-      JSON.stringify(mockCaisoContext),
-      JSON.stringify(mockErcotContext)
-    ]);
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l2:unified:context') return Promise.resolve(JSON.stringify(mockUnifiedContext));
+      return Promise.resolve(null);
+    });
 
     const response = await request(app).get('/openadr/v3/reports');
     expect(response.status).toBe(200);
@@ -326,23 +334,20 @@ describe('L2 Grid Signal Service', () => {
   });
 
   test('GET /openadr/v3/reports should aggregate regional digital twin stats from L1 keys', async () => {
-    const mockVehicle1 = { id: 'V1', physics_score: 0.98 };
-    const mockVehicle2 = { id: 'V2', physics_score: 0.80 };
+    const mockUnifiedContext = {
+      digital_twin: {
+        CAISO: { vehicle_count: 1, high_fidelity_count: 1 },
+        ERCOT: { vehicle_count: 1, high_fidelity_count: 0 }
+      },
+      regional_markets: {},
+      regional_locks: {},
+      site_statuses: {},
+      regional_capacity: {}
+    };
 
-    redisClient.scan.mockImplementation((cursor, options) => {
-      if (options && options.MATCH === 'l1:*:vehicle:*') {
-        if (cursor === '0' || cursor === 0) {
-          return Promise.resolve({ cursor: '123', keys: ['l1:CAISO:vehicle:V1'] });
-        }
-        return Promise.resolve({ cursor: 0, keys: ['l1:ERCOT:vehicle:V2'] });
-      }
-      return Promise.resolve({ cursor: 0, keys: [] });
-    });
-
-    redisClient.mGet.mockImplementation((keys) => {
-      if (keys.includes('l1:CAISO:vehicle:V1')) return Promise.resolve([JSON.stringify(mockVehicle1)]);
-      if (keys.includes('l1:ERCOT:vehicle:V2')) return Promise.resolve([JSON.stringify(mockVehicle2)]);
-      return Promise.resolve([]);
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l2:unified:context') return Promise.resolve(JSON.stringify(mockUnifiedContext));
+      return Promise.resolve(null);
     });
 
     const response = await request(app).get('/openadr/v3/reports');
@@ -598,41 +603,47 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body.site_id).toBe('SITE-456');
   });
 
-  test('GET /openadr/v3/reports should return cached regional stats (v2.4.2)', async () => {
-    const mockStats = {
-      CAISO: { vehicle_count: 1, high_fidelity_count: 1 },
-      ERCOT: { vehicle_count: 1, high_fidelity_count: 0 }
+  test('GET /openadr/v3/reports should return cached regional stats with EV/BESS breakdowns (v2.4.4)', async () => {
+    const mockUnifiedContext = {
+      digital_twin: {
+        CAISO: { vehicle_count: 2, high_fidelity_count: 2, ev_count: 1, bess_count: 1 },
+        ERCOT: { vehicle_count: 1, high_fidelity_count: 0, ev_count: 1, bess_count: 0 }
+      },
+      regional_markets: {},
+      regional_locks: {},
+      site_statuses: {},
+      regional_capacity: {},
+      confidence_score: 0.99
     };
 
     redisClient.get.mockImplementation((key) => {
-      if (key === 'l2:regional:stats') return Promise.resolve(JSON.stringify(mockStats));
+      if (key === 'l2:unified:context') return Promise.resolve(JSON.stringify(mockUnifiedContext));
       return Promise.resolve(null);
     });
 
     const response = await request(app).get('/openadr/v3/reports');
     expect(response.status).toBe(200);
-    expect(response.body.regional_stats.CAISO.vehicle_count).toBe(1);
-    expect(response.body.regional_stats.CAISO.high_fidelity_count).toBe(1);
-    expect(response.body.regional_stats.ERCOT.vehicle_count).toBe(1);
-    expect(response.body.regional_stats.ERCOT.high_fidelity_count).toBe(0);
+    expect(response.body.regional_stats.CAISO.vehicle_count).toBe(2);
+    expect(response.body.regional_stats.CAISO.ev_count).toBe(1);
+    expect(response.body.regional_stats.CAISO.bess_count).toBe(1);
+    expect(response.body.confidence_score).toBe(0.99);
   });
 
   test('GET /openadr/v3/reports should return L8 site statuses (Optimized with SMEMBERS)', async () => {
-    redisClient.scan.mockImplementation((cursor, options) => {
-      if (options.MATCH === 'l8:site:status:*') {
-        return Promise.resolve({ cursor: 0, keys: ['l8:site:status:SITE-1', 'l8:site:status:SITE-2'] });
-      }
-      return Promise.resolve({ cursor: 0, keys: [] });
-    });
+    const mockUnifiedContext = {
+      digital_twin: {},
+      regional_markets: {},
+      regional_locks: {},
+      site_statuses: {
+        'SITE-1': 'OPERATIONAL',
+        'SITE-2': 'SAFE_MODE'
+      },
+      regional_capacity: {}
+    };
 
-    redisClient.mGet.mockImplementation((keys) => {
-      if (keys.includes('l8:site:status:SITE-1')) return Promise.resolve(['OPERATIONAL', 'OPERATIONAL']);
-      return Promise.resolve([]);
-    });
-
-    redisClient.sMembers.mockImplementation((key) => {
-      if (key === 'l3:vpp:safemode_sites') return Promise.resolve(['SITE-2']);
-      return Promise.resolve([]);
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l2:unified:context') return Promise.resolve(JSON.stringify(mockUnifiedContext));
+      return Promise.resolve(null);
     });
 
     const response = await request(app).get('/openadr/v3/reports');
@@ -713,5 +724,32 @@ describe('L2 Grid Signal Service', () => {
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
     expect(sentValue.iso_region).toBe('ENTSOE');
     expect(redisClient.get).toHaveBeenCalledWith('l4:grid:lock:ENTSOE');
+  });
+
+  test('startSafetyConsumer should enforce 10% variance lock for BESS (Phase 5/6 Alignment)', async () => {
+    const { consumer, startSafetyConsumer } = require('./index');
+    await startSafetyConsumer();
+
+    const eachMessage = consumer.run.mock.calls[0][0].eachMessage;
+
+    const bessVarianceAlert = {
+      severity: 'WARNING',
+      event_type: 'EFFICIENCY_ALERT',
+      resource_type: 'BESS',
+      variance_pct: 12.5, // > 10% threshold for BESS
+      site_id: 'SITE-BESS-001'
+    };
+
+    await eachMessage({
+      topic: 'migrid.physics.alerts',
+      message: { value: Buffer.from(JSON.stringify(bessVarianceAlert)) }
+    });
+
+    expect(redisClient.setEx).toHaveBeenCalledWith('l1:safety:lock', 900, '1');
+    expect(redisClient.setEx).toHaveBeenCalledWith(
+      'l1:safety:lock:context',
+      900,
+      expect.stringContaining('exceeds 10% threshold for BESS')
+    );
   });
 });

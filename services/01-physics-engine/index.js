@@ -68,6 +68,62 @@ async function connectServices() {
 }
 
 /**
+ * [L1-118] Calculate Data Confidence Score for L11 ML Engine
+ * @param {number} streak - Current sentinel streak
+ * @param {string} lastSync - ISO string of last sync
+ * @returns {number} Confidence score (0.0000 to 1.0000)
+ */
+function calculateConfidenceScore(streak, lastSync) {
+  let score = 0.5; // Base confidence
+
+  // Streak bonus: 0.1 per streak point, max 0.4 (total 0.9)
+  score += Math.min(0.4, (streak || 0) * 0.1);
+
+  // Frequency bonus: if synced recently (within last 24h), add 0.1
+  if (lastSync) {
+    const lastSyncDate = new Date(lastSync);
+    const now = new Date();
+    const diffHours = (now - lastSyncDate) / (1000 * 60 * 60);
+    if (diffHours < 24) {
+      score += 0.1;
+    }
+  }
+
+  return parseFloat(Math.min(1.0, score).toFixed(4));
+}
+
+/**
+ * Helper: Standardize ISO region naming for cross-layer consistency
+ */
+function normalizeIso(iso) {
+  return (iso || 'CAISO').toUpperCase().replace(/-/g, '');
+}
+
+/**
+ * Centralized Physics Metadata Calculation
+ * Calculates physics_score, is_high_fidelity, and is_sentinel_fidelity.
+ */
+function calculatePhysicsMetadata(payload) {
+  let physicsScore = 1.0;
+  // [L1-117] BESS Efficiency Curves: Stricter 10% threshold for BESS (vs 15% for EV)
+  const varianceThreshold = (payload.resource_type === 'BESS') ? 10.0 : 15.0;
+
+  if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
+    physicsScore = 0.0;
+  } else if (payload.variance_pct !== undefined) {
+    physicsScore = Math.max(0, Math.min(1, 1 - (payload.variance_pct / varianceThreshold)));
+  } else if (payload.efficiency_pct !== undefined) {
+    physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
+  }
+
+  return {
+    physicsScore: parseFloat(physicsScore.toFixed(4)),
+    isHighFidelity: physicsScore > 0.95,
+    isSentinelFidelity: physicsScore > 0.99
+  };
+}
+
+/**
  * Handle EFFICIENCY_ALERT notifications from PostgreSQL
  */
 async function handlePhysicsAlert(msg) {
@@ -76,34 +132,52 @@ async function handlePhysicsAlert(msg) {
 
   const severity = (payload.event_type === 'PHYSICS_FRAUD') ? 'FRAUD' : (payload.event_type === 'CAPACITY_VIOLATION' ? 'CRITICAL' : 'WARNING');
 
-  // L1-103 Enhancement: Confidence Score (Physics Score)
-  // Higher score (closer to 1.0) means more trustworthy data.
-  // Lower score (closer to 0.0) indicates high variance and potential fraud.
-  // Priority: Direct violations (FRAUD/CAPACITY) ALWAYS result in 0.0 score.
-  let physicsScore = 1.0;
-  if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
-    physicsScore = 0.0;
-  } else if (payload.variance_pct !== undefined) {
-    physicsScore = Math.max(0, Math.min(1, 1 - (payload.variance_pct / 15.0)));
-  } else if (payload.efficiency_pct !== undefined) {
-    physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
+  const { physicsScore, isHighFidelity, isSentinelFidelity } = calculatePhysicsMetadata(payload);
+
+  // [L1-114] Sentinel Streak Tracker: Track consecutive 0.99+ sessions in Redis
+  if (payload.vehicle_id && (payload.event_type === 'SESSION_COMPLETED' || payload.event_type === 'EFFICIENCY_ALERT')) {
+    const streakKey = `l1:streak:sentinel:${payload.vehicle_id}`;
+    try {
+      if (isSentinelFidelity) {
+        // [L1-116] Streak Decay: Reset if inactivity > 7 days
+        const ttl = await redisClient.ttl(streakKey);
+        const thirtyDays = 86400 * 30;
+        const sevenDays = 86400 * 7;
+
+        if (ttl > 0 && ttl < (thirtyDays - sevenDays)) {
+          console.log(`⏳ [L1 Physics] Sentinel Streak decayed for ${payload.vehicle_id} due to 7+ days inactivity.`);
+          await redisClient.set(streakKey, '1');
+        } else {
+          await redisClient.incr(streakKey);
+        }
+        await redisClient.expire(streakKey, thirtyDays); // 30-day retention
+        console.log(`✨ [L1 Physics] Sentinel Streak incremented for ${payload.vehicle_id}`);
+      } else {
+        await redisClient.set(streakKey, '0');
+        console.log(`📉 [L1 Physics] Sentinel Streak reset for ${payload.vehicle_id} (Score: ${physicsScore})`);
+      }
+    } catch (streakErr) {
+      console.error('❌ [L1 Physics] Failed to update sentinel streak:', streakErr.message);
+    }
   }
 
-  // L1-109 Enhancement: High-Fidelity Data Tracking for L11 ML Engine
-  // HIGH_FIDELITY if physics_score > 0.95 (Green Audit compliant)
-  const isHighFidelity = physicsScore > 0.95;
-
-  // L6-v5.6.0 Enhancement: Physics Sentinel status (score > 0.99)
-  const isSentinelFidelity = physicsScore > 0.99;
-
   // Cross-Layer ISO Normalization (e.g., ENTSO-E -> ENTSOE)
-  const isoRegion = payload.iso_region ? payload.iso_region.toUpperCase().replace(/-/g, '') : 'CAISO';
+  const isoRegion = normalizeIso(payload.iso_region);
 
   // Update last known market price for Scarcity Mode detection
   if (payload.market_price_at_session !== undefined) {
     lastMarketPrice = parseFloat(payload.market_price_at_session);
     checkScarcityMode();
   }
+
+  // [L1-118] Fetch streak to calculate confidence score for real-time alerts
+  let currentStreak = 0;
+  if (payload.vehicle_id) {
+    const streakKey = `l1:streak:sentinel:${payload.vehicle_id}`;
+    const streakVal = await redisClient.get(streakKey);
+    currentStreak = parseInt(streakVal || '0');
+  }
+  const confidenceScore = calculateConfidenceScore(currentStreak, payload.timestamp || new Date().toISOString());
 
   // 1. Verify the Physics: Set Safety Lock in Redis for critical violations
   if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
@@ -121,6 +195,7 @@ async function handlePhysicsAlert(msg) {
         physics_score: physicsScore.toFixed(4),
         is_high_fidelity: isHighFidelity,
         is_sentinel_fidelity: isSentinelFidelity,
+        confidence_score: confidenceScore,
         current_soc: payload.current_soc,
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
@@ -153,6 +228,7 @@ async function handlePhysicsAlert(msg) {
       site_id: payload.site_id || payload.metadata?.site_id || SITE_ID,
       efficiency_pct: payload.efficiency_pct,
       variance_pct: payload.variance_pct,
+      resource_type: payload.resource_type || 'EV',
       current_soc: payload.current_soc,
       threshold: payload.threshold || (payload.event_type === 'EFFICIENCY_ALERT' ? 0.85 : (payload.event_type === 'CAPACITY_VIOLATION' ? 20.0 : null)),
       expected: payload.expected,
@@ -160,6 +236,7 @@ async function handlePhysicsAlert(msg) {
       physics_score: physicsScore.toFixed(4),
       is_high_fidelity: isHighFidelity,
       is_sentinel_fidelity: isSentinelFidelity,
+      confidence_score: confidenceScore,
       billing_mode: payload.billing_mode,
       vpp_active: payload.vpp_active,
       v2g_active: payload.v2g_active,
@@ -233,18 +310,7 @@ async function reconcileLogs() {
       const severity = (payload.event_type === 'PHYSICS_FRAUD') ? 'FRAUD' : (payload.event_type === 'CAPACITY_VIOLATION' ? 'CRITICAL' : 'WARNING');
 
       // Re-calculate physics score and fidelity for high-fidelity reconciliation
-      // Priority: Direct violations (FRAUD/CAPACITY) ALWAYS result in 0.0 score.
-      let physicsScore = 1.0;
-      if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
-        physicsScore = 0.0;
-      } else if (payload.variance_pct !== undefined) {
-        physicsScore = Math.max(0, Math.min(1, 1 - (payload.variance_pct / 15.0)));
-      } else if (payload.efficiency_pct !== undefined) {
-        physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
-      }
-
-      const isHighFidelity = physicsScore > 0.95;
-      const isSentinelFidelity = physicsScore > 0.99;
+      const { physicsScore, isHighFidelity, isSentinelFidelity } = calculatePhysicsMetadata(payload);
 
       // Re-publish missed alerts to Kafka
       const alert = {
@@ -255,6 +321,7 @@ async function reconcileLogs() {
         site_id: payload.site_id || payload.metadata?.site_id || SITE_ID,
         efficiency_pct: payload.efficiency_pct,
         variance_pct: payload.variance_pct,
+        resource_type: payload.resource_type || 'EV',
         current_soc: payload.current_soc,
         threshold: payload.threshold || (payload.event_type === 'EFFICIENCY_ALERT' ? 0.85 : (payload.event_type === 'CAPACITY_VIOLATION' ? 20.0 : null)),
         expected: payload.expected,
@@ -265,7 +332,7 @@ async function reconcileLogs() {
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
         v2g_active: payload.v2g_active,
-        iso_region: payload.iso_region ? payload.iso_region.toUpperCase().replace(/-/g, '') : 'CAISO',
+        iso_region: normalizeIso(payload.iso_region),
         market_price_at_session: payload.market_price_at_session || 0.0,
         timestamp: payload.timestamp || new Date().toISOString(),
         source_layer: 'L1',
@@ -279,7 +346,7 @@ async function reconcileLogs() {
       });
 
       // High-Fidelity SQL Insertion: map values correctly based on event_type
-      let expectedValue = payload.threshold || 0.85;
+      let expectedValue = payload.threshold || (payload.resource_type === 'BESS' ? 0.90 : 0.85);
       let actualValue = payload.efficiency_pct;
 
       if (payload.event_type === 'PHYSICS_FRAUD') {
@@ -315,7 +382,7 @@ async function reconcileLogs() {
         payload.billing_mode,
         payload.vpp_active,
         payload.v2g_active,
-        payload.iso_region ? payload.iso_region.toUpperCase().replace(/-/g, '') : 'CAISO',
+        normalizeIso(payload.iso_region),
         payload.market_price_at_session || 0.0,
         physicsScore.toFixed(4),
         isHighFidelity
@@ -340,26 +407,54 @@ async function syncDigitalTwin() {
 
   try {
     // JOIN with fleets to get the ISO region for regional keying
+    // JOIN with vpp_resources to include resource_type (EV/BESS) for L2/L3 alignment
     // [L1-107] Enhancement: Fetch physics_score and is_high_fidelity for L2 reporting
     const result = await pgClient.query(
-      `SELECT v.id, v.fleet_id, v.battery_capacity_kwh, v.current_soc, v.is_plugged_in, v.v2g_enabled, v.physics_score, v.is_high_fidelity, f.iso
+      `SELECT v.id, v.fleet_id, v.battery_capacity_kwh, v.current_soc, v.is_plugged_in, v.v2g_enabled, v.physics_score, v.is_high_fidelity, f.iso, COALESCE(vr.resource_type, 'EV') as resource_type
        FROM vehicles v
        JOIN fleets f ON v.fleet_id = f.id
+       LEFT JOIN vpp_resources vr ON v.id = vr.vehicle_id
        WHERE v.fleet_id = $1`,
       [fleetId]
     );
 
     for (const vehicle of result.rows) {
-      const iso = vehicle.iso ? vehicle.iso.toUpperCase().replace(/-/g, '') : 'CAISO';
+      const iso = normalizeIso(vehicle.iso);
       const key = `l1:${iso}:vehicle:${vehicle.id}`;
+
+      // [L1-118] Implement Data Confidence Score for L11 ML Engine
+      const streakKey = `l1:streak:sentinel:${vehicle.id}`;
+      const streakVal = await redisClient.get(streakKey);
+      const streak = parseInt(streakVal || '0');
+
+      // Fetch last known sync state to determine frequency
+      const existingDataRaw = await redisClient.get(key);
+      let lastSync = null;
+      if (existingDataRaw) {
+        const existingData = JSON.parse(existingDataRaw);
+        lastSync = existingData.last_sync;
+      }
+
+      const confidenceScore = calculateConfidenceScore(streak, lastSync);
+
+      // [L7 Fallback] If resource_type is missing or default, check L7's Redis cache
+      let resourceType = vehicle.resource_type;
+      if (!resourceType || resourceType === 'EV') {
+        const cachedResource = await redisClient.get(`charger_resource:${vehicle.id}`);
+        if (cachedResource) {
+          resourceType = cachedResource;
+        }
+      }
 
       const physicsScore = parseFloat(vehicle.physics_score || 1.0);
 
       await redisClient.setEx(key, 60, JSON.stringify({
         ...vehicle,
+        resource_type: resourceType,
         physics_score: physicsScore,
         is_high_fidelity: physicsScore > 0.95,
         is_sentinel_fidelity: physicsScore > 0.99,
+        confidence_score: confidenceScore,
         last_sync: new Date().toISOString()
       }));
     }
@@ -407,6 +502,7 @@ if (require.main === module) {
 
 module.exports = {
   handlePhysicsAlert,
+  calculatePhysicsMetadata,
   producer,
   connectServices,
   syncDigitalTwin,

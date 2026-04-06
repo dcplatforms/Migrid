@@ -3,6 +3,7 @@ const { Kafka } = require('kafkajs');
 const axios = require('axios');
 const express = require('express');
 const Decimal = require('decimal.js');
+const redis = require('redis');
 
 const app = express();
 const port = process.env.PORT || 3010;
@@ -10,19 +11,15 @@ const port = process.env.PORT || 3010;
 const pgClient = new Client({ connectionString: process.env.DATABASE_URL });
 const kafka = new Kafka({
   clientId: 'token-engine',
-  brokers: [process.env.KAFKA_BROKER || 'localhost:9092']
+  brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(',')
+});
+
+// Redis connection for market price context (Sync with L6)
+const redisClient = redis.createClient({
+  url: process.env.REDIS_URL || 'redis://localhost:6379'
 });
 
 const consumer = kafka.consumer({ groupId: 'token-engine-group' });
-
-// --- In-Memory Price Cache ---
-const priceCache = {
-  CAISO: { price: 45.0, timestamp: new Date() },
-  PJM: { price: 45.0, timestamp: new Date() },
-  ERCOT: { price: 45.0, timestamp: new Date() },
-  NORDPOOL: { price: 45.0, timestamp: new Date() },
-  ENTSOE: { price: 45.0, timestamp: new Date() }
-};
 
 // Thresholds for Dynamic Multipliers (surplus/scarcity) - Configurable via ENV
 const LMP_THRESHOLD_SURPLUS = new Decimal(process.env.LMP_THRESHOLD_SURPLUS || '30.0');
@@ -61,10 +58,10 @@ async function getOrCreateDriverWallet(driverId) {
   return res.rows[0];
 }
 
-async function logRewardTransaction(driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status = 'pending', iso = 'CAISO') {
+async function logRewardTransaction(driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status = 'pending', iso = 'CAISO', physicsScore = null, isHighFidelity = false, multiplierReason = 'Standard Reward') {
   const res = await pgClient.query(
-    'INSERT INTO token_reward_log(driver_id, rule_id, triggering_event_id, source_value, points_awarded, status, iso) VALUES($1, $2, $3, $4, $5, $6, $7) RETURNING *;',
-    [driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status, iso]
+    'INSERT INTO token_reward_log(driver_id, rule_id, triggering_event_id, source_value, points_awarded, status, iso, physics_score, is_high_fidelity, multiplier_reason) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *;',
+    [driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status, iso, physicsScore, isHighFidelity, multiplierReason]
   );
   return res.rows[0];
 }
@@ -76,29 +73,59 @@ async function updateRewardTransactionStatus(logId, newStatus, openWalletTransac
   );
 }
 
+/**
+ * Idempotency Helper: Checks if this reward has already been processed using unique DB constraint.
+ * This prevents double-minting tokens if Kafka delivers the same message twice.
+ */
+async function checkIdempotency(driverId, triggeringEventId, ruleId) {
+  const res = await pgClient.query(
+    'SELECT log_id FROM token_reward_log WHERE driver_id = $1 AND triggering_event_id = $2 AND rule_id = $3;',
+    [driverId, triggeringEventId, ruleId]
+  );
+  return res.rows.length > 0;
+}
+
 // --- Reward Multiplier Logic ---
 
-function getDynamicMultiplier(isoRaw, actionType) {
+async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
   const iso = isoRaw.toUpperCase().replace(/-/g, '');
-  const priceData = priceCache[iso];
-  const latestPrice = priceData ? new Decimal(priceData.price) : new Decimal(50.0);
+  let latestPrice = new Decimal(50.0);
 
-  if (actionType === 'session_completed' && latestPrice.lt(LMP_THRESHOLD_SURPLUS)) {
-    console.log(`[L10 Strategy] Surplus detected in ${iso} ($${latestPrice}). Applying 1.5x bonus for charging.`);
-    return new Decimal(1.5);
-  } else if (actionType === 'v2g_discharge' && latestPrice.gt(LMP_THRESHOLD_SCARCITY)) {
-    console.log(`[L10 Strategy] Scarcity detected in ${iso} ($${latestPrice}). Applying 2.0x bonus for grid support.`);
-    return new Decimal(2.0);
+  try {
+    const profitabilityStr = await redisClient.hGet('market:profitability', iso);
+    if (profitabilityStr) {
+      latestPrice = new Decimal(profitabilityStr);
+    }
+  } catch (err) {
+    console.error(`[L10] Error fetching market price from Redis for ${iso}:`, err.message);
   }
 
-  return new Decimal(1.0);
+  const isCharging = actionType === 'session_completed' || actionType === 'green_charging';
+
+  if (isCharging && latestPrice.lt(LMP_THRESHOLD_SURPLUS)) {
+    console.log(`[L10 Strategy] Surplus detected in ${iso} ($${latestPrice}). Applying 1.5x bonus for charging.`);
+    return { multiplier: new Decimal(1.5), reason: 'Grid Surplus Bonus (1.5x)' };
+  } else if (actionType === 'v2g_discharge' && latestPrice.gt(LMP_THRESHOLD_SCARCITY)) {
+    console.log(`[L10 Strategy] Scarcity detected in ${iso} ($${latestPrice}). Applying 2.0x bonus for grid support.`);
+    return { multiplier: new Decimal(2.0), reason: 'High Scarcity Reward (2.0x)' };
+  } else if (isCharging && latestPrice.gt(LMP_THRESHOLD_SCARCITY)) {
+    if (isVppEvent) {
+      console.log(`[L10 Strategy] Scarcity detected in ${iso} ($${latestPrice}) during VPP event. Applying 2.0x bonus for helpful charging.`);
+      return { multiplier: new Decimal(2.0), reason: 'VPP Scarcity Bonus (2.0x)' };
+    } else {
+      console.log(`[L10 Strategy] Scarcity detected in ${iso} ($${latestPrice}) without VPP alignment. Applying 0.5x penalty for harmful charging.`);
+      return { multiplier: new Decimal(0.5), reason: 'High Scarcity Surcharge (0.5x)' };
+    }
+  }
+
+  return { multiplier: new Decimal(1.0), reason: 'Standard Reward' };
 }
 
 // --- Health Check ---
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '4.2.0',
+    version: '4.3.0',
     status: 'healthy',
     layer: 'L10'
   });
@@ -111,84 +138,107 @@ async function start() {
     await pgClient.connect();
     console.log('✅ [L10 Token Engine] Connected to Ledger.');
 
+    await redisClient.connect();
+    console.log('✅ [L10 Token Engine] Connected to Redis.');
+
     await consumer.connect();
     await consumer.subscribe({ topics: ['driver_actions', 'MARKET_PRICE_UPDATED'], fromBeginning: true });
 
-    app.listen(port, () => {
-      console.log(`✅ [L10 Token Engine] Health check server running on port ${port}`);
-    });
+    if (require.main === module) {
+      app.listen(port, () => {
+        console.log(`✅ [L10 Token Engine] Health check server running on port ${port}`);
+      });
+    }
 
     await consumer.run({
       eachMessage: async ({ topic, partition, message }) => {
-        const payload = JSON.parse(message.value.toString());
+        try {
+          const payload = JSON.parse(message.value.toString());
 
-        if (topic === 'MARKET_PRICE_UPDATED') {
-          const iso = payload.iso.toUpperCase().replace(/-/g, '');
-          console.log(`[L10 Market Watch] Received price update for ${iso}: $${payload.price_per_mwh}/MWh`);
-          priceCache[iso] = {
-            price: payload.price_per_mwh,
-            timestamp: new Date(payload.timestamp || Date.now())
-          };
-          return;
-        }
+          if (topic === 'MARKET_PRICE_UPDATED') {
+            const iso = payload.iso.toUpperCase().replace(/-/g, '');
+            const price = payload.profitability_index || payload.price_per_mwh;
+            console.log(`[L10 Market Watch] Received price update for ${iso}: $${price}/MWh`);
+            await redisClient.hSet('market:profitability', iso, price.toString());
+            return;
+          }
 
-        console.log(`⚡ Received message from ${topic}:`, payload);
+          console.log(`⚡ Received message from ${topic}:`, payload);
 
-        const { driver_id, action_type, source_value, event_id, iso: payloadIso, physics_score } = payload;
+        const { driver_id, action_type, source_value, event_id, iso: payloadIso, physics_score, is_vpp_event, isVppEvent, is_high_fidelity, isHighFidelity } = payload;
+        const vppAligned = !!(is_vpp_event || isVppEvent);
 
-        // 1. Ensure Driver Wallet Exists (and get address)
-        const driverWallet = await getOrCreateDriverWallet(driver_id);
-        if (!driverWallet) {
-          console.error(`❌ Failed to get or create wallet for driver: ${driver_id}`);
-          return;
-        }
-        const iso = (payloadIso || driverWallet.iso || 'CAISO').toUpperCase().replace(/-/g, '');
+          // 1. Ensure Driver Wallet Exists (and get address)
+          const driverWallet = await getOrCreateDriverWallet(driver_id);
+          if (!driverWallet) {
+            console.error(`❌ Failed to get or create wallet for driver: ${driver_id}`);
+            return;
+          }
+          const iso = (payloadIso || driverWallet.iso || 'CAISO').toUpperCase().replace(/-/g, '');
 
         let pointsAwarded = new Decimal(0);
         let rule_id;
+        let multiplierReason = 'Standard Reward';
+        let physicsScorePersist = physics_score !== undefined ? parseFloat(physics_score) : null;
+        let isHighFidelityPersist = (is_high_fidelity === true || isHighFidelity === true) || (physicsScorePersist > 0.95);
+
+        // Fetch rule early for idempotency check
+        const rule = await getRewardRule(action_type);
+        if (!rule && !(action_type === 'challenge_completed' || action_type === 'achievement_unlocked')) {
+          console.warn(`⚠️ No active reward rule found for action type: ${action_type}`);
+          return;
+        }
+        rule_id = rule ? rule.rule_id : '00000000-0000-0000-0000-000000000000';
+
+        // 2. Idempotency Check
+        const existingReward = await checkIdempotency(driver_id, rule_id, event_id);
+        if (existingReward) {
+          console.log(`[L10 Idempotency] Reward already exists for ${action_type} (Event: ${event_id}). Status: ${existingReward.status}. Skipping.`);
+          return;
+        }
 
         if (action_type === 'challenge_completed' || action_type === 'achievement_unlocked') {
           // Fixed-value rewards (points/tokens)
-          calculatedPoints = new Decimal(source_value || 0);
-
-          const rule = await getRewardRule(action_type);
-          rule_id = rule ? rule.rule_id : '00000000-0000-0000-0000-000000000000';
-
-          console.log(`[L10] ${action_type} by driver ${driver_id}. Awarding ${calculatedPoints.toNumber()} tokens.`);
+          pointsAwarded = new Decimal(source_value || 0);
+          console.log(`[L10] ${action_type} by driver ${driver_id}. Awarding ${pointsAwarded.toNumber()} tokens.`);
         } else {
           // Proof of Physics Gate: Energy-based rewards must have verified physics
           if (physics_score !== undefined && physics_score !== null) {
             const score = parseFloat(physics_score);
+            const isHighFidelity = !!(payload.is_high_fidelity || payload.isHighFidelity);
+            const fidelityStatus = isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD';
+
             if (score <= 0.0) {
-              console.warn(`[L10 Audit] Rejected reward for event ${event_id}: Physics Score too low (${score}).`);
+              console.warn(`[L10 Audit] [${fidelityStatus}] Rejected reward for event ${event_id}: Physics Score too low (${score}). Driver: ${driver_id}`);
               return;
             }
           } else {
-            console.warn(`[L10 Audit] Rejected energy-based reward for event ${event_id}: Physics Score missing.`);
+            console.warn(`[L10 Audit] Rejected energy-based reward for event ${event_id}: Physics Score missing. Driver: ${driver_id}`);
             return;
           }
 
-          const rule = await getRewardRule(action_type);
-          if (!rule) {
-            console.warn(`⚠️ No active reward rule found for action type: ${action_type}`);
-            return;
-          }
-          rule_id = rule.rule_id;
+            const rule = await getRewardRule(action_type);
+            if (!rule) {
+              console.warn(`⚠️ No active reward rule found for action type: ${action_type}`);
+              return;
+            }
+            rule_id = rule.rule_id;
 
           // 2. Calculate Reward with Dynamic Boosting (Energy-based)
-          const marketMultiplier = getDynamicMultiplier(iso, action_type);
+          const marketMultiplier = await getDynamicMultiplier(iso, action_type, vppAligned);
+          multiplierReason = marketMultiplier.reason;
           const baseReward = new Decimal(source_value || 0).times(rule.reward_multiplier);
-          calculatedPoints = baseReward.times(marketMultiplier).toDecimalPlaces(8);
+          pointsAwarded = baseReward.times(marketMultiplier.multiplier).toDecimalPlaces(8);
 
-          console.log(`[L10] Reward calculated: ${calculatedPoints.toNumber()} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Market Mult: ${marketMultiplier})`);
+          console.log(`[L10] Reward calculated: ${pointsAwarded.toNumber()} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Market Mult: ${marketMultiplier.multiplier.toNumber()})`);
         }
 
-        if (pointsAwarded.isZero()) {
-          console.log(`[L10] Reward is zero for event ${event_id}, skipping.`);
-          return;
-        }
+          if (pointsAwarded.isZero()) {
+            console.log(`[L10] Reward is zero for event ${event_id}, skipping.`);
+            return;
+          }
 
-        // 3. Log the Reward (pending)
+        // 4. Log the Reward (pending)
         const rewardLog = await logRewardTransaction(
           driver_id,
           rule_id,
@@ -196,10 +246,13 @@ async function start() {
           source_value || 0,
           pointsAwarded.toNumber(),
           'pending',
-          iso
+          iso,
+          physicsScorePersist,
+          isHighFidelityPersist,
+          multiplierReason
         );
 
-        // 4. Execute Open-Wallet Transaction
+        // 6. Execute Blockchain/Wallet Transaction
         try {
           const openWalletResponse = await axios.post(`${process.env.OPEN_WALLET_API_URL}/transactions`, {
             walletAddress: driverWallet.open_wallet_address,
@@ -208,16 +261,19 @@ async function start() {
             referenceId: rewardLog.log_id
           });
           await updateRewardTransactionStatus(rewardLog.log_id, 'complete', openWalletResponse.data.transactionId);
-          console.log(`✅ [L10] Reward transaction completed: ${openWalletResponse.data.transactionId}`);
+          console.log(`✅ [L10] Reward minted: ${pointsAwarded.toNumber()} points (${multiplierReason})`);
         } catch (error) {
-          console.error(`❌ [L10] Open-Wallet transaction failed for log ${rewardLog.log_id}:`, error.message);
+          console.error(`❌ [L10] Reward failed for log ${rewardLog.log_id}:`, error.message);
           await updateRewardTransactionStatus(rewardLog.log_id, 'failed');
         }
-      },
+      } catch (error) {
+        console.error(`[L10] Error processing Kafka message on topic ${topic}:`, error.message);
+      }
+    },
     });
 
   } catch (error) {
-    console.error('❌ [L10 Token Engine] Startup error:', error);
+    console.error('❌ [L10 Token Engine] Fatal error:', error);
     process.exit(1);
   }
 }
@@ -230,7 +286,8 @@ process.on('SIGINT', async () => {
   console.log('👋 [L10 Token Engine] Shutting down...');
   await consumer.disconnect();
   await pgClient.end();
+  await redisClient.quit();
   process.exit(0);
 });
 
-module.exports = { getDynamicMultiplier, priceCache, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY };
+module.exports = { app, getDynamicMultiplier, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY, redisClient };

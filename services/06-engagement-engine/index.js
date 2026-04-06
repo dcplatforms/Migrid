@@ -121,8 +121,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.6.0', // Weekly Product Update: L10 Proof-of-Physics & Scarcity Savior Refinement
-    version: '5.6.0', // Weekly Product Update: Physics Sentinel & L10 Sync
+      version: '5.8.0', // Weekly Mission: Data Confidence & ML Readiness
     status: 'healthy',
     layer: 'L6'
   });
@@ -329,11 +328,13 @@ async function processChargingEvent(event) {
 
   if ((type === 'SESSION_COMPLETED' || type === 'session_completed' || event.energyDispensedKwh) && isValid) {
     const isFinal = type === 'SESSION_COMPLETED' || type === 'session_completed';
+    const vehicleId = event.vehicle_id || event.vehicleId;
 
     // Calculate physics_score and isHighFidelity if not already provided
     let physics_score = 1.0;
     let isHighFidelity = true;
     let isLowVariance = true;
+    let confidence_score = 0.5; // Default confidence
 
     // Use event-provided score if available (Backward compatibility for camelCase)
     if (event.physics_score !== undefined) physics_score = parseFloat(event.physics_score);
@@ -341,11 +342,33 @@ async function processChargingEvent(event) {
 
     isHighFidelity = physics_score > 0.95;
 
+    // [L6-118] Fetch Data Confidence Score from L1 Digital Twin for ML Engine Audit
+    if (vehicleId) {
+      try {
+        const digitalTwinRaw = await redisClient.get(`l1:${iso}:vehicle:${vehicleId}`);
+        if (digitalTwinRaw) {
+          const digitalTwin = JSON.parse(digitalTwinRaw);
+          confidence_score = parseFloat(digitalTwin.confidence_score || 0.5);
+        }
+      } catch (redisErr) {
+        console.error(`[L6] Error fetching L1 confidence score for vehicle ${vehicleId}:`, redisErr.message);
+      }
+    }
+
     if (isFinal) {
-      const sessionData = await pool.query('SELECT variance_percentage FROM charging_sessions WHERE id = $1', [sessionId]);
+      const sessionData = await pool.query(`
+        SELECT cs.variance_percentage, COALESCE(vr.resource_type, 'EV') as resource_type
+        FROM charging_sessions cs
+        LEFT JOIN vpp_resources vr ON cs.vehicle_id = vr.vehicle_id
+        WHERE cs.id = $1
+      `, [sessionId]);
+
       const variance = parseFloat(sessionData.rows[0]?.variance_percentage || '100');
+      const resourceType = sessionData.rows[0]?.resource_type || 'EV';
+      const varianceThreshold = resourceType === 'BESS' ? 10.0 : 15.0;
+
       isLowVariance = variance < 5.0;
-      physics_score = Math.max(0, Math.min(1, 1 - (variance / 15.0)));
+      physics_score = Math.max(0, Math.min(1, 1 - (variance / varianceThreshold)));
       isHighFidelity = physics_score > 0.95;
 
       await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
@@ -354,6 +377,8 @@ async function processChargingEvent(event) {
       await checkFirstSessionAchievement(driverId);
       await updateStreaks(driverId);
       await checkSustainabilityChampion(driverId);
+      await checkSentinelOfTheGridAchievement(driverId, vehicleId);
+      await checkHighConfidenceAchievement(driverId, vehicleId);
 
       // Market Master is awarded only on session completion to ensure it's session-based
       await checkMarketMasterAchievement(driverId, iso, sessionId);
@@ -361,12 +386,21 @@ async function processChargingEvent(event) {
 
       // Phase 6 AI Readiness: Check for ML Contributor (High-fidelity data)
       if (isLowVariance) {
-        await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'low_variance_session', JSON.stringify({ sessionId, variance, physics_score })]);
+        await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'low_variance_session', JSON.stringify({ sessionId, variance, physics_score, confidence_score })]);
         await checkMLContributorAchievement(driverId);
         await checkEnergyArchitectAchievement(driverId);
         await checkL11DataGuardianAchievement(driverId);
         await checkPhysicsSentinelAchievement(driverId);
         await updateChallengeProgress(driverId, 'low_variance_charging');
+
+        // [L6-118] ML Data Pioneer: Specifically for very high fidelity data
+        if (physics_score > 0.98) {
+          await updateChallengeProgress(driverId, 'ml_data_pioneer');
+        }
+      }
+
+      if (confidence_score > 0.9) {
+        await updateChallengeProgress(driverId, 'high_confidence_charging');
       }
     }
 
@@ -423,15 +457,15 @@ async function processChargingEvent(event) {
           session_id: sessionId,
           points,
           physics_score: physics_score.toFixed(4),
+          confidence_score: confidence_score.toFixed(4),
           fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD',
           multiplier_reason: multiplierReason
         }
       };
 
-      // Notify L10 Token Engine for points fulfillment (Proof of Physics included)
-      await producer.send({
-        topic: 'driver_actions',
-        messages: [{
+      // Consolidated Kafka Messages for L10 Token Engine (Proof of Physics included)
+      const l10Messages = [
+        {
           value: JSON.stringify({
             driver_id: driverId,
             action_type: 'green_charging',
@@ -439,11 +473,32 @@ async function processChargingEvent(event) {
             event_id: sessionId,
             iso: iso,
             physics_score: physics_score,
+            confidence_score: confidence_score,
             is_high_fidelity: isHighFidelity,
+            is_vpp_event: !!(event.isVPPEvent || event.is_vpp_event),
             multiplier_reason: multiplierReason
           })
-        }]
-      });
+        }
+      ];
+
+      if (isFinal) {
+        l10Messages.push({
+          value: JSON.stringify({
+            driver_id: driverId,
+            action_type: 'session_completed',
+            source_value: parseFloat(event.energyDispensedKwh),
+            event_id: sessionId,
+            iso: iso,
+            physics_score: physics_score,
+            confidence_score: confidence_score,
+            is_high_fidelity: isHighFidelity,
+            is_vpp_event: !!(event.isVPPEvent || event.is_vpp_event),
+            multiplier_reason: multiplierReason
+          })
+        });
+      }
+
+      await producer.send({ topic: 'driver_actions', messages: l10Messages });
 
       await producer.send({
         topic: 'engagement_notifications',
@@ -452,23 +507,6 @@ async function processChargingEvent(event) {
 
       // WebSocket Real-time Push
       io.to(`driver:${driverId}`).emit('notification', notification);
-
-      // Emit to driver_actions for L10 Token Engine (Proof of Physics)
-      await producer.send({
-        topic: 'driver_actions',
-        messages: [{
-          value: JSON.stringify({
-            driver_id: driverId,
-            action_type: 'session_completed',
-            source_value: parseFloat(event.energyDispensedKwh),
-            event_id: sessionId,
-            iso: iso,
-            physics_score: physics_score,
-            is_high_fidelity: isHighFidelity,
-            multiplier_reason: multiplierReason
-          })
-        }]
-      });
     }
   }
 
@@ -647,7 +685,7 @@ async function handleGridSignal(payload) {
     // - Returning data needed for notifications
     const results = await pool.query(`
       WITH target_drivers AS (
-          SELECT cs.driver_id, f.iso, f.id as fleet_id
+          SELECT cs.driver_id, UPPER(REPLACE(f.iso, '-', '')) as iso, f.id as fleet_id
           FROM charging_sessions cs
           JOIN drivers d ON cs.driver_id = d.id
           JOIN fleets f ON d.fleet_id = f.id
@@ -907,7 +945,10 @@ async function updateChallengeProgress(driver_id, challenge_type) {
         const chal = await pool.query('SELECT name, points_reward, token_reward FROM challenges WHERE id = $1', [challenge.id]);
         await updateLeaderboardPoints(driver_id, chal.rows[0].points_reward);
 
-        // Notify L10 Token Engine of challenge completion
+        // Notify L10 Token Engine of challenge completion (Consolidated)
+        const driverDataForChallenge = await pool.query('SELECT f.iso FROM drivers d JOIN fleets f ON d.fleet_id = f.id WHERE d.id = $1', [driver_id]);
+        const isoForChallenge = (driverDataForChallenge.rows[0]?.iso || 'CAISO').toUpperCase().replace(/-/g, '');
+
         await producer.send({
           topic: 'driver_actions',
           messages: [{
@@ -916,8 +957,9 @@ async function updateChallengeProgress(driver_id, challenge_type) {
               action_type: 'challenge_completed',
               challenge_id: challenge.id,
               challenge_name: chal.rows[0].name,
-              token_reward: chal.rows[0].token_reward,
+              source_value: chal.rows[0].token_reward || chal.rows[0].points_reward,
               event_id: challenge.id,
+              iso: isoForChallenge,
               physics_score: 1.0, // Behavioral achievements are logically verified
               is_high_fidelity: true
             })
@@ -938,26 +980,6 @@ async function updateChallengeProgress(driver_id, challenge_type) {
         });
 
         io.to(`driver:${driver_id}`).emit('notification', notification);
-
-        // Emit to driver_actions for L10 Token Engine
-        const driverDataForChallenge = await pool.query('SELECT f.iso FROM drivers d JOIN fleets f ON d.fleet_id = f.id WHERE d.id = $1', [driver_id]);
-        const isoForChallenge = (driverDataForChallenge.rows[0]?.iso || 'CAISO').toUpperCase().replace(/-/g, '');
-
-        await producer.send({
-          topic: 'driver_actions',
-          messages: [{
-            value: JSON.stringify({
-              driver_id,
-              action_type: 'challenge_completed',
-              challenge_name: chal.rows[0].name,
-              source_value: chal.rows[0].token_reward || chal.rows[0].points_reward,
-              event_id: challenge.id,
-              iso: isoForChallenge,
-              physics_score: 1.0,
-              is_high_fidelity: true
-            })
-          }]
-        });
       }
     }
   } catch (error) {
@@ -1018,7 +1040,10 @@ async function updateStreaks(driver_id) {
 async function checkV2GAchievements(driver_id, iso, sessionId) {
   try {
     // Scarcity Savior check
-    if (iso) await checkScarcitySaviorAchievement(driver_id, iso, sessionId);
+    if (iso) {
+      const normalizedIso = iso.toUpperCase().replace(/-/g, '');
+      await checkScarcitySaviorAchievement(driver_id, normalizedIso, sessionId);
+    }
 
     // 1. Grid Guardian (1 participation)
     const ggAchievement = await pool.query('SELECT id FROM achievements WHERE name = \'Grid Guardian\'');
@@ -1120,6 +1145,46 @@ async function checkEnergyArchitectAchievement(driver_id) {
     if (achievement.rows.length > 0) {
       await awardAchievement(driver_id, achievement.rows[0].id);
     }
+  }
+}
+
+async function checkSentinelOfTheGridAchievement(driver_id, vehicle_id) {
+  if (!vehicle_id) return;
+  try {
+    const streakStr = await redisClient.get(`l1:streak:sentinel:${vehicle_id}`);
+    const streak = parseInt(streakStr || '0');
+
+    if (streak >= 30) {
+      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Sentinel of the Grid'");
+      if (achievement.rows.length > 0) {
+        await awardAchievement(driver_id, achievement.rows[0].id);
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking Sentinel of the Grid achievement:', error);
+  }
+}
+
+async function checkHighConfidenceAchievement(driver_id, vehicle_id) {
+  if (!vehicle_id) return;
+  try {
+    const driverData = await pool.query('SELECT f.iso FROM drivers d JOIN fleets f ON d.fleet_id = f.id WHERE d.id = $1', [driver_id]);
+    const iso = (driverData.rows[0]?.iso || 'CAISO').toUpperCase().replace(/-/g, '');
+
+    const digitalTwinRaw = await redisClient.get(`l1:${iso}:vehicle:${vehicle_id}`);
+    if (!digitalTwinRaw) return;
+
+    const digitalTwin = JSON.parse(digitalTwinRaw);
+    const confidence = parseFloat(digitalTwin.confidence_score || 0);
+
+    if (confidence >= 0.95) {
+      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'High-Confidence Contributor'");
+      if (achievement.rows.length > 0) {
+        await awardAchievement(driver_id, achievement.rows[0].id);
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking High-Confidence achievement:', error);
   }
 }
 
@@ -1343,4 +1408,12 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
-module.exports = { app, server, pool, redisClient };
+module.exports = {
+  app,
+  server,
+  pool,
+  redisClient,
+  processChargingEvent,
+  checkHighConfidenceAchievement,
+  updateChallengeProgress
+};
