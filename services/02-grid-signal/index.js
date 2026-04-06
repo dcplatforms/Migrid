@@ -92,7 +92,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.4.4',
+    version: '2.4.5',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -236,6 +236,16 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
     const v2gRequested = (event.type === 'discharge' ||
                           (event.signals && event.signals.some(s => s.value < 0 || s.type === 'discharge')));
 
+    // IEEE 2030.5 DERControl Mapping (Phase 5 Forward Engineering)
+    const derControl = {};
+    if (event.signals) {
+      const opModeSignal = event.signals.find(s => s.type === 'level');
+      if (opModeSignal) derControl.op_mode = opModeSignal.value;
+
+      const setPointSignal = event.signals.find(s => s.type === 'setpoint');
+      if (setPointSignal) derControl.set_point_kw = setPointSignal.value;
+    }
+
     // 2. Save event to ledger
     await pool.query(
       'INSERT INTO grid_events (event_id, event_type, payload, status, received_at, metadata) VALUES ($1, $2, $3, $4, NOW(), $5) ON CONFLICT (event_id) DO NOTHING',
@@ -254,7 +264,8 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
       const safetyContextRaw = await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
       const safetyContext = safetyContextRaw ? JSON.parse(safetyContextRaw) : {};
 
-      // [L2-v2.4.4] Enhanced High-Fidelity Kafka Broadcast with Confidence & Regional Context
+      // [L2-v2.4.5] Enhanced High-Fidelity Kafka Broadcast with Confidence & Regional Context
+      const confidenceScore = parseFloat(safetyContext.confidence_score || safetyContext.physics_score || '1.0000');
       const physicsScore = parseFloat(safetyContext.physics_score || '1.0000');
       const fidelityStatus = physicsScore > 0.95 ? 'HIGH_FIDELITY' : 'STANDARD';
 
@@ -274,13 +285,14 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
             site_id: event.site_id || 'ALL',
             site_status: siteStatus || 'OPERATIONAL',
             v2g_requested: v2gRequested,
+            der_control: Object.keys(derControl).length > 0 ? derControl : null,
             iso_region: isoRegion,
             regional_capacity: regionalCapacity, // L2 v2.4.4: Regional capacity breakdown (Total/EV/BESS)
             market_price_at_session: event.metadata?.market_price_at_session ?? (marketMetadata.price_per_mwh ?? 0), // L2 v2.4.1: Nullish coalescing for 0-price preservation
             profitability_index: marketMetadata.profitability_index,
             degradation_cost_mwh: marketMetadata.degradation_cost_mwh,
             physics_score: physicsScore,
-            confidence_score: physicsScore, // L2 v2.4.4: Explicit confidence score for L11
+            confidence_score: confidenceScore, // L2 v2.4.5: Prioritized confidence score for L11
             fidelity_status: fidelityStatus,
             metadata: event.metadata || {}, // L2 v2.4.1: Full metadata preservation (OpenADR 3.1.0)
             billing_mode: event.metadata?.billing_mode,
@@ -432,8 +444,6 @@ const updateRegionalStats = async () => {
     const regionalCapacityRaw = await redisClient.get('vpp:capacity:regional:high_fidelity') || await redisClient.get('vpp:capacity:regional');
     if (regionalCapacityRaw) {
       context.regional_capacity = JSON.parse(regionalCapacityRaw);
-    } else if (legacyRegionalCapacityRaw) {
-      context.regional_capacity = JSON.parse(legacyRegionalCapacityRaw);
     }
 
     // 6. Aggregate Physics Confidence Score (from L1)
@@ -441,9 +451,8 @@ const updateRegionalStats = async () => {
     if (safetyContextRaw) {
       try {
         const safetyContext = JSON.parse(safetyContextRaw);
-        if (safetyContext.physics_score) {
-          context.confidence_score = parseFloat(safetyContext.physics_score);
-        }
+        // [L2 v2.4.5] Prioritize explicit confidence_score from L1 context
+        context.confidence_score = parseFloat(safetyContext.confidence_score || safetyContext.physics_score || '1.0');
       } catch (e) {}
     } else {
       context.confidence_score = 1.0; // Default to full confidence if no locks/alerts

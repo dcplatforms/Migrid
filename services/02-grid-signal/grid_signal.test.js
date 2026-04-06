@@ -726,6 +726,49 @@ describe('L2 Grid Signal Service', () => {
     expect(redisClient.get).toHaveBeenCalledWith('l4:grid:lock:ENTSOE');
   });
 
+  test('POST /openadr/v3/events should map IEEE 2030.5 der_control (v2.4.5)', async () => {
+    redisClient.get.mockResolvedValue(null);
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-der-mapping',
+        type: 'demand-response',
+        signals: [
+          { type: 'level', value: 2 },
+          { type: 'setpoint', value: 150.5 }
+        ]
+      });
+
+    expect(response.status).toBe(202);
+    const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
+    expect(sentValue.der_control.op_mode).toBe(2);
+    expect(sentValue.der_control.set_point_kw).toBe(150.5);
+  });
+
+  test('POST /openadr/v3/events should prioritize explicit confidence_score (v2.4.5)', async () => {
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({
+        physics_score: '0.9850',
+        confidence_score: '0.9999'
+      }));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-conf-check',
+        type: 'demand-response'
+      });
+
+    expect(response.status).toBe(202);
+    const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
+    expect(sentValue.confidence_score).toBe(0.9999); // Should prioritize confidence_score over physics_score
+  });
+
   test('startSafetyConsumer should enforce 10% variance lock for BESS (Phase 5/6 Alignment)', async () => {
     const { consumer, startSafetyConsumer } = require('./index');
     await startSafetyConsumer();
