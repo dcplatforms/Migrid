@@ -27,14 +27,6 @@ const LMP_THRESHOLD_SCARCITY = new Decimal(process.env.LMP_THRESHOLD_SCARCITY ||
 
 // --- Helper Functions for Database Interaction ---
 
-async function checkIdempotency(driverId, ruleId, triggeringEventId) {
-  const res = await pgClient.query(
-    'SELECT log_id, status FROM token_reward_log WHERE driver_id = $1 AND rule_id = $2 AND triggering_event_id = $3;',
-    [driverId, ruleId, triggeringEventId]
-  );
-  return res.rows[0];
-}
-
 async function getRewardRule(actionType) {
   const res = await pgClient.query(
     'SELECT * FROM token_reward_rules WHERE action_type = $1 AND is_active = TRUE;',
@@ -95,7 +87,7 @@ async function checkIdempotency(driverId, triggeringEventId, ruleId) {
 
 // --- Reward Multiplier Logic ---
 
-function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
+async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
   const iso = isoRaw.toUpperCase().replace(/-/g, '');
   let latestPrice = new Decimal(50.0);
 
@@ -115,14 +107,14 @@ function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
     return { multiplier: new Decimal(1.5), reason: 'Grid Surplus Bonus (1.5x)' };
   } else if (actionType === 'v2g_discharge' && latestPrice.gt(LMP_THRESHOLD_SCARCITY)) {
     console.log(`[L10 Strategy] Scarcity detected in ${iso} ($${latestPrice}). Applying 2.0x bonus for grid support.`);
-    return new Decimal(2.0);
+    return { multiplier: new Decimal(2.0), reason: 'High Scarcity Reward (2.0x)' };
   } else if (isCharging && latestPrice.gt(LMP_THRESHOLD_SCARCITY)) {
     if (isVppEvent) {
       console.log(`[L10 Strategy] Scarcity detected in ${iso} ($${latestPrice}) during VPP event. Applying 2.0x bonus for helpful charging.`);
-      return new Decimal(2.0);
+      return { multiplier: new Decimal(2.0), reason: 'VPP Scarcity Bonus (2.0x)' };
     } else {
       console.log(`[L10 Strategy] Scarcity detected in ${iso} ($${latestPrice}) without VPP alignment. Applying 0.5x penalty for harmful charging.`);
-      return new Decimal(0.5);
+      return { multiplier: new Decimal(0.5), reason: 'High Scarcity Surcharge (0.5x)' };
     }
   }
 
@@ -173,7 +165,7 @@ async function start() {
 
           console.log(`⚡ Received message from ${topic}:`, payload);
 
-        const { driver_id, action_type, source_value, event_id, iso: payloadIso, physics_score, is_vpp_event, isVppEvent } = payload;
+        const { driver_id, action_type, source_value, event_id, iso: payloadIso, physics_score, is_vpp_event, isVppEvent, is_high_fidelity, isHighFidelity } = payload;
         const vppAligned = !!(is_vpp_event || isVppEvent);
 
           // 1. Ensure Driver Wallet Exists (and get address)
@@ -188,7 +180,7 @@ async function start() {
         let rule_id;
         let multiplierReason = 'Standard Reward';
         let physicsScorePersist = physics_score !== undefined ? parseFloat(physics_score) : null;
-        let isHighFidelityPersist = is_high_fidelity === true || (physicsScorePersist > 0.95);
+        let isHighFidelityPersist = (is_high_fidelity === true || isHighFidelity === true) || (physicsScorePersist > 0.95);
 
         // Fetch rule early for idempotency check
         const rule = await getRewardRule(action_type);
@@ -233,11 +225,12 @@ async function start() {
             rule_id = rule.rule_id;
 
           // 2. Calculate Reward with Dynamic Boosting (Energy-based)
-          const marketMultiplier = getDynamicMultiplier(iso, action_type, vppAligned);
+          const marketMultiplier = await getDynamicMultiplier(iso, action_type, vppAligned);
+          multiplierReason = marketMultiplier.reason;
           const baseReward = new Decimal(source_value || 0).times(rule.reward_multiplier);
-          pointsAwarded = baseReward.times(multiplier).toDecimalPlaces(8);
+          pointsAwarded = baseReward.times(marketMultiplier.multiplier).toDecimalPlaces(8);
 
-          console.log(`[L10] Reward calculated: ${pointsAwarded.toNumber()} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Market Mult: ${multiplier})`);
+          console.log(`[L10] Reward calculated: ${pointsAwarded.toNumber()} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Market Mult: ${marketMultiplier.multiplier.toNumber()})`);
         }
 
           if (pointsAwarded.isZero()) {
@@ -273,7 +266,10 @@ async function start() {
           console.error(`❌ [L10] Reward failed for log ${rewardLog.log_id}:`, error.message);
           await updateRewardTransactionStatus(rewardLog.log_id, 'failed');
         }
-      },
+      } catch (error) {
+        console.error(`[L10] Error processing Kafka message on topic ${topic}:`, error.message);
+      }
+    },
     });
 
   } catch (error) {
