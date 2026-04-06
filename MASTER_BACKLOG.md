@@ -1,8 +1,8 @@
 # MiGrid Master Backlog & Strategic Dependency Matrix
 
 **Version:** 10.1.0
-**Last Updated:** March 2026
-**Status:** Phase 5 "Enterprise Scale" (90% Complete)
+**Last Updated:** April 2026
+**Status:** Phase 5 "Enterprise Scale" (92% Complete)
 
 ---
 
@@ -13,8 +13,8 @@
 | **P0** | **ML Demand Forecasting** | L11 (ML Engine) | ✅ Phase 5 High-Fidelity Data Pipelines (L1, L2, L3, L4) | Phase 6 |
 | **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | 🚧 L7 v5.5.0 Hardened (85% Complete) | Phase 5 |
 | **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 (Market) v3.7.0 Bidding Auditability | Phase 5 |
-| **P3** | **OCPI 2.2 Roaming** | L7 (Device) | L9 (Commerce) v5.1.0 settlement engine sync | Phase 5 |
-| **P4** | **AI Anomaly Detection** | L8 (Energy) | L11 (ML Engine) Foundation active | Phase 6 |
+| **P3** | **OCPI 2.2 Roaming** | L7 (Device) | 🚧 L9 (Commerce) v5.1.0 tariff engine sync | Phase 5 |
+| **P4** | **BESS RL Bidding** | L4 (Market) | 🚧 L3 BESS Integration (75% Complete) | Phase 6 |
 
 | Priority | Task ID | Description | Primary Layers | Status | Strategic Alignment |
 |:---:|:---:|:---|:---:|:---:|:---|
@@ -45,6 +45,12 @@
 - [✓] **Digital Twin Sync**: Fleet-filtered Redis sync for vehicle states.
 - [✓] **Contextual Safety Locks**: metadata-enriched `l1:safety:lock:context` in Redis.
 - [✓] **High-Fidelity Reconcile**: Preservation of regional metadata in audit logs.
+- [✓] **Confidence Scoring**: Integrated 0.0-1.0 confidence metrics for L11 training.
+
+### Layer 2: Grid Signal (v2.4.4)
+- [✓] **BESS-Aware Safety**: 10% variance threshold enforced for stationary storage.
+- [✓] **Regional Context**: High-fidelity capacity breakdown (Total/EV/BESS) in OpenADR reports.
+- [✓] **Confidence Propagation**: Forwarding L1 confidence scores to L11 pipelines.
 
 ### Layer 3: VPP Aggregator (v3.3.0)
 - [✓] **Redis Capacity Cache**: Sub-50ms reporting for L4 bidding.
@@ -60,18 +66,27 @@
 - [✓] **ERCOT & Nord Pool**: Full activation of Texas and Nordic market adapters.
 - [~] **BESS RL Bidding**: Research phase for reinforcement learning models (10%).
 
-### Layer 6: Engagement Engine (v5.5.0)
+### Layer 6: Engagement Engine (v5.8.0)
 - [✓] **ENTSO-E Pioneer**: European regional grid response achievement.
 - [✓] **Sustainability Refinement**: Optimized recursive CTE for consecutive charging streaks.
 - [✓] **ISO Explorer**: Multi-regional achievement logic using bulk CTE/UNION.
 - [✓] **Energy Architect**: Achievement for AI Readiness and historical data contribution.
 - [✓] **Grid-Aware Gamification**: Regional challenges using L2 Kafka signals.
 - [✓] **Scarcity Savior**: Achievement for high-scarcity V2G discharge response.
-- [✓] **Weekly Synchronization (v5.6.0)**: Consolidated Kafka producers and ISO normalization (March 2026).
+- [✓] **Market Synchronizer**: Surplus-charging incentive logic (LMP < $30).
+- [✓] **High-Confidence Contributor**: Physics-fidelity incentive (confidence >= 0.95).
+- [✓] **ML Data Pioneer**: High-fidelity session streak tracker (physics_score > 0.98).
+- [✓] **Sentinel of the Grid**: L1-integrated 30-day high-fidelity streak tracking.
 
 ### Layer 7: Device Gateway (v5.5.0)
 - [✓] **ISO 15118-20**: Hardened Certificate Exchange and EMAID handling (85%).
 - [✓] **OCPP 2.1 V2X**: Native bidirectional profile support.
+- [✓] **Resource Caching**: Redis-based `resource_type` (EV/BESS) lifecycle management.
+
+### Layer 10: Token Engine (v4.3.0)
+- [✓] **Dynamic Multipliers**: Surplus (1.5x) and Scarcity (2.0x) logic active.
+- [✓] **Reward Idempotency**: PostgreSQL unique constraints + Redis checkIdempotency.
+- [✓] **High-Fidelity Auditing**: Persistence of `physics_score` and `confidence_score` in logs.
 
 ---
 
