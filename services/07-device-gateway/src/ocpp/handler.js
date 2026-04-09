@@ -23,8 +23,9 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
         console.log(`[L7] OCPP Call received: ${action} from ${chargePointId} (${protocol})`);
 
         if (!validateSchema(protocol, action, payload)) {
-            console.warn(`⚠️ [L7] Validation failed for ${action} from ${chargePointId}`);
-            // In a strict production environment, we might reject the message here.
+            console.error(`❌ [L7] Protocol Violation: Validation failed for ${action} from ${chargePointId}. Dropping message.`);
+            ws.send(JSON.stringify([4, messageId, 'ProtocolError', 'Payload validation failed']));
+            return;
         }
 
         switch (action) {
@@ -38,29 +39,14 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
 
             case 'MeterValues':
                 // Standardize and broadcast to Kafka for L1 Physics Engine
-                await publishTelemetry(chargePointId, payload);
-                // Acknowledge
-                ws.send(JSON.stringify([3, messageId, {}]));
-                break;
-
-            case 'StatusNotification':
-                // Forward to L8 Energy Manager (logic placeholder)
-                break;
-
-            case 'MeterValues':
-                // Standardize and broadcast to Kafka for L1 Physics Engine
                 await publishTelemetry(chargePointId, payload, protocol);
                 // Acknowledge
                 ws.send(JSON.stringify([3, messageId, {}]));
                 break;
 
             case 'NotifyBidirEnergyFlow':
-                // Native OCPP 2.1 Bidir Telemetry with mandatory validation for L11 Data Integrity
-                if (validateSchema(protocol, action, payload)) {
-                    await publishTelemetry(chargePointId, payload, protocol);
-                } else {
-                    console.error(`❌ [L7] Data Integrity violation: NotifyBidirEnergyFlow from ${chargePointId} rejected.`);
-                }
+                // Native OCPP 2.1 Bidir Telemetry (Strict validation enforced at handler edge)
+                await publishTelemetry(chargePointId, payload, protocol);
                 ws.send(JSON.stringify([3, messageId, {}]));
                 break;
 
@@ -70,26 +56,38 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                 break;
 
             case 'Authorize':
-                // Enhanced for 2.1: Certificate-based PnC (EMAID) or Secure QR
+                // Enhanced for OCPP 2.1: ISO 15118 Certificate-based PnC (EMAID)
                 const idToken = payload.idToken?.idToken;
                 const tokenType = payload.idToken?.type || 'ISO14443';
                 console.log(`[L7] Authorize request for ${chargePointId}. Type: ${tokenType}, ID Token: ${idToken}`);
 
-                // Simulate DB check for authorization with EMAID support
                 try {
-                    const result = await pool.query('SELECT status FROM id_tokens WHERE token_value = $1', [idToken]);
-                    const status = result.rows[0]?.status || 'Accepted';
+                    // Strict EMAID validation for Plug & Charge sessions
+                    const result = await pool.query('SELECT status, type FROM id_tokens WHERE token_value = $1', [idToken]);
+
+                    if (result.rows.length === 0) {
+                        console.warn(`⚠️ [L7] Authorization DENIED for ${chargePointId}: Unknown Token ${idToken}`);
+                        ws.send(JSON.stringify([3, messageId, { idTokenInfo: { status: 'Unknown' } }]));
+                        return;
+                    }
+
+                    const dbToken = result.rows[0];
+                    if (tokenType === 'EMAID' && dbToken.type !== 'EMAID') {
+                        console.error(`❌ [L7] Security Alert: Protocol mismatch for ${chargePointId}. Hardware claims EMAID but DB records ${dbToken.type}.`);
+                        ws.send(JSON.stringify([3, messageId, { idTokenInfo: { status: 'Blocked' } }]));
+                        return;
+                    }
 
                     ws.send(JSON.stringify([3, messageId, {
                         idTokenInfo: {
-                            status: status,
+                            status: dbToken.status,
                             cacheExpiryDateTime: new Date(Date.now() + 3600000).toISOString(),
-                            personalMessage: tokenType === 'EMAID' ? { content: 'Plug & Charge Verified', format: 'UTF8' } : undefined
+                            personalMessage: tokenType === 'EMAID' ? { content: 'MiGrid Plug & Charge Verified', format: 'UTF8' } : undefined
                         }
                     }]));
                 } catch (err) {
-                    console.error('[L7] DB Auth Error', err);
-                    ws.send(JSON.stringify([3, messageId, { idTokenInfo: { status: 'Accepted' } }]));
+                    console.error('[L7] DB Auth Critical Failure:', err);
+                    ws.send(JSON.stringify([3, messageId, { idTokenInfo: { status: 'Invalid' } }]));
                 }
                 break;
 

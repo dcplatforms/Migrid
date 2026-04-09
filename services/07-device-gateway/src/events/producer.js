@@ -27,6 +27,23 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
     const rawRegion = await redis.get(`charger_region:${chargePointId}`) || 'CAISO';
     const isoRegion = rawRegion.toUpperCase().replace(/-/g, '');
 
+    // 1. Hardware Agnostic Normalization: Extract universal values regardless of source protocol
+    const importEnergy = protocol === 'ocpp2.1' && payload.bidirEnergyFlowData
+        ? extractBidirValue(payload.bidirEnergyFlowData, 'Energy.Active.Import.Register')
+        : extractMeterValue(payload, 'Energy.Active.Import.Register');
+
+    const exportEnergy = protocol === 'ocpp2.1' && payload.bidirEnergyFlowData
+        ? extractBidirValue(payload.bidirEnergyFlowData, 'Energy.Active.Export.Register')
+        : extractMeterValue(payload, 'Energy.Active.Export.Register');
+
+    const importPower = protocol === 'ocpp2.1' && payload.bidirEnergyFlowData
+        ? extractBidirValue(payload.bidirEnergyFlowData, 'Power.Active.Import')
+        : extractMeterValue(payload, 'Power.Active.Import');
+
+    const exportPower = protocol === 'ocpp2.1' && payload.bidirEnergyFlowData
+        ? extractBidirValue(payload.bidirEnergyFlowData, 'Power.Active.Export')
+        : extractMeterValue(payload, 'Power.Active.Export');
+
     // Physics Engine Contextual Data for L11 AI Readiness
     const safetyContextRaw = await redis.get('l1:safety:lock:context');
     let physicsScore = 1.0;
@@ -50,44 +67,22 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
     // Core Principle: Absolute fidelity and ZERO latency in the telemetry hot path.
     const resourceType = await redis.get(`charger_resource:${chargePointId}`) || 'EV';
 
-    if (protocol === 'ocpp2.1' && payload.bidirEnergyFlowData) {
-        // Native 2.1 NotifyBidirEnergyFlow
-        event = {
-            chargePointId,
-            timestamp: payload.timestamp || new Date().toISOString(),
-            energyActiveImport: extractBidirValue(payload.bidirEnergyFlowData, 'Energy.Active.Import.Register'),
-            energyActiveExport: extractBidirValue(payload.bidirEnergyFlowData, 'Energy.Active.Export.Register'),
-            powerActiveImport: extractBidirValue(payload.bidirEnergyFlowData, 'Power.Active.Import'),
-            powerActiveExport: extractBidirValue(payload.bidirEnergyFlowData, 'Power.Active.Export'),
-            protocol: 'ocpp2.1',
-            iso_region: isoRegion,
-            physics_score: physicsScore,
-            is_high_fidelity: isHighFidelity,
-            fidelity_status: fidelityStatus,
-            resource_type: resourceType
-        };
-    } else {
-        // Up-convert legacy MeterValues to 2.1 schema
-        const importEnergy = extractMeterValue(payload, 'Energy.Active.Import.Register');
-        const importPower = extractMeterValue(payload, 'Power.Active.Import');
-        const exportEnergy = extractMeterValue(payload, 'Energy.Active.Export.Register');
-        const exportPower = extractMeterValue(payload, 'Power.Active.Export');
-
-        event = {
-            chargePointId,
-            timestamp: new Date().toISOString(),
-            energyActiveImport: importEnergy,
-            energyActiveExport: exportEnergy,
-            powerActiveImport: importPower,
-            powerActiveExport: exportPower,
-            protocol: 'ocpp2.0.1_upconverted',
-            iso_region: isoRegion,
-            physics_score: physicsScore,
-            is_high_fidelity: isHighFidelity,
-            fidelity_status: fidelityStatus,
-            resource_type: resourceType
-        };
-    }
+    // 2. Standardized Output: Broadcast a unified schema to Kafka
+    event = {
+        chargePointId,
+        timestamp: payload.timestamp || new Date().toISOString(),
+        energyActiveImport: importEnergy,
+        energyActiveExport: exportEnergy,
+        powerActiveImport: importPower,
+        powerActiveExport: exportPower,
+        protocol: protocol,
+        iso_region: isoRegion,
+        physics_score: physicsScore,
+        is_high_fidelity: isHighFidelity,
+        fidelity_status: fidelityStatus,
+        resource_type: resourceType,
+        source: 'L7_GATEWAY_V5.5.0'
+    };
 
     await producer.send({
         topic: 'migrid.l1.telemetry',
