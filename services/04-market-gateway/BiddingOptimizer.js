@@ -27,33 +27,61 @@ class BiddingOptimizer {
 
   /**
    * Fetches real-time aggregated capacity from Redis.
-   * Supports regional aggregation (Phase 5 Forward Engineering).
+   * Supports regional aggregation and high-fidelity breakdowns (Phase 5/6 Forward Engineering).
    * @param {string} iso - Optional ISO for regional capacity lookup
-   * @returns {Promise<Object>} { capacity: Decimal, fidelity: string }
+   * @returns {Promise<Object>} { capacity: Decimal, fidelity: string, breakdown: { ev: number, bess: number } }
    */
   async getAggregatedCapacity(iso = null) {
     await this.connect();
 
     if (iso) {
       try {
-        const regionalCapacityRaw = await this.redisClient.get('vpp:capacity:regional');
-        if (regionalCapacityRaw) {
-          const regionalCapacity = JSON.parse(regionalCapacityRaw);
-          // ISO Normalization: Uppercase and remove hyphens (consistent with L3 v3.3.0)
-          const isoKey = iso.toUpperCase().replace(/-/g, '');
-          const data = regionalCapacity[isoKey];
+        // [L3 v3.3.0 Upgrade] Prioritize high-fidelity regional breakdown
+        const hfKey = 'vpp:capacity:regional:high_fidelity';
+        const legacyKey = 'vpp:capacity:regional';
+
+        const [hfRaw, legacyRaw] = await Promise.all([
+          this.redisClient.get(hfKey),
+          this.redisClient.get(legacyKey)
+        ]);
+
+        const isoKey = iso.toUpperCase().replace(/-/g, '');
+
+        // 1. Attempt high-fidelity lookup
+        if (hfRaw) {
+          const hfData = JSON.parse(hfRaw);
+          const data = hfData[isoKey];
+
+          if (data && typeof data === 'object') {
+            const fidelity = data.is_high_fidelity ? 'HIGH_FIDELITY' : 'STANDARD';
+            console.log(`[BiddingOptimizer] Using HIGH-FIDELITY regional capacity for ${isoKey}: ${data.total} kWh (EV: ${data.ev}, BESS: ${data.bess})`);
+            return {
+              capacity: new Decimal(data.total || '0'),
+              fidelity: fidelity,
+              breakdown: {
+                ev: data.ev || 0,
+                bess: data.bess || 0
+              }
+            };
+          }
+        }
+
+        // 2. Fallback to legacy regional lookup
+        if (legacyRaw) {
+          const legacyData = JSON.parse(legacyRaw);
+          const data = legacyData[isoKey];
 
           if (data !== undefined) {
-            // Support both flat value (legacy) and nested object (v3.3.0+)
             const isObject = (typeof data === 'object' && data !== null);
             const capacityValue = isObject ? data.capacity : data;
             const isHighFidelity = isObject ? !!data.is_high_fidelity : false;
             const fidelity = isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD';
 
-            console.log(`[BiddingOptimizer] Using regional capacity for ${isoKey}: ${capacityValue} kWh (Fidelity: ${fidelity})`);
+            console.log(`[BiddingOptimizer] Using legacy regional capacity for ${isoKey}: ${capacityValue} kWh`);
             return {
               capacity: new Decimal(capacityValue || '0'),
-              fidelity: fidelity
+              fidelity: fidelity,
+              breakdown: { ev: capacityValue || 0, bess: 0 } // Assume EV if breakdown missing
             };
           }
         }
@@ -65,7 +93,8 @@ class BiddingOptimizer {
     const capacity = await this.redisClient.get('vpp:capacity:available');
     return {
       capacity: new Decimal(capacity || '0'),
-      fidelity: 'STANDARD'
+      fidelity: 'STANDARD',
+      breakdown: { ev: parseFloat(capacity || '0'), bess: 0 }
     };
   }
 
@@ -147,7 +176,7 @@ class BiddingOptimizer {
     }
 
     // 4. Fetch Capacity Data
-    const { capacity: pVppKw, fidelity: capacityFidelityFromRedis } = await this.getAggregatedCapacity(iso);
+    const { capacity: pVppKw, fidelity: capacityFidelityFromRedis, breakdown } = await this.getAggregatedCapacity(iso);
     const pVppMw = pVppKw.dividedBy(1000);
 
     const degradationCostKwh = new Decimal(process.env.DEGRADATION_COST_KWH || '0.02');
@@ -177,7 +206,12 @@ class BiddingOptimizer {
         locks,
         physics_score: physicsScore,
         capacity_fidelity: capacityFidelityFromRedis, // Already normalized in getAggregatedCapacity
-        audit_context: auditContext,
+        audit_context: {
+          ...auditContext,
+          ev_capacity_kw: breakdown.ev,
+          bess_capacity_kw: breakdown.bess,
+          v3_capacity_fidelity: capacityFidelityFromRedis === 'HIGH_FIDELITY'
+        },
         pVppKw: pVppKw.toNumber(),
         timestamp: new Date().toISOString()
       }
