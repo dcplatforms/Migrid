@@ -125,7 +125,7 @@ async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '4.3.0',
+    version: '4.3.1',
     status: 'healthy',
     layer: 'L10'
   });
@@ -198,7 +198,9 @@ async function start() {
 
         // Fetch rule early for idempotency check
         const rule = await getRewardRule(action_type);
-        if (!rule && !(action_type === 'challenge_completed' || action_type === 'achievement_unlocked')) {
+        const isBehavioral = action_type === 'challenge_completed' || action_type === 'achievement_unlocked' || action_type === 'grid_response';
+
+        if (!rule && !isBehavioral) {
           console.warn(`⚠️ No active reward rule found for action type: ${action_type}`);
           return;
         }
