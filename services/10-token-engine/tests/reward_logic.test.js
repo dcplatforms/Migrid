@@ -100,4 +100,14 @@ describe('L10 Token Engine - Reward Logic v4.3.0', () => {
     expect(result.multiplier.toNumber()).toBe(1.0);
     expect(result.reason).toBe('Standard Reward');
   });
+
+  test('Grid response should be recognized as behavioral and exempt from physics threshold', () => {
+    // This is more of a logic check for the consumer, but we can verify the multiplier for it.
+    // grid_response is not charging or v2g_discharge so it should get standard reward 1.0x
+    const actionType = 'grid_response';
+    return getDynamicMultiplier('CAISO', actionType).then(({ multiplier, reason }) => {
+      expect(multiplier.toNumber()).toBe(1.0);
+      expect(reason).toBe('Standard Reward');
+    });
+  });
 });
