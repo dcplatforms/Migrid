@@ -58,10 +58,10 @@ async function getOrCreateDriverWallet(driverId) {
   return res.rows[0];
 }
 
-async function logRewardTransaction(driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status = 'pending', iso = 'CAISO', physicsScore = null, isHighFidelity = false, multiplierReason = 'Standard Reward') {
+async function logRewardTransaction(driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status = 'pending', iso = 'CAISO', physicsScore = null, isHighFidelity = false, multiplierReason = 'Standard Reward', confidenceScore = null) {
   const res = await pgClient.query(
-    'INSERT INTO token_reward_log(driver_id, rule_id, triggering_event_id, source_value, points_awarded, status, iso, physics_score, is_high_fidelity, multiplier_reason) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *;',
-    [driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status, iso, physicsScore, isHighFidelity, multiplierReason]
+    'INSERT INTO token_reward_log(driver_id, rule_id, triggering_event_id, source_value, points_awarded, status, iso, physics_score, is_high_fidelity, multiplier_reason, confidence_score) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *;',
+    [driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status, iso, physicsScore, isHighFidelity, multiplierReason, confidenceScore]
   );
   return res.rows[0];
 }
@@ -76,13 +76,14 @@ async function updateRewardTransactionStatus(logId, newStatus, openWalletTransac
 /**
  * Idempotency Helper: Checks if this reward has already been processed using unique DB constraint.
  * This prevents double-minting tokens if Kafka delivers the same message twice.
+ * Returns the existing log record if found.
  */
 async function checkIdempotency(driverId, triggeringEventId, ruleId) {
   const res = await pgClient.query(
-    'SELECT log_id FROM token_reward_log WHERE driver_id = $1 AND triggering_event_id = $2 AND rule_id = $3;',
+    'SELECT * FROM token_reward_log WHERE driver_id = $1 AND triggering_event_id = $2 AND rule_id = $3;',
     [driverId, triggeringEventId, ruleId]
   );
-  return res.rows.length > 0;
+  return res.rows[0] || null;
 }
 
 // --- Reward Multiplier Logic ---
@@ -125,7 +126,7 @@ async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '4.3.0',
+    version: '4.3.1',
     status: 'healthy',
     layer: 'L10'
   });
@@ -165,7 +166,7 @@ async function start() {
 
           console.log(`⚡ Received message from ${topic}:`, payload);
 
-        const { driver_id, action_type, source_value, event_id, iso: payloadIso, physics_score, is_vpp_event, isVppEvent, is_high_fidelity, isHighFidelity } = payload;
+        const { driver_id, action_type, source_value, event_id, iso: payloadIso, physics_score, confidence_score, is_vpp_event, isVppEvent, is_high_fidelity, isHighFidelity } = payload;
         const vppAligned = !!(is_vpp_event || isVppEvent);
 
           // 1. Ensure Driver Wallet Exists (and get address)
@@ -180,25 +181,28 @@ async function start() {
         let rule_id;
         let multiplierReason = 'Standard Reward';
         let physicsScorePersist = physics_score !== undefined ? parseFloat(physics_score) : null;
-        let isHighFidelityPersist = (is_high_fidelity === true || isHighFidelity === true) || (physicsScorePersist > 0.95);
+        let confidenceScorePersist = confidence_score !== undefined ? parseFloat(confidence_score) : null;
+        let isHighFidelityPersist = (is_high_fidelity === true || isHighFidelity === true) || (physicsScorePersist > 0.95) || (confidenceScorePersist > 0.95);
 
         // Fetch rule early for idempotency check
         const rule = await getRewardRule(action_type);
-        if (!rule && !(action_type === 'challenge_completed' || action_type === 'achievement_unlocked')) {
+        const isBehavioral = action_type === 'challenge_completed' || action_type === 'achievement_unlocked' || action_type === 'grid_response';
+
+        if (!rule && !isBehavioral) {
           console.warn(`⚠️ No active reward rule found for action type: ${action_type}`);
           return;
         }
         rule_id = rule ? rule.rule_id : '00000000-0000-0000-0000-000000000000';
 
         // 2. Idempotency Check
-        const existingReward = await checkIdempotency(driver_id, rule_id, event_id);
+        const existingReward = await checkIdempotency(driver_id, event_id, rule_id);
         if (existingReward) {
           console.log(`[L10 Idempotency] Reward already exists for ${action_type} (Event: ${event_id}). Status: ${existingReward.status}. Skipping.`);
           return;
         }
 
-        if (action_type === 'challenge_completed' || action_type === 'achievement_unlocked') {
-          // Fixed-value rewards (points/tokens)
+        if (isBehavioral) {
+          // Fixed-value rewards (points/tokens) for behavioral actions (Proof of Physics exempt)
           pointsAwarded = new Decimal(source_value || 0);
           console.log(`[L10] ${action_type} by driver ${driver_id}. Awarding ${pointsAwarded.toNumber()} tokens.`);
         } else {
@@ -249,7 +253,8 @@ async function start() {
           iso,
           physicsScorePersist,
           isHighFidelityPersist,
-          multiplierReason
+          multiplierReason,
+          confidenceScorePersist
         );
 
         // 6. Execute Blockchain/Wallet Transaction

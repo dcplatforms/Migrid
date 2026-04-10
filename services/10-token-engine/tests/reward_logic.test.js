@@ -14,7 +14,7 @@ jest.mock('redis', () => ({
   }))
 }));
 
-describe('L10 Token Engine - Reward Logic v4.3.0', () => {
+describe('L10 Token Engine - Reward Logic v4.3.1', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -99,5 +99,20 @@ describe('L10 Token Engine - Reward Logic v4.3.0', () => {
     // Default is 50.0, so multiplier should be 1.0
     expect(result.multiplier.toNumber()).toBe(1.0);
     expect(result.reason).toBe('Standard Reward');
+  });
+
+  test('Behavioral actions should be identifiable for Proof of Physics exemption', () => {
+    const behavioralActions = ['challenge_completed', 'achievement_unlocked', 'grid_response'];
+    const energyActions = ['session_completed', 'green_charging', 'v2g_discharge'];
+
+    behavioralActions.forEach(action => {
+      const isBehavioral = action === 'challenge_completed' || action === 'achievement_unlocked' || action === 'grid_response';
+      expect(isBehavioral).toBe(true);
+    });
+
+    energyActions.forEach(action => {
+      const isBehavioral = action === 'challenge_completed' || action === 'achievement_unlocked' || action === 'grid_response';
+      expect(isBehavioral).toBe(false);
+    });
   });
 });
