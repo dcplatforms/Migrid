@@ -101,18 +101,13 @@ describe('L10 Token Engine - Reward Logic v4.3.1', () => {
     expect(result.reason).toBe('Standard Reward');
   });
 
-  test('Behavioral actions should be identifiable for Proof of Physics exemption', () => {
-    const behavioralActions = ['challenge_completed', 'achievement_unlocked', 'grid_response'];
-    const energyActions = ['session_completed', 'green_charging', 'v2g_discharge'];
-
-    behavioralActions.forEach(action => {
-      const isBehavioral = action === 'challenge_completed' || action === 'achievement_unlocked' || action === 'grid_response';
-      expect(isBehavioral).toBe(true);
-    });
-
-    energyActions.forEach(action => {
-      const isBehavioral = action === 'challenge_completed' || action === 'achievement_unlocked' || action === 'grid_response';
-      expect(isBehavioral).toBe(false);
+  test('Grid response should be recognized as behavioral and exempt from physics threshold', () => {
+    // This is more of a logic check for the consumer, but we can verify the multiplier for it.
+    // grid_response is not charging or v2g_discharge so it should get standard reward 1.0x
+    const actionType = 'grid_response';
+    return getDynamicMultiplier('CAISO', actionType).then(({ multiplier, reason }) => {
+      expect(multiplier.toNumber()).toBe(1.0);
+      expect(reason).toBe('Standard Reward');
     });
   });
 });

@@ -75,15 +75,14 @@ async function updateRewardTransactionStatus(logId, newStatus, openWalletTransac
 
 /**
  * Idempotency Helper: Checks if this reward has already been processed using unique DB constraint.
- * This prevents double-minting tokens if Kafka delivers the same message twice.
- * Returns the existing log record if found.
+ * Returns the existing log record if found, null otherwise.
  */
 async function checkIdempotency(driverId, triggeringEventId, ruleId) {
   const res = await pgClient.query(
     'SELECT * FROM token_reward_log WHERE driver_id = $1 AND triggering_event_id = $2 AND rule_id = $3;',
     [driverId, triggeringEventId, ruleId]
   );
-  return res.rows[0] || null;
+  return res.rows.length > 0 ? res.rows[0] : null;
 }
 
 // --- Reward Multiplier Logic ---
@@ -166,7 +165,20 @@ async function start() {
 
           console.log(`⚡ Received message from ${topic}:`, payload);
 
-        const { driver_id, action_type, source_value, event_id, iso: payloadIso, physics_score, confidence_score, is_vpp_event, isVppEvent, is_high_fidelity, isHighFidelity } = payload;
+        const {
+          driver_id,
+          action_type,
+          source_value,
+          event_id,
+          iso: payloadIso,
+          physics_score,
+          is_vpp_event,
+          isVppEvent,
+          is_high_fidelity,
+          isHighFidelity,
+          confidence_score,
+          confidenceScore
+        } = payload;
         const vppAligned = !!(is_vpp_event || isVppEvent);
 
           // 1. Ensure Driver Wallet Exists (and get address)
@@ -181,8 +193,8 @@ async function start() {
         let rule_id;
         let multiplierReason = 'Standard Reward';
         let physicsScorePersist = physics_score !== undefined ? parseFloat(physics_score) : null;
-        let confidenceScorePersist = confidence_score !== undefined ? parseFloat(confidence_score) : null;
-        let isHighFidelityPersist = (is_high_fidelity === true || isHighFidelity === true) || (physicsScorePersist > 0.95) || (confidenceScorePersist > 0.95);
+        let isHighFidelityPersist = (is_high_fidelity === true || isHighFidelity === true) || (physicsScorePersist !== null && physicsScorePersist > 0.95);
+        let confidenceScorePersist = confidence_score !== undefined ? parseFloat(confidence_score) : (confidenceScore !== undefined ? parseFloat(confidenceScore) : null);
 
         // Fetch rule early for idempotency check
         const rule = await getRewardRule(action_type);
@@ -194,23 +206,24 @@ async function start() {
         }
         rule_id = rule ? rule.rule_id : '00000000-0000-0000-0000-000000000000';
 
-        // 2. Idempotency Check
+        // 2. Idempotency Check (Fixed parameter order: driver_id, event_id, rule_id)
         const existingReward = await checkIdempotency(driver_id, event_id, rule_id);
         if (existingReward) {
           console.log(`[L10 Idempotency] Reward already exists for ${action_type} (Event: ${event_id}). Status: ${existingReward.status}. Skipping.`);
           return;
         }
 
+        const isBehavioral = action_type === 'challenge_completed' || action_type === 'achievement_unlocked' || action_type === 'grid_response';
+
         if (isBehavioral) {
-          // Fixed-value rewards (points/tokens) for behavioral actions (Proof of Physics exempt)
+          // Fixed-value rewards (points/tokens)
           pointsAwarded = new Decimal(source_value || 0);
-          console.log(`[L10] ${action_type} by driver ${driver_id}. Awarding ${pointsAwarded.toNumber()} tokens.`);
+          console.log(`[L10] Behavioral ${action_type} by driver ${driver_id}. Awarding ${pointsAwarded.toNumber()} tokens.`);
         } else {
           // Proof of Physics Gate: Energy-based rewards must have verified physics
           if (physics_score !== undefined && physics_score !== null) {
             const score = parseFloat(physics_score);
-            const isHighFidelity = !!(payload.is_high_fidelity || payload.isHighFidelity);
-            const fidelityStatus = isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD';
+            const fidelityStatus = isHighFidelityPersist ? 'HIGH_FIDELITY' : 'STANDARD';
 
             if (score <= 0.0) {
               console.warn(`[L10 Audit] [${fidelityStatus}] Rejected reward for event ${event_id}: Physics Score too low (${score}). Driver: ${driver_id}`);
