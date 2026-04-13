@@ -92,7 +92,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.4.5',
+    version: '2.4.6',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -122,6 +122,7 @@ app.get('/openadr/v3/reports', async (req, res) => {
       regional_locks: {},
       site_statuses: {},
       regional_capacity: {},
+      regional_confidence: {},
       confidence_score: 1.0
     };
 
@@ -135,6 +136,7 @@ app.get('/openadr/v3/reports', async (req, res) => {
       regional_markets: unifiedContext.regional_markets,
       regional_capacity: Object.keys(unifiedContext.regional_capacity).length > 0 ? unifiedContext.regional_capacity : regionalCapacity,
       regional_stats: unifiedContext.digital_twin,
+      regional_confidence: unifiedContext.regional_confidence,
       safety_lock: {
         active: safetyLock === '1' || safetyLock === 'true',
         context: safetyContext
@@ -264,16 +266,19 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
       const safetyContextRaw = await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
       const safetyContext = safetyContextRaw ? JSON.parse(safetyContextRaw) : {};
 
-      // [L2-v2.4.5] Enhanced High-Fidelity Kafka Broadcast with Confidence & Regional Context
-      const confidenceScore = parseFloat(safetyContext.confidence_score || safetyContext.physics_score || '1.0000');
-      const physicsScore = parseFloat(safetyContext.physics_score || '1.0000');
-      const fidelityStatus = physicsScore > 0.95 ? 'HIGH_FIDELITY' : 'STANDARD';
-
-      // Fetch high-fidelity capacity snapshot for this region if available
+      // Fetch high-fidelity capacity/context snapshot for this region if available
       const unifiedContextRaw = await redisClient.get('l2:unified:context');
       const unifiedContext = unifiedContextRaw ? JSON.parse(unifiedContextRaw) : null;
-      const regionalCapacity = unifiedContext?.regional_capacity?.[isoRegion] || null;
 
+      // [L2-v2.4.5/6] Enhanced High-Fidelity Kafka Broadcast with Confidence & Regional Context
+      // [L2-v2.4.6] Prioritize regional average confidence if no safety lock is active
+      const regionalAvgConfidence = unifiedContext?.regional_confidence?.[isoRegion] ?? 1.0;
+      const confidenceScore = parseFloat((safetyContext.confidence_score !== undefined) ? safetyContext.confidence_score :
+                                         (safetyContext.physics_score !== undefined ? safetyContext.physics_score : regionalAvgConfidence.toString()));
+      const physicsScore = parseFloat(safetyContext.physics_score ?? '1.0000');
+      const fidelityStatus = physicsScore > 0.95 ? 'HIGH_FIDELITY' : 'STANDARD';
+
+      const regionalCapacity = unifiedContext?.regional_capacity?.[isoRegion] || null;
       await producer.send({
         topic: 'grid_signals',
         messages: [{
@@ -356,12 +361,15 @@ const updateRegionalStats = async () => {
     regional_markets: {},
     regional_locks: {},
     site_statuses: {},
-    regional_capacity: {}
+    regional_capacity: {},
+    regional_confidence: {}
   };
 
   try {
-    // 1. Aggregate Regional Digital Twin Statistics (from L1)
+    // 1. Aggregate Regional Digital Twin Statistics and Confidence (from L1)
     let twinCursor = '0';
+    const confidenceSums = {};
+
     do {
       const result = await redisClient.scan(twinCursor, { MATCH: 'l1:*:vehicle:*', COUNT: 100 });
       twinCursor = result.cursor;
@@ -374,6 +382,7 @@ const updateRegionalStats = async () => {
 
           if (!context.digital_twin[iso]) {
             context.digital_twin[iso] = { vehicle_count: 0, high_fidelity_count: 0, ev_count: 0, bess_count: 0 };
+            confidenceSums[iso] = 0;
           }
           context.digital_twin[iso].vehicle_count++;
           if (data) {
@@ -382,10 +391,25 @@ const updateRegionalStats = async () => {
             }
             if (data.resource_type === 'EV') context.digital_twin[iso].ev_count++;
             if (data.resource_type === 'BESS') context.digital_twin[iso].bess_count++;
+
+            // [L2-v2.4.6] Track confidence sum for regional average
+            confidenceSums[iso] += parseFloat(data.confidence_score || '1.0');
+          } else {
+            confidenceSums[iso] += 1.0;
           }
         });
       }
     } while (twinCursor !== 0 && twinCursor !== '0');
+
+    // Calculate Regional Averages
+    Object.keys(context.digital_twin).forEach(iso => {
+      const count = context.digital_twin[iso].vehicle_count;
+      if (count > 0) {
+        context.regional_confidence[iso] = parseFloat((confidenceSums[iso] / count).toFixed(4));
+      } else {
+        context.regional_confidence[iso] = 1.0;
+      }
+    });
 
     // 2. Aggregate all regional market contexts (from L4)
     let marketCursor = '0';
@@ -452,7 +476,8 @@ const updateRegionalStats = async () => {
       try {
         const safetyContext = JSON.parse(safetyContextRaw);
         // [L2 v2.4.5] Prioritize explicit confidence_score from L1 context
-        context.confidence_score = parseFloat(safetyContext.confidence_score || safetyContext.physics_score || '1.0');
+        context.confidence_score = parseFloat((safetyContext.confidence_score !== undefined) ? safetyContext.confidence_score :
+                                               (safetyContext.physics_score !== undefined ? safetyContext.physics_score : '1.0'));
       } catch (e) {}
     } else {
       context.confidence_score = 1.0; // Default to full confidence if no locks/alerts

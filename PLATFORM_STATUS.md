@@ -2,7 +2,7 @@
 
 # MiGrid Platform Status Report
 
-**Version 10.1.0** • **April 2026**
+**Version 10.1.1** • **April 2026**
 
 [![Phase](https://img.shields.io/badge/Phase_5-Enterprise_Scale-blue.svg)](../docs/roadmap.md)
 [![Progress](https://img.shields.io/badge/Progress-67%25_Complete-blue.svg)](PLATFORM_STATUS.md)
@@ -800,8 +800,8 @@ done
 
 | Layer | Service | Version | Status |
 | :--- | :--- | :--- | :--- |
-| **L1** | Physics Engine | `10.1.0` | ✅ Operational |
-| **L2** | Grid Signal | `2.4.4` | ✅ Operational |
+| **L1** | Physics Engine | `10.1.1` | ✅ Operational |
+| **L2** | Grid Signal | `2.4.6` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.0` | ✅ Operational |
 | **L4** | Market Gateway | `3.7.0` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
@@ -818,10 +818,10 @@ done
 
 - **L6 Engagement Engine (v5.8.0)**: Deployed **High-Fidelity Contributor** and **Market Synchronizer** achievements, and integrated L1-based **Sentinel of the Grid** streak tracking.
 - **L10 Token Engine (v4.3.0)**: Hardened reward idempotency via Postgres unique constraints and implemented `checkIdempotency` Redis helper for Kafka resilience.
-- **L2 Grid Signal (v2.4.4)**: Enforced **10% variance threshold** for BESS resources and expanded OpenADR reports to include granular EV/BESS capacity breakdowns.
+- **L2 Grid Signal (v2.4.6)**: Implemented **Regional Confidence Aggregation** and integrated **Site-Aware Confidence** from L1 to support high-fidelity OpenADR 3.0 reporting.
 - **L4 Market Gateway (v3.7.0)**: Activated **Nord Pool & ERCOT** adapters, **Bidding Auditability** (FIX-PROT-AUDIT), and **Regional Grid Lock** observability.
 - **L7 Device Gateway (v5.5.0)**: Implemented session-based **Resource Type Caching** in Redis to optimize L1 Physics Engine telemetry routing.
-- **L1 Physics Engine (v10.1.0)**: Deployed **Confidence Scoring** (0.0-1.0) for ML training and finalized **High-Fidelity Reconciliation** of regional metadata.
+- **L1 Physics Engine (v10.1.1)**: Deployed **[L1-120] Confidence Decay** and **[L1-121] Site Energy Integration** into the data confidence pipeline for L11.
 - **L3 VPP Aggregator (v3.3.0)**: Refactored capacity tracking to provide high-fidelity EV/BESS breakdowns for grid-aware dispatching.
 
 ---
@@ -842,7 +842,7 @@ The platform is now actively generating the high-fidelity timeseries data requir
 
 *The Operating System for Sustainable Fleet Electrification*
 
-**Last Updated:** March 2026 • **Platform Version:** 10.1.0 • **Roadmap Status:** 75% Complete (65/87 features)
+**Last Updated:** April 2026 • **Platform Version:** 10.1.1 • **Roadmap Status:** 75% Complete (65/87 features)
 
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-blue.svg)](https://github.com/dcplatforms/Migrid)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
