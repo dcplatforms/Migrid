@@ -1,6 +1,6 @@
 # MiGrid Master Backlog & Strategic Dependency Matrix
 
-**Version:** 10.1.0
+**Version:** 10.1.1
 **Last Updated:** April 2026
 **Status:** Phase 5 "Enterprise Scale" (92% Complete)
 
@@ -12,7 +12,7 @@
 |:---:|:---|:---:|:---|:---:|
 | **P0** | **ML Demand Forecasting** | L11 (ML Engine) | ✅ Phase 5 High-Fidelity Data Pipelines (L1, L2, L3, L4) | Phase 6 |
 | **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | 🚧 L7 v5.5.0 Hardened (85% Complete) | Phase 5 |
-| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 (Market) v3.7.0 Bidding Auditability | Phase 5 |
+| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 (Market) v3.8.0 Bidding Auditability | Phase 5 |
 | **P3** | **OCPI 2.2 Roaming** | L7 (Device) | 🚧 L9 (Commerce) v5.1.0 tariff engine sync | Phase 5 |
 | **P4** | **BESS RL Bidding** | L4 (Market) | 🚧 L3 BESS Integration (75% Complete) | Phase 6 |
 
@@ -41,13 +41,13 @@
 
 ## 🛠️ Active Engineering Sprints (Phase 5)
 
-### Layer 1: Physics Engine (v10.1.0)
+### Layer 1: Physics Engine (v10.1.1)
 - [✓] **Digital Twin Sync**: Fleet-filtered Redis sync for vehicle states.
 - [✓] **Contextual Safety Locks**: metadata-enriched `l1:safety:lock:context` in Redis.
 - [✓] **High-Fidelity Reconcile**: Preservation of regional metadata in audit logs.
 - [✓] **Confidence Scoring**: Integrated 0.0-1.0 confidence metrics for L11 training.
 
-### Layer 2: Grid Signal (v2.4.4)
+### Layer 2: Grid Signal (v2.4.6)
 - [✓] **BESS-Aware Safety**: 10% variance threshold enforced for stationary storage.
 - [✓] **Regional Context**: High-fidelity capacity breakdown (Total/EV/BESS) in OpenADR reports.
 - [✓] **Confidence Propagation**: Forwarding L1 confidence scores to L11 pipelines.
@@ -60,8 +60,8 @@
 - [✓] **Physics-Aware Reporting**: Integration of `physics_score` and `is_high_fidelity` for L11.
 - [~] **BESS Integration**: Support for stationary storage assets (75%).
 
-### Layer 4: Market Gateway (v3.7.0)
-- [✓] **Bidding Auditability**: High-fidelity audit context (physics_score, capacity_fidelity) for all bids.
+### Layer 4: Market Gateway (v3.8.0)
+- [✓] **Bidding Auditability**: High-fidelity audit context (physics_score, confidence_score, capacity_fidelity) for all bids.
 - [✓] **Regional Grid Lock**: Improved observability and specific ISO lock logging.
 - [✓] **ERCOT & Nord Pool**: Full activation of Texas and Nordic market adapters.
 - [~] **BESS RL Bidding**: Research phase for reinforcement learning models (10%).
@@ -83,7 +83,7 @@
 - [✓] **OCPP 2.1 V2X**: Native bidirectional profile support.
 - [✓] **Resource Caching**: Redis-based `resource_type` (EV/BESS) lifecycle management.
 
-### Layer 10: Token Engine (v4.3.0)
+### Layer 10: Token Engine (v4.3.1)
 - [✓] **Dynamic Multipliers**: Surplus (1.5x) and Scarcity (2.0x) logic active.
 - [✓] **Reward Idempotency**: PostgreSQL unique constraints + Redis checkIdempotency.
 - [✓] **High-Fidelity Auditing**: Persistence of `physics_score` and `confidence_score` in logs.
