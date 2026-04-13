@@ -56,9 +56,9 @@ describe('L6 Engagement Engine v5.8.0 Logic and Alignment', () => {
     // server.close(); // Not needed if not listening
   });
 
-  test('Health check returns correct version v5.8.0', async () => {
+  test('Health check returns correct version v5.9.0', async () => {
     const res = await request(app).get('/health');
-    expect(res.body.version).toBe('5.8.0');
+    expect(res.body.version).toBe('5.9.0');
   });
 
   test('Database contains expected achievement functions', async () => {

@@ -121,7 +121,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-      version: '5.8.0', // Weekly Mission: Data Confidence & ML Readiness
+      version: '5.9.0', // Weekly Mission: BESS Precision & Cross-Layer Fidelity
     status: 'healthy',
     layer: 'L6'
   });
@@ -329,6 +329,7 @@ async function processChargingEvent(event) {
   if ((type === 'SESSION_COMPLETED' || type === 'session_completed' || event.energyDispensedKwh) && isValid) {
     const isFinal = type === 'SESSION_COMPLETED' || type === 'session_completed';
     const vehicleId = event.vehicle_id || event.vehicleId;
+    let resourceType = 'EV';
 
     // Calculate physics_score and isHighFidelity if not already provided
     let physics_score = 1.0;
@@ -364,7 +365,7 @@ async function processChargingEvent(event) {
       `, [sessionId]);
 
       const variance = parseFloat(sessionData.rows[0]?.variance_percentage || '100');
-      const resourceType = sessionData.rows[0]?.resource_type || 'EV';
+      resourceType = sessionData.rows[0]?.resource_type || 'EV';
       const varianceThreshold = resourceType === 'BESS' ? 10.0 : 15.0;
 
       isLowVariance = variance < 5.0;
@@ -372,13 +373,18 @@ async function processChargingEvent(event) {
       isHighFidelity = physics_score > 0.95;
 
       await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
-        [driverId, 'session_completed', JSON.stringify({ sessionId, energyDispensedKwh: event.energyDispensedKwh, isLowVariance, physics_score, isHighFidelity })]);
+        [driverId, 'session_completed', JSON.stringify({ sessionId, energyDispensedKwh: event.energyDispensedKwh, isLowVariance, physics_score, isHighFidelity, resource_type: resourceType, variance_percentage: variance })]);
 
       await checkFirstSessionAchievement(driverId);
       await updateStreaks(driverId);
       await checkSustainabilityChampion(driverId);
       await checkSentinelOfTheGridAchievement(driverId, vehicleId);
       await checkHighConfidenceAchievement(driverId, vehicleId);
+
+      // [L6-v5.9.0] BESS Specific Achievements
+      if (resourceType === 'BESS') {
+        await checkBessAchievements(driverId, sessionId, variance, physics_score);
+      }
 
       // Market Master is awarded only on session completion to ensure it's session-based
       await checkMarketMasterAchievement(driverId, iso, sessionId);
@@ -453,6 +459,7 @@ async function processChargingEvent(event) {
         type: 'points_earned',
         title: 'Points Earned! ⚡',
         body: `You just earned ${points} points for your charging session.`,
+        priority: 'normal', // L5 anti-fatigue: minor updates can be batched
         data: {
           session_id: sessionId,
           points,
@@ -476,7 +483,8 @@ async function processChargingEvent(event) {
             confidence_score: confidence_score,
             is_high_fidelity: isHighFidelity,
             is_vpp_event: !!(event.isVPPEvent || event.is_vpp_event),
-            multiplier_reason: multiplierReason
+            multiplier_reason: multiplierReason,
+            resource_type: resourceType
           })
         }
       ];
@@ -493,7 +501,8 @@ async function processChargingEvent(event) {
             confidence_score: confidence_score,
             is_high_fidelity: isHighFidelity,
             is_vpp_event: !!(event.isVPPEvent || event.is_vpp_event),
-            multiplier_reason: multiplierReason
+            multiplier_reason: multiplierReason,
+            resource_type: resourceType
           })
         });
       }
@@ -552,7 +561,8 @@ async function processChargingEvent(event) {
           iso: iso,
           physics_score: 1.0, // V2G discharge is verified by protocol and VPP controller
           is_high_fidelity: true,
-          multiplier_reason: multiplierReason
+          multiplier_reason: multiplierReason,
+          resource_type: event.resourceType || event.resource_type || 'EV' // Propagate resource type for L10 auditing
         })
       }]
     });
@@ -794,24 +804,48 @@ async function handleGridSignal(payload) {
       GROUP BY td.driver_id, td.iso
     `, [site_id || 'ALL', JSON.stringify({ event_id })]);
 
-    // 2. Optimized Notification Handling
+    // 2. Optimized Notification & L10 Payout Handling
     for (const row of results.rows) {
       const challenges = JSON.parse(row.completed_challenges);
       const achievements = JSON.parse(row.unlocked_achievements);
 
       for (const chalName of challenges) {
+        const chalData = await pool.query('SELECT id, points_reward, token_reward FROM challenges WHERE name = $1', [chalName]);
+        const chalId = chalData.rows[0]?.id;
+        const reward = chalData.rows[0]?.token_reward || chalData.rows[0]?.points_reward || 0;
+
         const notification = {
           driver_id: row.driver_id,
           type: 'challenge_completed',
           title: 'Challenge Completed! 🎖️',
           body: `Congratulations! You've completed the '${chalName}' challenge.`,
+          priority: 'high' // L5 anti-fatigue: Challenges are high priority
         };
         await producer.send({ topic: 'engagement_notifications', messages: [{ key: row.driver_id, value: JSON.stringify(notification) }] });
         io.to(`driver:${row.driver_id}`).emit('notification', notification);
+
+        // Notify L10 for payout
+        await producer.send({
+          topic: 'driver_actions',
+          messages: [{
+            value: JSON.stringify({
+              driver_id: row.driver_id,
+              action_type: 'challenge_completed',
+              challenge_id: chalId,
+              challenge_name: chalName,
+              source_value: reward,
+              event_id: chalId,
+              iso: row.iso,
+              physics_score: 1.0,
+              is_high_fidelity: true
+            })
+          }]
+        });
       }
 
       for (const achName of achievements) {
-        const achData = await pool.query('SELECT points, icon FROM achievements WHERE name = $1', [achName]);
+        const achData = await pool.query('SELECT id, points, icon FROM achievements WHERE name = $1', [achName]);
+        const achId = achData.rows[0]?.id;
         const points = achData.rows[0]?.points || 0;
         const icon = achData.rows[0]?.icon;
 
@@ -820,10 +854,28 @@ async function handleGridSignal(payload) {
           type: 'achievement_unlocked',
           title: 'Achievement Unlocked! 🏆',
           body: `You've earned the '${achName}' badge!`,
+          priority: 'high', // L5 anti-fatigue: Achievements are high priority
           data: { name: achName, points, icon }
         };
         await producer.send({ topic: 'engagement_notifications', messages: [{ key: row.driver_id, value: JSON.stringify(notification) }] });
         io.to(`driver:${row.driver_id}`).emit('notification', notification);
+
+        // Notify L10 for payout
+        await producer.send({
+          topic: 'driver_actions',
+          messages: [{
+            value: JSON.stringify({
+              driver_id: row.driver_id,
+              action_type: 'achievement_unlocked',
+              achievement_name: achName,
+              source_value: points,
+              event_id: achId,
+              iso: row.iso,
+              physics_score: 1.0,
+              is_high_fidelity: true
+            })
+          }]
+        });
       }
     }
 
@@ -900,6 +952,50 @@ async function checkL11DataGuardianAchievement(driver_id) {
   }
 }
 
+async function checkBessAchievements(driverId, sessionId, variance, physicsScore) {
+  try {
+    // 1. BESS Power: Awarded for the first successful discharge/session from a stationary BESS
+    const count = await pool.query(`
+      SELECT COUNT(*) FROM driver_actions
+      WHERE driver_id = $1 AND action_type = 'session_completed'
+        AND (metadata->>'resource_type') = 'BESS'
+    `, [driverId]);
+
+    if (parseInt(count.rows[0].count) >= 1) {
+      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'BESS Power'");
+      if (achievement.rows.length > 0) {
+        await awardAchievement(driverId, achievement.rows[0].id);
+      }
+    }
+
+    // 2. BESS Precision Specialist: 10 consecutive BESS sessions with <5% variance
+    if (variance < 5.0) {
+      const recentBess = await pool.query(`
+        WITH recent_sessions AS (
+          SELECT (metadata->>'variance_percentage')::float as variance
+          FROM driver_actions
+          WHERE driver_id = $1 AND action_type = 'session_completed'
+            AND (metadata->>'resource_type') = 'BESS'
+          ORDER BY created_at DESC
+          LIMIT 10
+        )
+        SELECT COUNT(*) as total,
+               COUNT(*) FILTER (WHERE variance < 5.0) as precision_count
+        FROM recent_sessions
+      `, [driverId]);
+
+      if (parseInt(recentBess.rows[0].total) >= 10 && parseInt(recentBess.rows[0].precision_count) === 10) {
+        const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'BESS Precision Specialist'");
+        if (achievement.rows.length > 0) {
+          await awardAchievement(driverId, achievement.rows[0].id);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking BESS achievements:', error);
+  }
+}
+
 async function checkErcotPioneerAchievement(driver_id) {
   // Requirement: Participate in at least 1 grid response event in ERCOT
   const count = await pool.query(`
@@ -971,6 +1067,7 @@ async function updateChallengeProgress(driver_id, challenge_type) {
           type: 'challenge_completed',
           title: 'Challenge Completed! 🎖️',
           body: `Congratulations! You've completed the '${chal.rows[0].name}' challenge.`,
+          priority: 'high',
           data: { challenge_id: challenge.id }
         };
 
@@ -1296,6 +1393,7 @@ async function awardAchievement(driver_id, achievement_id) {
       type: 'achievement_unlocked',
       title: 'Achievement Unlocked! 🏆',
       body: `You've earned the '${name}' badge and ${points} points!`,
+      priority: 'high',
       data: { achievement_id, name, points, icon }
     };
 
@@ -1353,16 +1451,25 @@ async function recalculateRanks() {
   // Phase 5 Optimization: Notify only for Top 10 or significant jumps (>= 5 positions)
   for (const row of result.rows) {
     if (row.new_rank <= 10 || Math.abs(row.rank_delta) >= 5) {
-      io.to(`driver:${row.driver_id}`).emit('notification', {
+      const notification = {
+        driver_id: row.driver_id,
         type: 'rank_change',
         title: 'Rank Updated! 📈',
         body: `Your new rank on the leaderboard is #${row.new_rank}.`,
+        priority: row.new_rank <= 3 ? 'high' : 'normal',
         data: {
           rank: row.new_rank,
           previous_rank: row.new_rank + row.rank_delta,
           delta: row.rank_delta
         }
+      };
+
+      await producer.send({
+        topic: 'engagement_notifications',
+        messages: [{ key: row.driver_id, value: JSON.stringify(notification) }]
       });
+
+      io.to(`driver:${row.driver_id}`).emit('notification', notification);
     }
   }
 
