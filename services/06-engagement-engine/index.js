@@ -258,24 +258,6 @@ app.get('/achievements/driver/:driver_id', authenticateToken, async (req, res) =
   }
 });
 
-// Award achievement to driver
-app.post('/achievements/award', authenticateToken, async (req, res) => {
-  const { driver_id, achievement_id } = req.body;
-
-  // IDOR check
-  if (driver_id !== req.user.driver_id.toString()) {
-    return res.status(403).json({ error: 'Unauthorized' });
-  }
-
-  try {
-    const points = await awardAchievement(driver_id, achievement_id);
-    res.json({ success: true, points_earned: points });
-  } catch (error) {
-    console.error('[Engagement Error]', error);
-    res.status(500).json({ error: error.message || 'An internal server error occurred' });
-  }
-});
-
 // ============================================================================
 // CHALLENGES ENDPOINTS
 // ============================================================================

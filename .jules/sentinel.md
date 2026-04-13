@@ -29,3 +29,8 @@
 **Vulnerability:** Missing high-level error handling in Kafka `eachMessage` handlers.
 **Learning:** A single malformed JSON payload or unhandled exception in the message processing logic would crash the entire consumer, leading to a denial of service for the reward engine.
 **Prevention:** Always wrap the body of `eachMessage` handlers in a `try...catch` block to log errors and allow the consumer to continue processing subsequent messages.
+
+## 2026-04-23 - [Achievement Self-Awarding Logic Flaw]
+**Vulnerability:** Privilege escalation via a public endpoint that allowed users to trigger their own rewards.
+**Learning:** The `POST /achievements/award` endpoint lacked server-side verification of achievement prerequisites, trusting the client-side request to determine if a reward was deserved. Even with IDOR protection, the existence of such an endpoint is a critical design flaw in an automated engagement system.
+**Prevention:** Never expose endpoints that allow users to claim or award themselves rewards based solely on a request. Reward logic must be fully server-side and triggered by verified internal events or state changes.
