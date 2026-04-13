@@ -120,6 +120,8 @@ describe('BiddingOptimizer', () => {
     const context = JSON.stringify({
       event_type: 'PHYSICS_FRAUD',
       severity: 'FRAUD',
+      physics_score: 0.0,
+      confidence_score: 0.0,
       site_id: 'SITE-123',
       iso_region: 'CAISO',
       vpp_active: true,
@@ -134,19 +136,22 @@ describe('BiddingOptimizer', () => {
 
     const { audit } = await optimizer.generateDayAheadBids('CAISO');
 
-    expect(audit.physics_score).toBe(1.0); // Default if not in context
+    expect(audit.physics_score).toBe(0.0);
+    expect(audit.confidence_score).toBe(0.0);
+    expect(audit.capacity_fidelity).toBe('STANDARD');
     expect(audit.audit_context.event_type).toBe('PHYSICS_FRAUD');
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('L1 safety lock is active'));
 
     consoleSpy.mockRestore();
   });
 
-  test('should log physics_score when present in safety lock context', async () => {
+  test('should log physics_score and confidence_score when present in safety lock context', async () => {
     const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
     const context = JSON.stringify({
       event_type: 'CAPACITY_VIOLATION',
       severity: 'CRITICAL',
       physics_score: 0.85,
+      confidence_score: 0.80,
       site_id: 'SITE-456',
       iso_region: 'PJM',
       vpp_active: true,
@@ -162,8 +167,10 @@ describe('BiddingOptimizer', () => {
     const { audit } = await optimizer.generateDayAheadBids('PJM');
 
     expect(audit.physics_score).toBe(0.85);
-    expect(audit.capacity_fidelity).toBe('STANDARD'); // 0.85 <= 0.95
+    expect(audit.confidence_score).toBe(0.80);
+    expect(audit.capacity_fidelity).toBe('STANDARD'); // Both <= 0.95
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Score: 0.85'));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Confidence: 0.8'));
 
     consoleSpy.mockRestore();
   });

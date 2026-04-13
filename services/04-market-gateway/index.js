@@ -1,5 +1,5 @@
 /**
- * L4: Market Gateway Service (v3.7.0)
+ * L4: Market Gateway Service (v3.8.0)
  * Wholesale energy market integration (CAISO, PJM, ERCOT)
  */
 
@@ -115,9 +115,10 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
     const degradationCostMwh = degradationCostKwh.times(1000);
     const profitabilityIndex = price.minus(degradationCostMwh);
 
-    // AI Readiness: Include physics score from L1 safety context if available
+    // AI Readiness: Include physics score and confidence score from L1 safety context if available
     // Phase 5 Enhancement: Match global safety lock to the current ISO region
     let physicsScore = 1.0;
+    let confidenceScore = 1.0;
     try {
       const lockContext = await redisClient.get('l1:safety:lock:context');
       if (lockContext) {
@@ -129,6 +130,9 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
         if (!lockIso || lockIso === currentIso || lockIso === 'SYSTEM_WIDE') {
           if (details.physics_score !== undefined) {
             physicsScore = parseFloat(details.physics_score);
+          }
+          if (details.confidence_score !== undefined) {
+            confidenceScore = parseFloat(details.confidence_score);
           }
         }
       }
@@ -143,7 +147,8 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
       profitability_index: profitabilityIndex.toDecimalPlaces(2).toNumber(),
       degradation_cost_mwh: degradationCostMwh.toNumber(),
       physics_score: physicsScore,
-      fidelity_status: physicsScore > 0.95 ? 'HIGH_FIDELITY' : 'STANDARD',
+      confidence_score: confidenceScore,
+      fidelity_status: (physicsScore > 0.95 || confidenceScore > 0.95) ? 'HIGH_FIDELITY' : 'STANDARD',
       timestamp: new Date().toISOString()
     };
 
@@ -197,7 +202,7 @@ async function startGridSignalConsumer() {
  * Proactive background loop to poll market prices and notify other layers (L9)
  */
 async function startPriceBroadcaster() {
-  console.log(`[Market Gateway v3.7.0] Initializing proactive price broadcaster for: ${SUPPORTED_ISOS.join(', ')}`);
+  console.log(`[Market Gateway v3.8.0] Initializing proactive price broadcaster for: ${SUPPORTED_ISOS.join(', ')}`);
 
   const simulationEnabled = process.env.ENABLE_MARKET_SIMULATION === 'true' || process.env.NODE_ENV === 'test';
 
@@ -292,7 +297,7 @@ app.get('/health', async (req, res) => {
 
   res.json({
     service: 'market-gateway',
-    version: '3.7.0',
+    version: '3.8.0',
     status: 'healthy',
     layer: 'L4',
     markets: SUPPORTED_ISOS,
@@ -367,7 +372,7 @@ app.post('/bids/optimize', authenticateToken, async (req, res) => {
 // Submit energy bid
 // Phase 5 Enhancement: Persist audit metadata for L11 ML Engine (FIX-PROT-AUDIT)
 app.post('/bids/submit', authenticateToken, async (req, res) => {
-  const { iso, market_type, quantity_kw, price_per_mwh, delivery_hour, physics_score, capacity_fidelity, audit_context } = req.body;
+  const { iso, market_type, quantity_kw, price_per_mwh, delivery_hour, physics_score, confidence_score, capacity_fidelity, audit_context } = req.body;
 
   if (!iso) {
     return res.status(400).json({ error: 'ISO is required' });
@@ -387,14 +392,14 @@ app.post('/bids/submit', authenticateToken, async (req, res) => {
     const quantity_mwh = new Decimal(quantity_kw).dividedBy(1000);
     const total_value = quantity_mwh.times(price_per_mwh);
 
-    // Insert bid record with auditing columns (v3.7.0)
+    // Insert bid record with auditing columns (v3.8.0)
     const result = await pool.query(`
       INSERT INTO market_bids (
         iso, market_type, quantity_kw, price_per_mwh,
         total_value_usd, delivery_hour, status, submitted_at,
-        physics_score, capacity_fidelity, audit_context
+        physics_score, confidence_score, capacity_fidelity, audit_context
       )
-      VALUES ($1, $2, $3, $4, $5, $6, 'pending', NOW(), $7, $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, 'pending', NOW(), $7, $8, $9, $10)
       RETURNING id, status
     `, [
       normalizedIso,
@@ -404,6 +409,7 @@ app.post('/bids/submit', authenticateToken, async (req, res) => {
       total_value.toFixed(2),
       delivery_hour,
       physics_score || 1.0,
+      confidence_score || 1.0,
       capacity_fidelity || 'STANDARD',
       JSON.stringify(audit_context || {})
     ]);

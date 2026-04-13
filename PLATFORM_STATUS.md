@@ -800,16 +800,16 @@ done
 
 | Layer | Service | Version | Status |
 | :--- | :--- | :--- | :--- |
-| **L1** | Physics Engine | `10.1.0` | ✅ Operational |
-| **L2** | Grid Signal | `2.4.4` | ✅ Operational |
+| **L1** | Physics Engine | `10.1.1` | ✅ Operational |
+| **L2** | Grid Signal | `2.4.6` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.0` | ✅ Operational |
-| **L4** | Market Gateway | `3.7.0` | ✅ Operational |
+| **L4** | Market Gateway | `3.8.0` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
 | **L6** | Engagement Engine | `5.8.0` | ✅ Operational |
 | **L7** | Device Gateway | `5.5.0` | ✅ Operational |
 | **L8** | Energy Manager | `2.1.0` | ✅ Operational |
 | **L9** | Commerce Engine | `5.1.0` | ✅ Operational |
-| **L10**| Token Engine | `4.3.0` | ✅ Operational |
+| **L10**| Token Engine | `4.3.1` | ✅ Operational |
 | **L11**| ML Engine | `0.1.0` | ✅ Operational |
 
 ---
@@ -817,11 +817,11 @@ done
 ## Latest Release Wins (April 2026)
 
 - **L6 Engagement Engine (v5.8.0)**: Deployed **High-Fidelity Contributor** and **Market Synchronizer** achievements, and integrated L1-based **Sentinel of the Grid** streak tracking.
-- **L10 Token Engine (v4.3.0)**: Hardened reward idempotency via Postgres unique constraints and implemented `checkIdempotency` Redis helper for Kafka resilience.
-- **L2 Grid Signal (v2.4.4)**: Enforced **10% variance threshold** for BESS resources and expanded OpenADR reports to include granular EV/BESS capacity breakdowns.
-- **L4 Market Gateway (v3.7.0)**: Activated **Nord Pool & ERCOT** adapters, **Bidding Auditability** (FIX-PROT-AUDIT), and **Regional Grid Lock** observability.
+- **L10 Token Engine (v4.3.1)**: Hardened reward idempotency via Postgres unique constraints and implemented `checkIdempotency` Redis helper for Kafka resilience.
+- **L2 Grid Signal (v2.4.6)**: Enforced **10% variance threshold** for BESS resources and expanded OpenADR reports to include granular EV/BESS capacity breakdowns.
+- **L4 Market Gateway (v3.8.0)**: Integrated **High-Fidelity Confidence Scoring** (0.0-1.0) into bidding audits and market price broadcasts, aligning with L10 v4.3.1 for ML readiness.
 - **L7 Device Gateway (v5.5.0)**: Implemented session-based **Resource Type Caching** in Redis to optimize L1 Physics Engine telemetry routing.
-- **L1 Physics Engine (v10.1.0)**: Deployed **Confidence Scoring** (0.0-1.0) for ML training and finalized **High-Fidelity Reconciliation** of regional metadata.
+- **L1 Physics Engine (v10.1.1)**: Deployed **Confidence Scoring** (0.0-1.0) for ML training and finalized **High-Fidelity Reconciliation** of regional metadata.
 - **L3 VPP Aggregator (v3.3.0)**: Refactored capacity tracking to provide high-fidelity EV/BESS breakdowns for grid-aware dispatching.
 
 ---
