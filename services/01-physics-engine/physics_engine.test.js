@@ -6,6 +6,7 @@ global.mockRedisSet = jest.fn();
 global.mockRedisGet = jest.fn();
 global.mockRedisRPop = jest.fn();
 global.mockRedisTtl = jest.fn();
+global.mockRedisHGetAll = jest.fn();
 global.mockPgQuery = jest.fn();
 
 // Mock dependencies (hoisted by Jest)
@@ -46,6 +47,7 @@ jest.mock('redis', () => ({
     }),
     expire: jest.fn().mockResolvedValue(true),
     get: jest.fn().mockImplementation((key) => global.mockRedisGet(key)),
+    hGetAll: jest.fn().mockImplementation((key) => global.mockRedisHGetAll(key)),
     set: jest.fn().mockImplementation((key, value) => {
         global.mockRedisSet(key, value);
         return Promise.resolve('OK');
@@ -595,6 +597,51 @@ describe('L1 Physics Engine Digital Twin Sync', () => {
       'l1:CAISO:vehicle:v-fallback',
       60,
       expect.stringContaining('"confidence_score":0.9')
+    );
+  });
+
+  test('[L1-120] should apply confidence decay for old sync (>30 days)', async () => {
+    global.mockPgQuery.mockResolvedValue({
+      rows: [{ id: 'v-old', fleet_id: 'f1', iso: 'CAISO' }]
+    });
+
+    const thirtyOneDaysAgo = new Date();
+    thirtyOneDaysAgo.setDate(thirtyOneDaysAgo.getDate() - 31);
+
+    global.mockRedisGet
+      .mockResolvedValueOnce('0') // Streak
+      .mockResolvedValueOnce(JSON.stringify({ last_sync: thirtyOneDaysAgo.toISOString() }));
+
+    await physicsEngine.syncDigitalTwin();
+
+    // Confidence = 0.5 (base) - 0.2 (decay) = 0.3
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith(
+      'l1:CAISO:vehicle:v-old',
+      60,
+      expect.stringContaining('"confidence_score":0.3')
+    );
+  });
+
+  test('[L1-121] should apply confidence penalty for high site load (>90%)', async () => {
+    global.mockPgQuery.mockResolvedValue({
+      rows: [{ id: 'v-site', fleet_id: 'f1', iso: 'CAISO', site_id: 'SITE-90' }]
+    });
+
+    global.mockRedisGet
+      .mockResolvedValueOnce('0') // Streak
+      .mockResolvedValueOnce(null) // lastSync
+      .mockResolvedValueOnce('95.0') // building_load_kw (for siteData)
+      .mockResolvedValueOnce(null); // L7 resource_type fallback
+
+    global.mockRedisHGetAll.mockResolvedValue({ max_capacity_kw: '100.0' });
+
+    await physicsEngine.syncDigitalTwin();
+
+    // Confidence = 0.5 (base) - 0.15 (site penalty) = 0.35
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith(
+      'l1:CAISO:vehicle:v-site',
+      60,
+      expect.stringContaining('"confidence_score":0.35')
     );
   });
 });
