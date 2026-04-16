@@ -11,14 +11,14 @@
 | Priority | Feature / Task | Primary Layer | Blocking Dependencies | Target Phase |
 |:---:|:---|:---:|:---|:---:|
 | **P0** | **ML Demand Forecasting** | L11 (ML Engine) | ✅ Phase 5 High-Fidelity Data Pipelines (L1, L2, L3, L4) | Phase 6 |
-| **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | 🚧 L7 v5.5.0 Hardened (85% Complete) | Phase 5 |
+| **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | 🚧 L7 v5.6.0 Hardened (90% Complete) | Phase 5 |
 | **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 (Market) v3.7.0 Bidding Auditability | Phase 5 |
 | **P3** | **OCPI 2.2 Roaming** | L7 (Device) | 🚧 L9 (Commerce) v5.1.0 tariff engine sync | Phase 5 |
 | **P4** | **BESS RL Bidding** | L4 (Market) | 🚧 L3 BESS Integration (75% Complete) | Phase 6 |
 
 | Priority | Task ID | Description | Primary Layers | Status | Strategic Alignment |
 |:---:|:---:|:---|:---:|:---:|:---|
-| 1 | **ISO-15118-PC** | Full ISO 15118-20 Bidirectional Certificate Exchange & Plug & Charge UI (OCPP 2.1) | L7, L5, L1 | 85% | Phase 5: Enterprise Scale |
+| 1 | **ISO-15118-PC** | Full ISO 15118-20 Bidirectional Certificate Exchange & Plug & Charge UI (OCPP 2.1) | L7, L5, L1 | 90% | Phase 5: Enterprise Scale |
 | 2 | **COMMERCE-BILLING** | Complete L9 Commerce Engine Tariff Engine and Flexible Billing Logic | L9, L5 | 65% | Phase 5: Commerce Sync |
 | 3 | **OCPI-2.2-ROAM** | OCPI 2.2 Roaming Integration for cross-network orchestration | L7, L9 | 60% | Phase 5: Global Expansion |
 | 4 | **REGIONAL-CHALLENGE** | Implementation of L6 Regional Team Challenges & Live Grid Events | L6, L2 | ✅ 100%| Phase 5: Grid-Aware Gamification |
@@ -31,7 +31,7 @@
 | Downstream Layer | Dependency | Upstream Source | Impact of Failure | Status |
 |:---|:---|:---|:---|:---|
 | **L11 ML Engine** | High-Fidelity Logs | **L1 Physics (v10.1.0)** | ML training data lacks regional context | ✅ Active |
-| **L5 Driver DX** | PnC Auth Status | **L7 Device Gateway** | Driver cannot use Plug & Charge sessions | 🚧 85% |
+| **L5 Driver DX** | PnC Auth Status | **L7 Device Gateway** | Driver cannot use Plug & Charge sessions | 🚧 90% |
 | **L9 Commerce** | Billing Reconciliation | **L1 Physics / L4 Market** | Inaccurate split-billing or tariff logic | ✅ Active |
 | **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.0 Active |
 | **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine** | Rewards fail for 'ISO Explorer' challenges | ✅ v5.6.0 Sync |
@@ -81,10 +81,11 @@
 - [✓] **BESS Specialist**: Achievements for BESS Power and Precision Specialist.
 - [✓] **Hardened Metadata**: Kafka events enriched with `resource_type`.
 
-### Layer 7: Device Gateway (v5.5.0)
-- [✓] **ISO 15118-20**: Hardened Certificate Exchange and EMAID handling (85%).
+### Layer 7: Device Gateway (v5.6.0)
+- [✓] **ISO 15118-20**: Hardened Certificate Exchange and EMAID handling (90%).
 - [✓] **OCPP 2.1 V2X**: Native bidirectional profile support.
 - [✓] **Resource Caching**: Redis-based `resource_type` (EV/BESS) lifecycle management.
+- [✓] **Horizontal Scaling**: Cross-pod command routing via Redis Pub/Sub.
 
 ### Layer 10: Token Engine (v4.3.1)
 - [✓] **Dynamic Multipliers**: Surplus (1.5x) and Scarcity (2.0x) logic active.

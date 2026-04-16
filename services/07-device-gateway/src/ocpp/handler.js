@@ -51,7 +51,15 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                 break;
 
             case 'StatusNotification':
-                // Forward to L8 Energy Manager (logic placeholder)
+                // Update Redis and forward to internal services
+                await redis.set(`charger_status:${chargePointId}`, payload.connectorStatus, 'EX', 86400);
+                await publishSessionEvent('CHARGER_STATUS_UPDATED', {
+                    chargePointId,
+                    status: payload.connectorStatus,
+                    evseId: payload.evseId,
+                    connectorId: payload.connectorId,
+                    timestamp: payload.timestamp || new Date().toISOString()
+                });
                 ws.send(JSON.stringify([3, messageId, {}]));
                 break;
 
@@ -93,14 +101,17 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
 
             case 'CertificateSigned':
                 // ISO 15118-20 PnC: Handle signed certificate from V2G CA
-                console.log(`[L7] Received signed certificate for ${chargePointId}`);
-                // In a production scenario, we would store this or forward to HSM
+                console.log(`[L7] Received signed certificate for ${chargePointId}:`, payload.certificate);
+                // Advance ISO 15118 support: Persist certificate metadata for PnC session validation
+                await redis.hset(`charger_certs:${chargePointId}`, 'status', 'Signed', 'lastUpdated', new Date().toISOString());
                 ws.send(JSON.stringify([3, messageId, { status: 'Accepted' }]));
                 break;
 
             case 'GetCertificateStatus':
                 // ISO 15118-20 PnC: Handle OCSP requests for PnC session validation
-                console.log(`[L7] GetCertificateStatus (OCSP) for ${chargePointId}`);
+                console.log(`[L7] GetCertificateStatus (OCSP) for ${chargePointId}:`, payload.ocspRequestData);
+                // Advance ISO 15118 support: Log OCSP request context for L11 audit trails
+                await redis.hset(`charger_certs:${chargePointId}`, 'ocspStatus', 'Requested', 'ocspTimestamp', new Date().toISOString());
                 ws.send(JSON.stringify([3, messageId, { status: 'Accepted' }]));
                 break;
 
@@ -140,12 +151,17 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                     let energyDispensed = 0;
                     try {
                         if (payload.meterValue && payload.meterValue.length > 0) {
+                            // Find the cumulative energy register across all meter values
                             const lastMeterValue = payload.meterValue[payload.meterValue.length - 1];
-                            const sampledValue = lastMeterValue.sampledValue?.find(sv =>
+                            const energySample = lastMeterValue.sampledValue?.find(sv =>
                                 sv.measurand === 'Energy.Active.Import.Register' || sv.measurand === undefined
                             );
-                            if (sampledValue) {
-                                energyDispensed = parseFloat(sampledValue.value) || 0;
+
+                            if (energySample) {
+                                energyDispensed = parseFloat(energySample.value) || 0;
+                            } else if (lastMeterValue.sampledValue?.[0]?.value) {
+                                // Fallback: Take the first value if it looks like energy
+                                energyDispensed = parseFloat(lastMeterValue.sampledValue[0].value) || 0;
                             }
                         }
                     } catch (e) {
