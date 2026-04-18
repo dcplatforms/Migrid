@@ -3,6 +3,7 @@ const Redis = require('ioredis');
 // Use environment variable or fallback to default
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 const redis = new Redis(redisUrl);
+const redisSub = new Redis(redisUrl);
 
 /**
  * Maps a charger to the specific Device Gateway instance holding its WebSocket.
@@ -23,4 +24,4 @@ async function removeConnection(chargePointId) {
     await redis.del(`charger_region:${chargePointId}`);
 }
 
-module.exports = { redis, registerConnection, removeConnection };
+module.exports = { redis, redisSub, registerConnection, removeConnection };
