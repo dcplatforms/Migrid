@@ -121,7 +121,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-      version: '5.9.0', // Weekly Mission: BESS Precision & Cross-Layer Fidelity
+      version: '5.10.0', // Weekly Mission: Site Harmony & High-Fidelity Engagement
     status: 'healthy',
     layer: 'L6'
   });
@@ -362,6 +362,7 @@ async function processChargingEvent(event) {
       await checkSustainabilityChampion(driverId);
       await checkSentinelOfTheGridAchievement(driverId, vehicleId);
       await checkHighConfidenceAchievement(driverId, vehicleId);
+      await checkSiteHarmonyAchievement(driverId, vehicleId);
 
       // [L6-v5.9.0] BESS Specific Achievements
       if (resourceType === 'BESS') {
@@ -385,6 +386,10 @@ async function processChargingEvent(event) {
         if (physics_score > 0.98) {
           await updateChallengeProgress(driverId, 'ml_data_pioneer');
         }
+      }
+
+      if (confidence_score >= 0.95) {
+        await updateChallengeProgress(driverId, 'site_harmony_charging');
       }
 
       if (confidence_score > 0.9) {
@@ -439,6 +444,8 @@ async function processChargingEvent(event) {
       const notification = {
         driver_id: driverId,
         type: 'points_earned',
+        category: 'reward',
+        sub_category: 'charging',
         title: 'Points Earned! ⚡',
         body: `You just earned ${points} points for your charging session.`,
         priority: 'normal', // L5 anti-fatigue: minor updates can be batched
@@ -799,6 +806,8 @@ async function handleGridSignal(payload) {
         const notification = {
           driver_id: row.driver_id,
           type: 'challenge_completed',
+          category: 'reward',
+          sub_category: 'challenge',
           title: 'Challenge Completed! 🎖️',
           body: `Congratulations! You've completed the '${chalName}' challenge.`,
           priority: 'high' // L5 anti-fatigue: Challenges are high priority
@@ -834,6 +843,8 @@ async function handleGridSignal(payload) {
         const notification = {
           driver_id: row.driver_id,
           type: 'achievement_unlocked',
+          category: 'reward',
+          sub_category: 'achievement',
           title: 'Achievement Unlocked! 🏆',
           body: `You've earned the '${achName}' badge!`,
           priority: 'high', // L5 anti-fatigue: Achievements are high priority
@@ -1047,6 +1058,8 @@ async function updateChallengeProgress(driver_id, challenge_type) {
         const notification = {
           driver_id,
           type: 'challenge_completed',
+          category: 'reward',
+          sub_category: 'challenge',
           title: 'Challenge Completed! 🎖️',
           body: `Congratulations! You've completed the '${chal.rows[0].name}' challenge.`,
           priority: 'high',
@@ -1267,6 +1280,30 @@ async function checkHighConfidenceAchievement(driver_id, vehicle_id) {
   }
 }
 
+async function checkSiteHarmonyAchievement(driver_id, vehicle_id) {
+  if (!vehicle_id) return;
+  try {
+    const driverData = await pool.query('SELECT f.iso FROM drivers d JOIN fleets f ON d.fleet_id = f.id WHERE d.id = $1', [driver_id]);
+    const iso = (driverData.rows[0]?.iso || 'CAISO').toUpperCase().replace(/-/g, '');
+
+    const digitalTwinRaw = await redisClient.get(`l1:${iso}:vehicle:${vehicle_id}`);
+    if (!digitalTwinRaw) return;
+
+    const digitalTwin = JSON.parse(digitalTwinRaw);
+    const confidence = parseFloat(digitalTwin.confidence_score || 0);
+
+    // Site Harmony: Requires high confidence, which per L1 v10.1.1 implies low site load (<90%)
+    if (confidence >= 0.95) {
+      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Site Harmony'");
+      if (achievement.rows.length > 0) {
+        await awardAchievement(driver_id, achievement.rows[0].id);
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking Site Harmony achievement:', error);
+  }
+}
+
 async function checkSustainabilityChampion(driver_id) {
   // 100% Compliance Check: Verify at least one valid session for each of the last 30 consecutive days.
   // This enforces the "Green Audit" (<15% variance) via the L1-verified 'is_valid' flag.
@@ -1373,6 +1410,8 @@ async function awardAchievement(driver_id, achievement_id) {
     const notification = {
       driver_id,
       type: 'achievement_unlocked',
+      category: 'reward',
+      sub_category: 'achievement',
       title: 'Achievement Unlocked! 🏆',
       body: `You've earned the '${name}' badge and ${points} points!`,
       priority: 'high',
@@ -1436,6 +1475,8 @@ async function recalculateRanks() {
       const notification = {
         driver_id: row.driver_id,
         type: 'rank_change',
+        category: 'social',
+        sub_category: 'leaderboard',
         title: 'Rank Updated! 📈',
         body: `Your new rank on the leaderboard is #${row.new_rank}.`,
         priority: row.new_rank <= 3 ? 'high' : 'normal',
@@ -1504,5 +1545,6 @@ module.exports = {
   redisClient,
   processChargingEvent,
   checkHighConfidenceAchievement,
+  checkSiteHarmonyAchievement,
   updateChallengeProgress
 };
