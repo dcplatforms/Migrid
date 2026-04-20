@@ -132,7 +132,7 @@ function calculatePhysicsMetadata(payload) {
 
   return {
     physicsScore: parseFloat(physicsScore.toFixed(4)),
-    isHighFidelity: physicsScore > 0.95,
+    isHighFidelity: physicsScore > 0.95, // [L1-124] Base fidelity
     isSentinelFidelity: physicsScore > 0.99
   };
 }
@@ -195,7 +195,7 @@ async function handlePhysicsAlert(msg) {
   // [L1-121] Fetch Site Load Data for Confidence Scoring
   const alertSiteId = payload.site_id || payload.metadata?.site_id || SITE_ID;
   const buildingLoadKw = parseFloat(await redisClient.get(`site:${alertSiteId}:building_load_kw`)) || 0;
-  const siteConfig = await redisClient.hGetAll(`site:${alertSiteId}:config`);
+  const siteConfig = (await redisClient.hGetAll(`site:${alertSiteId}:config`)) || {};
   const limitKw = parseFloat(siteConfig.max_capacity_kw) || 0;
 
   const confidenceScore = calculateConfidenceScore(
@@ -238,8 +238,17 @@ async function handlePhysicsAlert(msg) {
   }
 
   if (isOffline) {
-    // Log to local Redis for later reconciliation
-    await redisClient.lPush('local_audit_log', msg.payload);
+    // [L1-126] Hardened Offline Mode: Persist scores to local audit log
+    const offlinePayload = {
+      ...payload,
+      physics_score: physicsScore.toFixed(4),
+      confidence_score: confidenceScore,
+      is_high_fidelity: physicsScore > 0.95 || confidenceScore > 0.95,
+      is_sentinel_fidelity: isSentinelFidelity,
+      source_layer: 'L1',
+      severity: severity
+    };
+    await redisClient.lPush('local_audit_log', JSON.stringify(offlinePayload));
     return;
   }
 
@@ -259,7 +268,7 @@ async function handlePhysicsAlert(msg) {
       expected: payload.expected,
       actual: payload.actual,
       physics_score: physicsScore.toFixed(4),
-      is_high_fidelity: isHighFidelity,
+      is_high_fidelity: (physicsScore > 0.95 || confidenceScore > 0.95), // [L1-124] High-Fidelity Alignment
       is_sentinel_fidelity: isSentinelFidelity,
       confidence_score: confidenceScore,
       billing_mode: payload.billing_mode,
@@ -334,8 +343,11 @@ async function reconcileLogs() {
       // Map severity correctly
       const severity = (payload.event_type === 'PHYSICS_FRAUD') ? 'FRAUD' : (payload.event_type === 'CAPACITY_VIOLATION' ? 'CRITICAL' : 'WARNING');
 
-      // Re-calculate physics score and fidelity for high-fidelity reconciliation
-      const { physicsScore, isHighFidelity, isSentinelFidelity } = calculatePhysicsMetadata(payload);
+      // [L1-126] Hardened Reconciliation: Use persisted scores or re-calculate
+      const physicsScore = payload.physics_score || calculatePhysicsMetadata(payload).physicsScore.toFixed(4);
+      const confidenceScore = payload.confidence_score || 0.5;
+      const isHighFidelity = payload.is_high_fidelity || (parseFloat(physicsScore) > 0.95 || confidenceScore > 0.95);
+      const isSentinelFidelity = payload.is_sentinel_fidelity || parseFloat(physicsScore) > 0.99;
 
       // Re-publish missed alerts to Kafka
       const alert = {
@@ -351,9 +363,10 @@ async function reconcileLogs() {
         threshold: payload.threshold || (payload.event_type === 'EFFICIENCY_ALERT' ? 0.85 : (payload.event_type === 'CAPACITY_VIOLATION' ? 20.0 : null)),
         expected: payload.expected,
         actual: payload.actual,
-        physics_score: physicsScore.toFixed(4),
+        physics_score: physicsScore,
         is_high_fidelity: isHighFidelity,
         is_sentinel_fidelity: isSentinelFidelity,
+        confidence_score: confidenceScore,
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
         v2g_active: payload.v2g_active,
@@ -401,7 +414,8 @@ async function reconcileLogs() {
           current_soc: payload.current_soc,
           variance_pct: payload.variance_pct,
           efficiency_pct: payload.efficiency_pct,
-          physics_score: physicsScore.toFixed(4),
+          physics_score: physicsScore,
+          confidence_score: confidenceScore,
           is_high_fidelity: isHighFidelity
         }),
         payload.billing_mode,
@@ -409,7 +423,7 @@ async function reconcileLogs() {
         payload.v2g_active,
         normalizeIso(payload.iso_region),
         payload.market_price_at_session || 0.0,
-        physicsScore.toFixed(4),
+        physicsScore,
         isHighFidelity
       ]);
 
@@ -447,14 +461,22 @@ async function syncDigitalTwin() {
     );
 
     // [L1-121] Fetch Site Load Data once per sync cycle for Confidence Scoring efficiency
-    const buildingLoadKw = parseFloat(await redisClient.get(`site:${SITE_ID}:building_load_kw`)) || 0;
-    const siteConfig = await redisClient.hGetAll(`site:${SITE_ID}:config`);
-    const limitKw = parseFloat(siteConfig.max_capacity_kw) || 0;
-    const siteLoadData = { loadKw: buildingLoadKw, limitKw };
+    // [L1-125] Multi-Site Awareness: Per-cycle site load cache
+    const siteCache = new Map();
 
     for (const vehicle of result.rows) {
       const iso = normalizeIso(vehicle.iso);
       const key = `l1:${iso}:vehicle:${vehicle.id}`;
+      const vehicleSiteId = vehicle.site_id || SITE_ID;
+
+      // [L1-125] Fetch site telemetry if not in cache
+      if (!siteCache.has(vehicleSiteId)) {
+        const loadKw = parseFloat(await redisClient.get(`site:${vehicleSiteId}:building_load_kw`)) || 0;
+        const config = (await redisClient.hGetAll(`site:${vehicleSiteId}:config`)) || {};
+        const limitKw = parseFloat(config.max_capacity_kw) || 0;
+        siteCache.set(vehicleSiteId, { loadKw, limitKw });
+      }
+      const siteLoadData = siteCache.get(vehicleSiteId);
 
       // [L1-118] Implement Data Confidence Score for L11 ML Engine
       const streakKey = `l1:streak:sentinel:${vehicle.id}`;
@@ -486,7 +508,7 @@ async function syncDigitalTwin() {
         ...vehicle,
         resource_type: resourceType,
         physics_score: physicsScore,
-        is_high_fidelity: physicsScore > 0.95,
+        is_high_fidelity: (physicsScore > 0.95 || confidenceScore > 0.95), // [L1-124] High-Fidelity Alignment
         is_sentinel_fidelity: physicsScore > 0.99,
         confidence_score: confidenceScore,
         last_sync: new Date().toISOString()

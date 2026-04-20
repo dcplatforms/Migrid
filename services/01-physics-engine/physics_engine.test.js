@@ -658,8 +658,9 @@ describe('L1 Physics Engine Digital Twin Sync', () => {
     thirtyOneDaysAgo.setDate(thirtyOneDaysAgo.getDate() - 31);
 
     global.mockRedisGet
-      .mockResolvedValueOnce('0') // Streak
-      .mockResolvedValueOnce(JSON.stringify({ last_sync: thirtyOneDaysAgo.toISOString() }));
+      .mockResolvedValueOnce('0') // Streak for siteData buildingLoadKw
+      .mockResolvedValueOnce('0') // Streak for vehicle
+      .mockResolvedValueOnce(JSON.stringify({ last_sync: thirtyOneDaysAgo.toISOString() })); // lastSync
 
     await physicsEngine.syncDigitalTwin();
 
@@ -677,10 +678,12 @@ describe('L1 Physics Engine Digital Twin Sync', () => {
     });
 
     global.mockRedisGet
-      .mockResolvedValueOnce('0') // Streak
-      .mockResolvedValueOnce(null) // lastSync
-      .mockResolvedValueOnce('95.0') // building_load_kw (for siteData)
-      .mockResolvedValueOnce(null); // L7 resource_type fallback
+      .mockImplementation((key) => {
+        if (key === 'site:SITE-90:building_load_kw') return Promise.resolve('95.0');
+        if (key === 'l1:streak:sentinel:v-site') return Promise.resolve('0');
+        if (key === 'l1:CAISO:vehicle:v-site') return Promise.resolve(null);
+        return Promise.resolve(null);
+      });
 
     global.mockRedisHGetAll.mockResolvedValue({ max_capacity_kw: '100.0' });
 

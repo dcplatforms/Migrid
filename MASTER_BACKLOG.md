@@ -1,6 +1,6 @@
 # MiGrid Master Backlog & Strategic Dependency Matrix
 
-**Version:** 10.1.1
+**Version:** 10.1.2
 **Last Updated:** April 2026
 **Status:** Phase 5 "Enterprise Scale" (92% Complete)
 
@@ -41,19 +41,23 @@
 
 ## 🛠️ Active Engineering Sprints (Phase 5)
 
-### Layer 1: Physics Engine (v10.1.1)
+### Layer 1: Physics Engine (v10.1.2)
 - [✓] **Digital Twin Sync**: Fleet-filtered Redis sync for vehicle states.
 - [✓] **Contextual Safety Locks**: metadata-enriched `l1:safety:lock:context` in Redis.
 - [✓] **High-Fidelity Reconcile**: Preservation of regional metadata in audit logs.
 - [✓] **Confidence Scoring**: Integrated 0.0-1.0 confidence metrics for L11 training.
 - [✓] **[L1-120] Confidence Decay**: -0.2 penalty for syncs > 30 days old.
 - [✓] **[L1-121] Site Integration**: -0.15 penalty for sites > 90% load utilization.
+- [✓] **[L1-124] High-Fidelity Alignment**: Aligned scoring thresholds for L10/L11 consistency.
+- [✓] **[L1-125] Multi-Site Awareness**: Vehicle-specific site telemetry integration for confidence scoring.
+- [✓] **[L1-126] Hardened Offline Mode**: metadata preservation in local Redis during cloud disconnection.
 
-### Layer 2: Grid Signal (v2.4.5)
+### Layer 2: Grid Signal (v2.4.7)
 - [✓] **BESS-Aware Safety**: 10% variance threshold enforced for stationary storage.
 - [✓] **Regional Context**: High-fidelity capacity breakdown (Total/EV/BESS) in OpenADR reports.
 - [✓] **Confidence Propagation**: Forwarding L1 confidence scores to L11 pipelines.
 - [✓] **Unified Context**: Optimized aggregation of digital twin stats into `l2:unified:context`.
+- [✓] **Fidelity Alignment**: Updated classification logic for consistency with L1 v10.1.2.
 
 ### Layer 3: VPP Aggregator (v3.3.0)
 - [✓] **Redis Capacity Cache**: Sub-50ms reporting for L4 bidding.
