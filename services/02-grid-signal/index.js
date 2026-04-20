@@ -152,7 +152,7 @@ app.get('/openadr/v3/reports', async (req, res) => {
     });
   } catch (error) {
     console.error('[L2 Grid Signal] Report Error:', error);
-    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: 'An internal server error occurred' });
   }
 });
 
@@ -322,7 +322,7 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('[L2 Grid Signal Error]', error);
-    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: 'An internal server error occurred' });
   }
 });
 

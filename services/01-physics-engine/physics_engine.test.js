@@ -4,6 +4,7 @@ global.mockRedisSetEx = jest.fn();
 global.mockRedisIncr = jest.fn();
 global.mockRedisSet = jest.fn();
 global.mockRedisGet = jest.fn();
+global.mockRedisHGetAll = jest.fn().mockResolvedValue({});
 global.mockRedisRPop = jest.fn();
 global.mockRedisTtl = jest.fn();
 global.mockRedisHGetAll = jest.fn();
@@ -436,6 +437,51 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.confidence_score).toBe(0.9);
   });
 
+  test('[L1-120] should apply confidence decay for 30+ days inactivity', async () => {
+    const thirtyOneDaysAgo = new Date();
+    thirtyOneDaysAgo.setDate(thirtyOneDaysAgo.getDate() - 31);
+
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'SESSION_COMPLETED',
+        vehicle_id: 'vehicle-decay-test',
+        timestamp: thirtyOneDaysAgo.toISOString()
+      })
+    };
+
+    // Streak = 0. Base = 0.5. No frequency bonus (31 days). Decay = -0.2. Total = 0.3
+    global.mockRedisGet.mockResolvedValueOnce('0'); // Streak
+    global.mockRedisGet.mockResolvedValueOnce('0'); // building_load_kw
+    global.mockRedisHGetAll.mockResolvedValueOnce({ max_capacity_kw: '500' }); // site config
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.confidence_score).toBe(0.3);
+  });
+
+  test('[L1-121] should apply penalty for high site load (>90%)', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'SESSION_COMPLETED',
+        vehicle_id: 'vehicle-site-test',
+        timestamp: new Date().toISOString()
+      })
+    };
+
+    // Streak = 0. Base = 0.5. Frequency bonus = 0.1.
+    // Site load = 460kW, Limit = 500kW (92%). Penalty = -0.15.
+    // Total = 0.5 + 0.1 - 0.15 = 0.45
+    global.mockRedisGet.mockResolvedValueOnce('0'); // Streak
+    global.mockRedisGet.mockResolvedValueOnce('460'); // building_load_kw
+    global.mockRedisHGetAll.mockResolvedValueOnce({ max_capacity_kw: '500' }); // site config
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.confidence_score).toBe(0.45);
+  });
+
   test('should increment sentinel streak for score > 0.99', async () => {
     const msg = {
       payload: JSON.stringify({
@@ -581,9 +627,12 @@ describe('L1 Physics Engine Digital Twin Sync', () => {
 
     // Mock L7 cache
     global.mockRedisGet
+      .mockResolvedValueOnce('0') // building_load_kw (site level, fetched first)
       .mockResolvedValueOnce('5') // Streak for vehicle
       .mockResolvedValueOnce(null) // Existing data for lastSync
       .mockResolvedValueOnce('BESS'); // L7 resource_type fallback
+
+    global.mockRedisHGetAll.mockResolvedValueOnce({ max_capacity_kw: '500' });
 
     await physicsEngine.syncDigitalTwin();
 

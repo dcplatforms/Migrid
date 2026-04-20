@@ -71,10 +71,10 @@ async function connectServices() {
  * [L1-118] Calculate Data Confidence Score for L11 ML Engine
  * @param {number} streak - Current sentinel streak
  * @param {string} lastSync - ISO string of last sync
- * @param {object} siteData - Optional site data { loadKw, limitKw }
+ * @param {object} siteLoadData - Optional site load data { loadKw, limitKw }
  * @returns {number} Confidence score (0.0000 to 1.0000)
  */
-function calculateConfidenceScore(streak, lastSync, siteData = null) {
+function calculateConfidenceScore(streak, lastSync, siteLoadData) {
   let score = 0.5; // Base confidence
 
   // Streak bonus: 0.1 per streak point, max 0.4 (total 0.9)
@@ -89,22 +89,21 @@ function calculateConfidenceScore(streak, lastSync, siteData = null) {
       score += 0.1;
     }
 
-    // [L1-120] Confidence Decay: -0.2 if last sync > 30 days
-    const diffDays = diffHours / 24;
-    if (diffDays > 30) {
+    // [L1-120] Confidence Decay: -0.2 if inactive for > 30 days
+    if (diffHours > 24 * 30) {
       score -= 0.2;
     }
   }
 
-  // [L1-121] Site Energy Integration: -0.15 if site load > 90% capacity
-  if (siteData && siteData.limitKw > 0) {
-    const usageRatio = siteData.loadKw / siteData.limitKw;
-    if (usageRatio > 0.9) {
+  // [L1-121] Site Energy Snapshot: -0.15 if load > 90% capacity
+  if (siteLoadData && siteLoadData.limitKw > 0) {
+    const loadFactor = siteLoadData.loadKw / siteLoadData.limitKw;
+    if (loadFactor > 0.9) {
       score -= 0.15;
     }
   }
 
-  return parseFloat(Math.max(0.0, Math.min(1.0, score)).toFixed(4));
+  return parseFloat(Math.max(0, Math.min(1.0, score)).toFixed(4));
 }
 
 /**
@@ -193,25 +192,17 @@ async function handlePhysicsAlert(msg) {
     currentStreak = parseInt(streakVal || '0');
   }
 
-  // [L1-121] Fetch real-time site data if available for alert confidence enrichment
-  let siteData = null;
-  const siteId = payload.site_id || payload.metadata?.site_id;
-  if (siteId) {
-    try {
-      const siteConfig = await redisClient.hGetAll(`site:${siteId}:config`);
-      const buildingLoadRaw = await redisClient.get(`site:${siteId}:building_load_kw`);
-      if (siteConfig && Object.keys(siteConfig).length > 0) {
-        siteData = {
-          loadKw: parseFloat(buildingLoadRaw || '0'),
-          limitKw: parseFloat(siteConfig.max_capacity_kw || '0')
-        };
-      }
-    } catch (e) {
-      console.warn(`[L1 Physics] Failed to fetch site data for confidence calculation: ${e.message}`);
-    }
-  }
+  // [L1-121] Fetch Site Load Data for Confidence Scoring
+  const alertSiteId = payload.site_id || payload.metadata?.site_id || SITE_ID;
+  const buildingLoadKw = parseFloat(await redisClient.get(`site:${alertSiteId}:building_load_kw`)) || 0;
+  const siteConfig = await redisClient.hGetAll(`site:${alertSiteId}:config`);
+  const limitKw = parseFloat(siteConfig.max_capacity_kw) || 0;
 
-  const confidenceScore = calculateConfidenceScore(currentStreak, payload.timestamp || new Date().toISOString(), siteData);
+  const confidenceScore = calculateConfidenceScore(
+    currentStreak,
+    payload.timestamp || new Date().toISOString(),
+    { loadKw: buildingLoadKw, limitKw }
+  );
 
   // 1. Verify the Physics: Set Safety Lock in Redis for critical violations
   if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
@@ -455,6 +446,12 @@ async function syncDigitalTwin() {
       [fleetId]
     );
 
+    // [L1-121] Fetch Site Load Data once per sync cycle for Confidence Scoring efficiency
+    const buildingLoadKw = parseFloat(await redisClient.get(`site:${SITE_ID}:building_load_kw`)) || 0;
+    const siteConfig = await redisClient.hGetAll(`site:${SITE_ID}:config`);
+    const limitKw = parseFloat(siteConfig.max_capacity_kw) || 0;
+    const siteLoadData = { loadKw: buildingLoadKw, limitKw };
+
     for (const vehicle of result.rows) {
       const iso = normalizeIso(vehicle.iso);
       const key = `l1:${iso}:vehicle:${vehicle.id}`;
@@ -472,24 +469,7 @@ async function syncDigitalTwin() {
         lastSync = existingData.last_sync;
       }
 
-      // [L1-121] Fetch site data from Redis for confidence score calculation
-      let siteData = null;
-      if (vehicle.site_id) {
-        try {
-          const siteConfig = await redisClient.hGetAll(`site:${vehicle.site_id}:config`);
-          const buildingLoadRaw = await redisClient.get(`site:${vehicle.site_id}:building_load_kw`);
-          if (siteConfig && Object.keys(siteConfig).length > 0) {
-            siteData = {
-              loadKw: parseFloat(buildingLoadRaw || '0'),
-              limitKw: parseFloat(siteConfig.max_capacity_kw || '0')
-            };
-          }
-        } catch (e) {
-          console.warn(`[L1 Physics] Redis error fetching site data for ${vehicle.site_id}:`, e.message);
-        }
-      }
-
-      const confidenceScore = calculateConfidenceScore(streak, lastSync, siteData);
+      const confidenceScore = calculateConfidenceScore(streak, lastSync, siteLoadData);
 
       // [L7 Fallback] If resource_type is missing or default, check L7's Redis cache
       let resourceType = vehicle.resource_type;
