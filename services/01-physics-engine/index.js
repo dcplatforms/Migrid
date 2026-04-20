@@ -71,9 +71,10 @@ async function connectServices() {
  * [L1-118] Calculate Data Confidence Score for L11 ML Engine
  * @param {number} streak - Current sentinel streak
  * @param {string} lastSync - ISO string of last sync
+ * @param {object} siteLoadData - Optional site load data { loadKw, limitKw }
  * @returns {number} Confidence score (0.0000 to 1.0000)
  */
-function calculateConfidenceScore(streak, lastSync) {
+function calculateConfidenceScore(streak, lastSync, siteLoadData) {
   let score = 0.5; // Base confidence
 
   // Streak bonus: 0.1 per streak point, max 0.4 (total 0.9)
@@ -87,9 +88,22 @@ function calculateConfidenceScore(streak, lastSync) {
     if (diffHours < 24) {
       score += 0.1;
     }
+
+    // [L1-120] Confidence Decay: -0.2 if inactive for > 30 days
+    if (diffHours > 24 * 30) {
+      score -= 0.2;
+    }
   }
 
-  return parseFloat(Math.min(1.0, score).toFixed(4));
+  // [L1-121] Site Energy Snapshot: -0.15 if load > 90% capacity
+  if (siteLoadData && siteLoadData.limitKw > 0) {
+    const loadFactor = siteLoadData.loadKw / siteLoadData.limitKw;
+    if (loadFactor > 0.9) {
+      score -= 0.15;
+    }
+  }
+
+  return parseFloat(Math.max(0, Math.min(1.0, score)).toFixed(4));
 }
 
 /**
@@ -177,7 +191,18 @@ async function handlePhysicsAlert(msg) {
     const streakVal = await redisClient.get(streakKey);
     currentStreak = parseInt(streakVal || '0');
   }
-  const confidenceScore = calculateConfidenceScore(currentStreak, payload.timestamp || new Date().toISOString());
+
+  // [L1-121] Fetch Site Load Data for Confidence Scoring
+  const alertSiteId = payload.site_id || payload.metadata?.site_id || SITE_ID;
+  const buildingLoadKw = parseFloat(await redisClient.get(`site:${alertSiteId}:building_load_kw`)) || 0;
+  const siteConfig = await redisClient.hGetAll(`site:${alertSiteId}:config`);
+  const limitKw = parseFloat(siteConfig.max_capacity_kw) || 0;
+
+  const confidenceScore = calculateConfidenceScore(
+    currentStreak,
+    payload.timestamp || new Date().toISOString(),
+    { loadKw: buildingLoadKw, limitKw }
+  );
 
   // 1. Verify the Physics: Set Safety Lock in Redis for critical violations
   if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
@@ -408,15 +433,24 @@ async function syncDigitalTwin() {
   try {
     // JOIN with fleets to get the ISO region for regional keying
     // JOIN with vpp_resources to include resource_type (EV/BESS) for L2/L3 alignment
+    // JOIN with charging_sessions/chargers to get site_id (location_id) for L1-121
     // [L1-107] Enhancement: Fetch physics_score and is_high_fidelity for L2 reporting
     const result = await pgClient.query(
-      `SELECT v.id, v.fleet_id, v.battery_capacity_kwh, v.current_soc, v.is_plugged_in, v.v2g_enabled, v.physics_score, v.is_high_fidelity, f.iso, COALESCE(vr.resource_type, 'EV') as resource_type
+      `SELECT v.id, v.fleet_id, v.battery_capacity_kwh, v.current_soc, v.is_plugged_in, v.v2g_enabled, v.physics_score, v.is_high_fidelity, f.iso, COALESCE(vr.resource_type, 'EV') as resource_type, c.location_id as site_id
        FROM vehicles v
        JOIN fleets f ON v.fleet_id = f.id
        LEFT JOIN vpp_resources vr ON v.id = vr.vehicle_id
+       LEFT JOIN charging_sessions cs ON v.id = cs.vehicle_id AND cs.end_time IS NULL
+       LEFT JOIN chargers c ON cs.charger_id = c.id
        WHERE v.fleet_id = $1`,
       [fleetId]
     );
+
+    // [L1-121] Fetch Site Load Data once per sync cycle for Confidence Scoring efficiency
+    const buildingLoadKw = parseFloat(await redisClient.get(`site:${SITE_ID}:building_load_kw`)) || 0;
+    const siteConfig = await redisClient.hGetAll(`site:${SITE_ID}:config`);
+    const limitKw = parseFloat(siteConfig.max_capacity_kw) || 0;
+    const siteLoadData = { loadKw: buildingLoadKw, limitKw };
 
     for (const vehicle of result.rows) {
       const iso = normalizeIso(vehicle.iso);
@@ -435,7 +469,7 @@ async function syncDigitalTwin() {
         lastSync = existingData.last_sync;
       }
 
-      const confidenceScore = calculateConfidenceScore(streak, lastSync);
+      const confidenceScore = calculateConfidenceScore(streak, lastSync, siteLoadData);
 
       // [L7 Fallback] If resource_type is missing or default, check L7's Redis cache
       let resourceType = vehicle.resource_type;
