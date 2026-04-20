@@ -1,6 +1,6 @@
 # MiGrid Master Backlog & Strategic Dependency Matrix
 
-**Version:** 10.1.0
+**Version:** 10.1.1
 **Last Updated:** April 2026
 **Status:** Phase 5 "Enterprise Scale" (92% Complete)
 
@@ -41,11 +41,13 @@
 
 ## 🛠️ Active Engineering Sprints (Phase 5)
 
-### Layer 1: Physics Engine (v10.1.0)
+### Layer 1: Physics Engine (v10.1.1)
 - [✓] **Digital Twin Sync**: Fleet-filtered Redis sync for vehicle states.
 - [✓] **Contextual Safety Locks**: metadata-enriched `l1:safety:lock:context` in Redis.
 - [✓] **High-Fidelity Reconcile**: Preservation of regional metadata in audit logs.
 - [✓] **Confidence Scoring**: Integrated 0.0-1.0 confidence metrics for L11 training.
+- [✓] **[L1-120] Confidence Decay**: -0.2 penalty for syncs > 30 days old.
+- [✓] **[L1-121] Site Integration**: -0.15 penalty for sites > 90% load utilization.
 
 ### Layer 2: Grid Signal (v2.4.5)
 - [✓] **BESS-Aware Safety**: 10% variance threshold enforced for stationary storage.

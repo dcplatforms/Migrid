@@ -433,12 +433,15 @@ async function syncDigitalTwin() {
   try {
     // JOIN with fleets to get the ISO region for regional keying
     // JOIN with vpp_resources to include resource_type (EV/BESS) for L2/L3 alignment
+    // JOIN with charging_sessions/chargers to get site_id (location_id) for L1-121
     // [L1-107] Enhancement: Fetch physics_score and is_high_fidelity for L2 reporting
     const result = await pgClient.query(
-      `SELECT v.id, v.fleet_id, v.battery_capacity_kwh, v.current_soc, v.is_plugged_in, v.v2g_enabled, v.physics_score, v.is_high_fidelity, f.iso, COALESCE(vr.resource_type, 'EV') as resource_type
+      `SELECT v.id, v.fleet_id, v.battery_capacity_kwh, v.current_soc, v.is_plugged_in, v.v2g_enabled, v.physics_score, v.is_high_fidelity, f.iso, COALESCE(vr.resource_type, 'EV') as resource_type, c.location_id as site_id
        FROM vehicles v
        JOIN fleets f ON v.fleet_id = f.id
        LEFT JOIN vpp_resources vr ON v.id = vr.vehicle_id
+       LEFT JOIN charging_sessions cs ON v.id = cs.vehicle_id AND cs.end_time IS NULL
+       LEFT JOIN chargers c ON cs.charger_id = c.id
        WHERE v.fleet_id = $1`,
       [fleetId]
     );

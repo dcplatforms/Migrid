@@ -2,7 +2,7 @@
 
 # MiGrid Platform Status Report
 
-**Version 10.1.0** • **April 2026**
+**Version 10.1.1** • **April 2026**
 
 [![Phase](https://img.shields.io/badge/Phase_5-Enterprise_Scale-blue.svg)](../docs/roadmap.md)
 [![Progress](https://img.shields.io/badge/Progress-69%25_Complete-blue.svg)](PLATFORM_STATUS.md)
