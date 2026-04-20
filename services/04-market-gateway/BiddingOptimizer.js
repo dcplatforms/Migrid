@@ -133,6 +133,7 @@ class BiddingOptimizer {
 
     // 2. Fetch safety lock context for audit (L11 ML Engine readiness)
     let physicsScore = 1.0;
+    let confidenceScore = 1.0;
     let auditContext = null;
     try {
       const lockContextRaw = await this.redisClient.get('l1:safety:lock:context');
@@ -141,26 +142,30 @@ class BiddingOptimizer {
         if (auditContext.physics_score !== undefined) {
           physicsScore = parseFloat(auditContext.physics_score);
         }
+        if (auditContext.confidence_score !== undefined) {
+          confidenceScore = parseFloat(auditContext.confidence_score);
+        }
       }
     } catch (err) {
       console.warn('[BiddingOptimizer] Failed to fetch safety lock context for audit:', err.message);
     }
 
-    const capacityFidelity = physicsScore > 0.95 ? 'HIGH_FIDELITY' : 'STANDARD';
+    // High-Fidelity logic: physics_score OR confidence_score > 0.95 (Align with L10 v4.3.1)
+    const capacityFidelity = (physicsScore > 0.95 || confidenceScore > 0.95) ? 'HIGH_FIDELITY' : 'STANDARD';
 
     // 3. Handle Halted Bidding
     if (locks.l1 || locks.l4) {
       if (locks.l1) {
-        console.warn(`🚨 [L4 Market Gateway v3.7.0] Bidding halted: L1 safety lock is active for ${iso}`);
+        console.warn(`🚨 [L4 Market Gateway v3.8.0] Bidding halted: L1 safety lock is active for ${iso}`);
         if (auditContext) {
-          console.warn(`[L4 Safety Context] Reason: ${auditContext.event_type}, Severity: ${auditContext.severity}, Score: ${auditContext.physics_score || 'N/A'}, Region: ${auditContext.iso_region || 'N/A'}`);
+          console.warn(`[L4 Safety Context] Reason: ${auditContext.event_type}, Severity: ${auditContext.severity}, Score: ${auditContext.physics_score || 'N/A'}, Confidence: ${auditContext.confidence_score || 'N/A'}, Region: ${auditContext.iso_region || 'N/A'}`);
         }
       }
 
       if (locks.l4) {
         const regionalLockActive = await this.redisClient.get(`l4:grid:lock:${iso.toUpperCase().replace(/-/g, '')}`);
         const scope = (regionalLockActive === 'true' || regionalLockActive === '1') ? `Regional (${iso})` : 'Global';
-        console.warn(`⚠️ [L4 Market Gateway v3.7.0] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
+        console.warn(`⚠️ [L4 Market Gateway v3.8.0] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
       }
 
       return {
@@ -168,6 +173,7 @@ class BiddingOptimizer {
         audit: {
           locks,
           physics_score: physicsScore,
+          confidence_score: confidenceScore,
           capacity_fidelity: capacityFidelity,
           audit_context: auditContext,
           timestamp: new Date().toISOString()
@@ -205,6 +211,7 @@ class BiddingOptimizer {
       audit: {
         locks,
         physics_score: physicsScore,
+        confidence_score: confidenceScore,
         capacity_fidelity: capacityFidelityFromRedis, // Already normalized in getAggregatedCapacity
         audit_context: {
           ...auditContext,

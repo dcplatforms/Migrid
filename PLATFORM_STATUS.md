@@ -805,7 +805,7 @@ done
 | **L1** | Physics Engine | `10.1.0` | ✅ Operational |
 | **L2** | Grid Signal | `2.4.5` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.0` | ✅ Operational |
-| **L4** | Market Gateway | `3.7.0` | ✅ Operational |
+| **L4** | Market Gateway | `3.8.0` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
 | **L6** | Engagement Engine | `5.9.0` | ✅ Operational |
 | **L7** | Device Gateway | `5.6.0` | ✅ Operational |
