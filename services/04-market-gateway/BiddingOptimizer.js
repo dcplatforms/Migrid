@@ -127,6 +127,7 @@ class BiddingOptimizer {
    */
   async generateDayAheadBids(iso) {
     await this.connect();
+    const isoKey = iso.toUpperCase().replace(/-/g, '');
 
     // 1. Verify the Physics & Grid signals: Check for safety locks before bidding
     const locks = await this.getSafetyLockStatus(iso);
@@ -145,12 +146,20 @@ class BiddingOptimizer {
         if (auditContext.confidence_score !== undefined) {
           confidenceScore = parseFloat(auditContext.confidence_score);
         }
+      } else {
+        // [L4 v3.8.1] Fallback: Query L2 Unified Context for regional confidence averages
+        const unifiedRaw = await this.redisClient.get('l2:unified:context');
+        if (unifiedRaw) {
+          const unified = JSON.parse(unifiedRaw);
+          confidenceScore = unified.regional_confidence?.[isoKey] || unified.confidence_score || 1.0;
+          console.log(`[BiddingOptimizer] Using L2 regional confidence fallback for ${isoKey}: ${confidenceScore}`);
+        }
       }
     } catch (err) {
       console.warn('[BiddingOptimizer] Failed to fetch safety lock context for audit:', err.message);
     }
 
-    // High-Fidelity logic: physics_score OR confidence_score > 0.95 (Align with L10 v4.3.1)
+    // High-Fidelity logic: physics_score > 0.95 OR confidence_score > 0.95 (Align with L10 v4.3.1)
     const capacityFidelity = (physicsScore > 0.95 || confidenceScore > 0.95) ? 'HIGH_FIDELITY' : 'STANDARD';
 
     // 3. Handle Halted Bidding
@@ -185,8 +194,18 @@ class BiddingOptimizer {
     const { capacity: pVppKw, fidelity: capacityFidelityFromRedis, breakdown } = await this.getAggregatedCapacity(iso);
     const pVppMw = pVppKw.dividedBy(1000);
 
-    const degradationCostKwh = new Decimal(process.env.DEGRADATION_COST_KWH || '0.02');
-    const degradationCostMwh = degradationCostKwh.times(1000); // $20/MWh
+    // [L4-BESS-OPT] Resource-Aware Degradation Costs
+    const evDegradationKwh = new Decimal(process.env.DEGRADATION_COST_KWH || '0.02');
+    const bessDegradationKwh = new Decimal(process.env.BESS_DEGRADATION_COST_KWH || '0.01');
+
+    // Calculate weighted degradation cost based on resource breakdown
+    let weightedDegradationKwh = evDegradationKwh;
+    if (pVppKw.gt(0)) {
+      const evWeight = new Decimal(breakdown.ev).dividedBy(pVppKw);
+      const bessWeight = new Decimal(breakdown.bess).dividedBy(pVppKw);
+      weightedDegradationKwh = evDegradationKwh.times(evWeight).plus(bessDegradationKwh.times(bessWeight));
+    }
+    const degradationCostMwh = weightedDegradationKwh.times(1000);
 
     // 5. Generate Bids
     const forecasts = await this.pricingService.getDayAheadForecast(iso);

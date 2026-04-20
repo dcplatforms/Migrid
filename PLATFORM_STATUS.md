@@ -802,10 +802,10 @@ done
 
 | Layer | Service | Version | Status |
 | :--- | :--- | :--- | :--- |
-| **L1** | Physics Engine | `10.1.0` | ✅ Operational |
-| **L2** | Grid Signal | `2.4.5` | ✅ Operational |
+| **L1** | Physics Engine | `10.1.2` | ✅ Operational |
+| **L2** | Grid Signal | `2.4.7` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.0` | ✅ Operational |
-| **L4** | Market Gateway | `3.8.0` | ✅ Operational |
+| **L4** | Market Gateway | `3.8.1` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
 | **L6** | Engagement Engine | `5.9.0` | ✅ Operational |
 | **L7** | Device Gateway | `5.6.0` | ✅ Operational |
@@ -821,7 +821,7 @@ done
 - **L6 Engagement Engine (v5.9.0)**: Deployed **BESS Power** and **BESS Precision Specialist** achievements. Hardened Kafka metadata with `resource_type` and implemented L5 anti-fatigue notification priority flags.
 - **L10 Token Engine (v4.3.1)**: Hardened high-fidelity auditing for L11 ML Engine by persisting `confidence_score` in `token_reward_log`. Fixed critical `rule_id`/`event_id` swap bug in idempotency helper.
 - **L2 Grid Signal (v2.4.5)**: Optimized OpenADR reporting by aggregating regional digital twin stats and high-fidelity capacity breakdowns into a unified `l2:unified:context` Redis object.
-- **L4 Market Gateway (v3.7.0)**: Activated **Nord Pool & ERCOT** adapters, **Bidding Auditability** (FIX-PROT-AUDIT), and **Regional Grid Lock** observability.
+- **L4 Market Gateway (v3.8.1)**: Activated **Nord Pool & ERCOT** adapters, **Bidding Auditability** (FIX-PROT-AUDIT), **Resource-Aware Bidding (BESS/EV)**, and **L2 Confidence Fallbacks**.
 - **L7 Device Gateway (v5.6.0)**: Implemented **Horizontal Command Routing** via Redis Pub/Sub, hardened **StatusNotification** telemetry, and advanced ISO 15118-20 certificate exchange logic.
 - **L1 Physics Engine (v10.1.0)**: Deployed **Confidence Scoring** (0.0-1.0) for ML training and finalized **High-Fidelity Reconciliation** of regional metadata.
 - **L3 VPP Aggregator (v3.3.0)**: Refactored capacity tracking to provide high-fidelity EV/BESS breakdowns for grid-aware dispatching.
