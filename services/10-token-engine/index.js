@@ -58,10 +58,10 @@ async function getOrCreateDriverWallet(driverId) {
   return res.rows[0];
 }
 
-async function logRewardTransaction(driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status = 'pending', iso = 'CAISO', physicsScore = null, isHighFidelity = false, multiplierReason = 'Standard Reward', confidenceScore = null) {
+async function logRewardTransaction(driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status = 'pending', iso = 'CAISO', physicsScore = null, isHighFidelity = false, multiplierReason = 'Standard Reward', confidenceScore = null, resourceType = 'EV') {
   const res = await pgClient.query(
-    'INSERT INTO token_reward_log(driver_id, rule_id, triggering_event_id, source_value, points_awarded, status, iso, physics_score, is_high_fidelity, multiplier_reason, confidence_score) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *;',
-    [driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status, iso, physicsScore, isHighFidelity, multiplierReason, confidenceScore]
+    'INSERT INTO token_reward_log(driver_id, rule_id, triggering_event_id, source_value, points_awarded, status, iso, physics_score, is_high_fidelity, multiplier_reason, confidence_score, resource_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *;',
+    [driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status, iso, physicsScore, isHighFidelity, multiplierReason, confidenceScore, resourceType]
   );
   return res.rows[0];
 }
@@ -253,10 +253,10 @@ async function start() {
           console.log(`[L10] Reward calculated: ${pointsAwarded.toNumber()} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Market Mult: ${marketMultiplier.multiplier.toNumber()})`);
         }
 
-          if (pointsAwarded.isZero()) {
-            console.log(`[L10] Reward is zero for event ${event_id}, skipping.`);
-            return;
-          }
+        if (pointsAwarded.isZero()) {
+          console.log(`[L10] Reward is zero for event ${event_id}, skipping.`);
+          return;
+        }
 
         // 4. Log the Reward (pending)
         const rewardLog = await logRewardTransaction(
@@ -270,7 +270,8 @@ async function start() {
           physicsScorePersist,
           isHighFidelityPersist,
           multiplierReason,
-          confidenceScorePersist
+          confidenceScorePersist,
+          resourceTypePersist
         );
 
         // 6. Execute Blockchain/Wallet Transaction
