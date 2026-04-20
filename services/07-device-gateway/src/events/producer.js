@@ -81,7 +81,7 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
         is_high_fidelity: isHighFidelity,
         fidelity_status: fidelityStatus,
         resource_type: resourceType,
-        source: 'L7_GATEWAY_V5.5.0'
+        source: 'L7_GATEWAY_V5.6.0'
     };
 
     await producer.send({
@@ -112,10 +112,10 @@ async function publishSessionEvent(type, payload) {
     });
 
     // Also publish to a generic charging_events topic for L6/L10 consumption if it's a completion
-    if (type === 'SESSION_COMPLETED') {
+    if (type === 'SESSION_COMPLETED' || type === 'CHARGER_STATUS_UPDATED') {
         await producer.send({
             topic: 'charging_events',
-            messages: [{ value: JSON.stringify({ ...payload, type: 'SESSION_COMPLETED' }) }]
+            messages: [{ value: JSON.stringify({ ...payload, type: type }) }]
         });
     }
 }

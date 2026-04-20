@@ -3,7 +3,7 @@ const http = require('http');
 const express = require('express');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
-const { redis, registerConnection, removeConnection } = require('./state/connectionMgr');
+const { redis, redisSub, registerConnection, removeConnection } = require('./state/connectionMgr');
 const { handleOcppMessage } = require('./ocpp/handler');
 const { connectProducer, publishSessionEvent } = require('./events/producer');
 const { connectConsumer } = require('./events/consumer');
@@ -15,6 +15,8 @@ app.use(express.json());
 const pool = new Pool({
   connectionString: config.databaseUrl,
 });
+
+const podId = process.env.POD_ID || 'gateway-instance-1';
 
 // Local memory map for active WebSocket connections on this instance
 const localConnections = new Map();
@@ -165,17 +167,42 @@ const handleControlSignal = async (topic, payload) => {
     if (topic === 'migrid.l8.control') {
         // DLM update for multiple chargers
         for (const allocation of payload.allocations) {
-            await sendSetChargingProfile(allocation.chargePointId, allocation.limitKw, 'Charge');
+            await routeControlCommand(allocation.chargePointId, allocation.limitKw, 'Charge');
         }
     } else if (topic === 'migrid.l3.v2g') {
         // Specific V2G/V2X Dispatch
-        await sendSetChargingProfile(payload.chargePointId, payload.limitKw, payload.mode || 'Discharge');
+        await routeControlCommand(payload.chargePointId, payload.limitKw, payload.mode || 'Discharge');
     }
 };
 
+/**
+ * Routes a control command to the correct L7 instance.
+ */
+async function routeControlCommand(chargePointId, limitKw, mode) {
+    if (localConnections.has(chargePointId)) {
+        await sendSetChargingProfile(chargePointId, limitKw, mode);
+    } else {
+        // Look up target pod for this charger
+        const targetPodId = await redis.get(`charger_route:${chargePointId}`);
+        if (targetPodId) {
+            console.log(`[L7] Routing command for ${chargePointId} to pod ${targetPodId} via Redis Pub/Sub`);
+            await redis.publish(`l7:commands:${targetPodId}`, JSON.stringify({
+                chargePointId,
+                limitKw,
+                mode
+            }));
+        } else {
+            console.warn(`⚠️ [L7] No route found for charger ${chargePointId}. Command dropped.`);
+        }
+    }
+}
+
 async function sendSetChargingProfile(chargePointId, limitKw, mode) {
     const connection = localConnections.get(chargePointId);
-    if (!connection || connection.ws.readyState !== WebSocket.OPEN) return;
+    if (!connection || connection.ws.readyState !== WebSocket.OPEN) {
+        console.warn(`⚠️ [L7] Cannot send command to ${chargePointId}: Connection not open locally.`);
+        return;
+    }
 
     const rawRegion = await redis.get(`charger_region:${chargePointId}`) || 'CAISO';
     const isoRegion = rawRegion.toUpperCase().replace(/-/g, '');
@@ -256,7 +283,6 @@ server.on('upgrade', (request, socket, head) => {
 
 wss.on('connection', async (ws, request, chargePointId, protocol) => {
     console.log(`[L7] Charger Connected: ${chargePointId} | Protocol: ${protocol}`);
-    const podId = process.env.POD_ID || 'gateway-instance-1';
 
     const chargerRes = await pool.query('SELECT iso_region FROM chargers WHERE serial_number = $1', [chargePointId]);
     const rawRegion = chargerRes.rows[0]?.iso_region || 'CAISO';
@@ -264,6 +290,14 @@ wss.on('connection', async (ws, request, chargePointId, protocol) => {
 
     localConnections.set(chargePointId, { ws, protocol, isoRegion });
     await registerConnection(chargePointId, podId, isoRegion);
+
+    await publishSessionEvent('CHARGER_CONNECTED', {
+        chargePointId,
+        podId,
+        iso_region: isoRegion,
+        protocol,
+        timestamp: new Date().toISOString()
+    });
 
     ws.on('message', async (data) => {
         // Pass negotiated protocol to the handler
@@ -274,6 +308,12 @@ wss.on('connection', async (ws, request, chargePointId, protocol) => {
         console.log(`[L7] Charger Disconnected: ${chargePointId}`);
         localConnections.delete(chargePointId);
         await removeConnection(chargePointId);
+
+        await publishSessionEvent('CHARGER_DISCONNECTED', {
+            chargePointId,
+            podId,
+            timestamp: new Date().toISOString()
+        });
     });
 });
 
@@ -281,8 +321,20 @@ async function startServer() {
     await connectProducer();
     await connectConsumer(handleControlSignal);
 
+    // Subscribe to commands routed from other L7 pods
+    await redisSub.subscribe(`l7:commands:${podId}`);
+    redisSub.on('message', async (channel, message) => {
+        try {
+            const { chargePointId, limitKw, mode } = JSON.parse(message);
+            console.log(`[L7] Received routed command from Redis for ${chargePointId}`);
+            await sendSetChargingProfile(chargePointId, limitKw, mode);
+        } catch (e) {
+            console.error('[L7] Error processing routed command:', e.message);
+        }
+    });
+
     server.listen(config.port, () => {
-        console.log(`[L7] Device Gateway listening on port ${config.port}`);
+        console.log(`[L7] Device Gateway listening on port ${config.port} (Pod: ${podId})`);
     });
 }
 

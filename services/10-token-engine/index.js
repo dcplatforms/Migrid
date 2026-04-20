@@ -58,10 +58,10 @@ async function getOrCreateDriverWallet(driverId) {
   return res.rows[0];
 }
 
-async function logRewardTransaction(driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status = 'pending', iso = 'CAISO', physicsScore = null, isHighFidelity = false, multiplierReason = 'Standard Reward', confidenceScore = null) {
+async function logRewardTransaction(driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status = 'pending', iso = 'CAISO', physicsScore = null, isHighFidelity = false, multiplierReason = 'Standard Reward', confidenceScore = null, resourceType = 'EV') {
   const res = await pgClient.query(
-    'INSERT INTO token_reward_log(driver_id, rule_id, triggering_event_id, source_value, points_awarded, status, iso, physics_score, is_high_fidelity, multiplier_reason, confidence_score) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *;',
-    [driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status, iso, physicsScore, isHighFidelity, multiplierReason, confidenceScore]
+    'INSERT INTO token_reward_log(driver_id, rule_id, triggering_event_id, source_value, points_awarded, status, iso, physics_score, is_high_fidelity, multiplier_reason, confidence_score, resource_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *;',
+    [driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status, iso, physicsScore, isHighFidelity, multiplierReason, confidenceScore, resourceType]
   );
   return res.rows[0];
 }
@@ -172,29 +172,42 @@ async function start() {
           event_id,
           iso: payloadIso,
           physics_score,
+          physicsScore,
           is_vpp_event,
           isVppEvent,
           is_high_fidelity,
           isHighFidelity,
           confidence_score,
-          confidenceScore
+          confidenceScore,
+          resource_type,
+          resourceType
         } = payload;
-        const vppAligned = !!(is_vpp_event || isVppEvent);
 
-          // 1. Ensure Driver Wallet Exists (and get address)
-          const driverWallet = await getOrCreateDriverWallet(driver_id);
-          if (!driverWallet) {
-            console.error(`❌ Failed to get or create wallet for driver: ${driver_id}`);
-            return;
-          }
-          const iso = (payloadIso || driverWallet.iso || 'CAISO').toUpperCase().replace(/-/g, '');
+        const vppAligned = !!(is_vpp_event || isVppEvent);
+        const physicsScoreVal = physics_score !== undefined ? physics_score : physicsScore;
+        const confidenceScoreVal = confidence_score !== undefined ? confidence_score : confidenceScore;
+        const isHighFidelityVal = is_high_fidelity !== undefined ? is_high_fidelity : isHighFidelity;
+        const resourceTypeVal = resource_type || resourceType || 'EV';
+
+        // 1. Ensure Driver Wallet Exists (and get address)
+        const driverWallet = await getOrCreateDriverWallet(driver_id);
+        if (!driverWallet) {
+          console.error(`❌ Failed to get or create wallet for driver: ${driver_id}`);
+          return;
+        }
+        const iso = (payloadIso || driverWallet.iso || 'CAISO').toUpperCase().replace(/-/g, '');
 
         let pointsAwarded = new Decimal(0);
         let rule_id;
         let multiplierReason = 'Standard Reward';
-        let physicsScorePersist = physics_score !== undefined ? parseFloat(physics_score) : null;
-        let isHighFidelityPersist = (is_high_fidelity === true || isHighFidelity === true) || (physicsScorePersist !== null && physicsScorePersist > 0.95);
-        let confidenceScorePersist = confidence_score !== undefined ? parseFloat(confidence_score) : (confidenceScore !== undefined ? parseFloat(confidenceScore) : null);
+
+        let physicsScorePersist = physicsScoreVal !== undefined ? parseFloat(physicsScoreVal) : null;
+        let confidenceScorePersist = confidenceScoreVal !== undefined ? parseFloat(confidenceScoreVal) : null;
+
+        // April 2026 Audit Standard: High fidelity if physics OR confidence > 0.95
+        let isHighFidelityPersist = (isHighFidelityVal === true) ||
+                                     (physicsScorePersist !== null && physicsScorePersist > 0.95) ||
+                                     (confidenceScorePersist !== null && confidenceScorePersist > 0.95);
 
         // Fetch rule early for idempotency check
         const rule = await getRewardRule(action_type);
@@ -213,33 +226,23 @@ async function start() {
           return;
         }
 
-        const isBehavioral = action_type === 'challenge_completed' || action_type === 'achievement_unlocked' || action_type === 'grid_response';
-
         if (isBehavioral) {
           // Fixed-value rewards (points/tokens)
           pointsAwarded = new Decimal(source_value || 0);
-          console.log(`[L10] Behavioral ${action_type} by driver ${driver_id}. Awarding ${pointsAwarded.toNumber()} tokens.`);
+          console.log(`[L10] Behavioral ${action_type} by driver ${driver_id}. Awarding ${pointsAwarded.toNumber()} tokens. [Resource: ${resourceTypeVal}]`);
         } else {
           // Proof of Physics Gate: Energy-based rewards must have verified physics
-          if (physics_score !== undefined && physics_score !== null) {
-            const score = parseFloat(physics_score);
+          if (physicsScorePersist !== null) {
             const fidelityStatus = isHighFidelityPersist ? 'HIGH_FIDELITY' : 'STANDARD';
 
-            if (score <= 0.0) {
-              console.warn(`[L10 Audit] [${fidelityStatus}] Rejected reward for event ${event_id}: Physics Score too low (${score}). Driver: ${driver_id}`);
+            if (physicsScorePersist <= 0.0) {
+              console.warn(`[L10 Audit] [${fidelityStatus}] Rejected reward for event ${event_id}: Physics Score too low (${physicsScorePersist}). Driver: ${driver_id} [Resource: ${resourceTypeVal}]`);
               return;
             }
           } else {
-            console.warn(`[L10 Audit] Rejected energy-based reward for event ${event_id}: Physics Score missing. Driver: ${driver_id}`);
+            console.warn(`[L10 Audit] Rejected energy-based reward for event ${event_id}: Physics Score missing. Driver: ${driver_id} [Resource: ${resourceTypeVal}]`);
             return;
           }
-
-            const rule = await getRewardRule(action_type);
-            if (!rule) {
-              console.warn(`⚠️ No active reward rule found for action type: ${action_type}`);
-              return;
-            }
-            rule_id = rule.rule_id;
 
           // 2. Calculate Reward with Dynamic Boosting (Energy-based)
           const marketMultiplier = await getDynamicMultiplier(iso, action_type, vppAligned);
@@ -250,10 +253,10 @@ async function start() {
           console.log(`[L10] Reward calculated: ${pointsAwarded.toNumber()} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Market Mult: ${marketMultiplier.multiplier.toNumber()})`);
         }
 
-          if (pointsAwarded.isZero()) {
-            console.log(`[L10] Reward is zero for event ${event_id}, skipping.`);
-            return;
-          }
+        if (pointsAwarded.isZero()) {
+          console.log(`[L10] Reward is zero for event ${event_id}, skipping.`);
+          return;
+        }
 
         // 4. Log the Reward (pending)
         const rewardLog = await logRewardTransaction(
@@ -267,7 +270,8 @@ async function start() {
           physicsScorePersist,
           isHighFidelityPersist,
           multiplierReason,
-          confidenceScorePersist
+          confidenceScorePersist,
+          resourceTypePersist
         );
 
         // 6. Execute Blockchain/Wallet Transaction

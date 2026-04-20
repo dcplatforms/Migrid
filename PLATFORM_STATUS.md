@@ -2,7 +2,7 @@
 
 # MiGrid Platform Status Report
 
-**Version 10.1.0** • **April 2026**
+**Version 10.1.1** • **April 2026**
 
 [![Phase](https://img.shields.io/badge/Phase_5-Enterprise_Scale-blue.svg)](../docs/roadmap.md)
 [![Progress](https://img.shields.io/badge/Progress-69%25_Complete-blue.svg)](PLATFORM_STATUS.md)
@@ -93,7 +93,7 @@ This section serves as the mathematical source of truth for platform completion 
 
 ### Phase 5: Enterprise Scale (In-Progress)
 - [~] L9 Commerce Engine (Billing & Tariffs) (65%)
-- [~] L7 ISO 15118 Plug & Charge Certification (85%)
+- [~] L7 ISO 15118 Plug & Charge Certification (90%)
 - [~] L7 OCPI 2.2 Roaming Integration (60%)
 - [x] L4 ERCOT Market Activation
 - [x] L4 Proactive Price Polling Loop
@@ -281,7 +281,7 @@ Strategic alignment and high-fidelity data integrity updates:
 - [✓] **L10 Token Engine (v4.3.1)**: Hardened high-fidelity auditing for L11 ML Engine by persisting `confidence_score` in `token_reward_log`.
 - [✓] **L2 Grid Signal (v2.4.5)**: Optimized OpenADR reporting by aggregating regional digital twin stats into a unified `l2:unified:context` Redis object.
 - [✓] **L1 Physics Engine (v10.1.0)**: Deployed **Confidence Scoring** (0.0-1.0) and synchronized resource-aware metadata via L7 Redis caching to unblock L11 ML training.
-- [✓] **L7 Device Gateway (v5.5.0)**: Deployed session-based **Resource Lifecycle Management** in Redis and hardened ISO 15118-20 EMAID handling.
+- [✓] **L7 Device Gateway (v5.6.0)**: Deployed **Horizontal Command Routing** via Redis Pub/Sub and hardened **StatusNotification** telemetry.
 - [✓] **L3 VPP Aggregator (v3.3.0)**: Refactored **Regional Capacity Tracking** to provide EV vs BESS breakdown and dual-format Redis caching for L2/L4 synchronization.
 
 </details>
@@ -714,7 +714,7 @@ Standards Progress:    ███████████░░░░░░░░
 <tr>
 <td><b>ISO 15118</b></td>
 <td>Plug & Charge with PKI</td>
-<td align="center">85%</td>
+<td align="center">90%</td>
 <td align="center">Q1 2026</td>
 </tr>
 <tr>
@@ -805,10 +805,10 @@ done
 | **L1** | Physics Engine | `10.1.0` | ✅ Operational |
 | **L2** | Grid Signal | `2.4.5` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.0` | ✅ Operational |
-| **L4** | Market Gateway | `3.7.0` | ✅ Operational |
+| **L4** | Market Gateway | `3.8.0` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
 | **L6** | Engagement Engine | `5.9.0` | ✅ Operational |
-| **L7** | Device Gateway | `5.5.0` | ✅ Operational |
+| **L7** | Device Gateway | `5.6.0` | ✅ Operational |
 | **L8** | Energy Manager | `2.1.0` | ✅ Operational |
 | **L9** | Commerce Engine | `5.1.0` | ✅ Operational |
 | **L10**| Token Engine | `4.3.1` | ✅ Operational |
@@ -822,7 +822,7 @@ done
 - **L10 Token Engine (v4.3.1)**: Hardened high-fidelity auditing for L11 ML Engine by persisting `confidence_score` in `token_reward_log`. Fixed critical `rule_id`/`event_id` swap bug in idempotency helper.
 - **L2 Grid Signal (v2.4.5)**: Optimized OpenADR reporting by aggregating regional digital twin stats and high-fidelity capacity breakdowns into a unified `l2:unified:context` Redis object.
 - **L4 Market Gateway (v3.7.0)**: Activated **Nord Pool & ERCOT** adapters, **Bidding Auditability** (FIX-PROT-AUDIT), and **Regional Grid Lock** observability.
-- **L7 Device Gateway (v5.5.0)**: Implemented session-based **Resource Type Caching** in Redis to optimize L1 Physics Engine telemetry routing.
+- **L7 Device Gateway (v5.6.0)**: Implemented **Horizontal Command Routing** via Redis Pub/Sub, hardened **StatusNotification** telemetry, and advanced ISO 15118-20 certificate exchange logic.
 - **L1 Physics Engine (v10.1.0)**: Deployed **Confidence Scoring** (0.0-1.0) for ML training and finalized **High-Fidelity Reconciliation** of regional metadata.
 - **L3 VPP Aggregator (v3.3.0)**: Refactored capacity tracking to provide high-fidelity EV/BESS breakdowns for grid-aware dispatching.
 

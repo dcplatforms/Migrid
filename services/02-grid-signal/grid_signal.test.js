@@ -18,6 +18,7 @@ jest.mock('redis', () => ({
     keys: jest.fn().mockResolvedValue([]),
     scan: jest.fn().mockResolvedValue({ cursor: 0, keys: [] }),
     mGet: jest.fn().mockResolvedValue([]),
+    hGetAll: jest.fn().mockResolvedValue({}),
     on: jest.fn()
   })
 }), { virtual: true });
@@ -794,5 +795,30 @@ describe('L2 Grid Signal Service', () => {
       900,
       expect.stringContaining('exceeds 10% threshold for BESS')
     );
+  });
+
+  test('POST /openadr/v3/events should use regional average confidence (v2.4.6)', async () => {
+    const mockUnifiedContext = {
+      regional_confidence: { CAISO: 0.85 },
+      regional_capacity: {}
+    };
+
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l2:unified:context') return Promise.resolve(JSON.stringify(mockUnifiedContext));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-reg-conf',
+        type: 'demand-response',
+        targets: [{ type: 'region', value: 'caiso' }]
+      });
+
+    expect(response.status).toBe(202);
+    const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
+    expect(sentValue.confidence_score).toBe(0.85);
   });
 });
