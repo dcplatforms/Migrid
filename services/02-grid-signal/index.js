@@ -92,7 +92,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.4.6',
+    version: '2.4.7',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -276,7 +276,8 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
       const confidenceScore = parseFloat((safetyContext.confidence_score !== undefined) ? safetyContext.confidence_score :
                                          (safetyContext.physics_score !== undefined ? safetyContext.physics_score : regionalAvgConfidence.toString()));
       const physicsScore = parseFloat(safetyContext.physics_score ?? '1.0000');
-      const fidelityStatus = physicsScore > 0.95 ? 'HIGH_FIDELITY' : 'STANDARD';
+      // [L1-124] Aligned High-Fidelity Standard: physics > 0.95 OR confidence > 0.95
+      const fidelityStatus = (physicsScore > 0.95 || confidenceScore > 0.95) ? 'HIGH_FIDELITY' : 'STANDARD';
 
       const regionalCapacity = unifiedContext?.regional_capacity?.[isoRegion] || null;
       await producer.send({
@@ -386,7 +387,8 @@ const updateRegionalStats = async () => {
           }
           context.digital_twin[iso].vehicle_count++;
           if (data) {
-            if (data.is_high_fidelity || data.physics_score > 0.95) {
+            // [L1-124] Aligned High-Fidelity Standard
+            if (data.is_high_fidelity || data.physics_score > 0.95 || data.confidence_score > 0.95) {
               context.digital_twin[iso].high_fidelity_count++;
             }
             if (data.resource_type === 'EV') context.digital_twin[iso].ev_count++;

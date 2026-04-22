@@ -1,6 +1,6 @@
 {
   "name": "@migrid/physics-engine",
-  "version": "10.1.1",
+  "version": "10.1.2",
   "main": "index.js",
   "dependencies": {
     "dotenv": "^17.3.1",
