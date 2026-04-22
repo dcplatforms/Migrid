@@ -277,10 +277,10 @@ Sell: LMP > $100/MWh (grid services revenue)
 
 Strategic alignment and high-fidelity data integrity updates:
 
-- [✓] **L6 Engagement Engine (v5.9.0)**: Deployed **BESS Power** and **BESS Precision Specialist** achievements. Hardened Kafka metadata with `resource_type`.
-- [✓] **L10 Token Engine (v4.3.1)**: Hardened high-fidelity auditing for L11 ML Engine by persisting `confidence_score` in `token_reward_log`.
-- [✓] **L2 Grid Signal (v2.4.7)**: Aligned with L1 v10.1.2 High-Fidelity standards and optimized regional confidence tracking.
-- [✓] **L1 Physics Engine (v10.1.2)**: Deployed **High-Fidelity Alignment**, **Multi-Site Awareness**, and **Hardened Offline Mode**.
+- [✓] **L6 Engagement Engine (v5.10.0)**: Deployed **Site Harmony** logic and high-fidelity charging incentives. Enriched notification metadata for L5.
+- [✓] **L10 Token Engine (v4.3.1)**: Hardened high-fidelity auditing and refactored reward rules for BESS vs EV resource types.
+- [✓] **L2 Grid Signal (v2.4.6)**: Implemented BESS-specific 10% safety thresholds and aggregated regional confidence averages.
+- [✓] **L1 Physics Engine (v10.1.1)**: Deployed **Site Energy Snapshot** integration and [L1-120] Confidence Decay penalties.
 - [✓] **L7 Device Gateway (v5.6.0)**: Deployed **Horizontal Command Routing** via Redis Pub/Sub and hardened **StatusNotification** telemetry.
 - [✓] **L3 VPP Aggregator (v3.3.0)**: Refactored **Regional Capacity Tracking** to provide EV vs BESS breakdown and dual-format Redis caching for L2/L4 synchronization.
 
@@ -802,12 +802,12 @@ done
 
 | Layer | Service | Version | Status |
 | :--- | :--- | :--- | :--- |
-| **L1** | Physics Engine | `10.1.2` | ✅ Operational |
-| **L2** | Grid Signal | `2.4.7` | ✅ Operational |
+| **L1** | Physics Engine | `10.1.1` | ✅ Operational |
+| **L2** | Grid Signal | `2.4.6` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.0` | ✅ Operational |
 | **L4** | Market Gateway | `3.8.0` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
-| **L6** | Engagement Engine | `5.9.0` | ✅ Operational |
+| **L6** | Engagement Engine | `5.10.0` | ✅ Operational |
 | **L7** | Device Gateway | `5.6.0` | ✅ Operational |
 | **L8** | Energy Manager | `2.1.0` | ✅ Operational |
 | **L9** | Commerce Engine | `5.1.0` | ✅ Operational |
@@ -818,13 +818,12 @@ done
 
 ## Latest Release Wins (April 2026)
 
-- **L6 Engagement Engine (v5.9.0)**: Deployed **BESS Power** and **BESS Precision Specialist** achievements. Hardened Kafka metadata with `resource_type` and implemented L5 anti-fatigue notification priority flags.
-- **L10 Token Engine (v4.3.1)**: Hardened high-fidelity auditing for L11 ML Engine by persisting `confidence_score` in `token_reward_log`. Fixed critical `rule_id`/`event_id` swap bug in idempotency helper.
-- **L2 Grid Signal (v2.4.7)**: Aligned High-Fidelity status logic with L1 v10.1.2 standards and optimized regional average confidence propagation.
-- **L4 Market Gateway (v3.8.0)**: Activated **Nord Pool & ERCOT** adapters, **Bidding Auditability** (FIX-PROT-AUDIT), and **Regional Grid Lock** observability.
-- **L7 Device Gateway (v5.6.0)**: Implemented **Horizontal Command Routing** via Redis Pub/Sub, hardened **StatusNotification** telemetry, and advanced ISO 15118-20 certificate exchange logic.
-- **L1 Physics Engine (v10.1.2)**: Deployed **High-Fidelity Alignment** ([L1-124]), **Multi-Site Awareness** ([L1-125]), and **Hardened Offline Mode** ([L1-126]).
-- **L3 VPP Aggregator (v3.3.0)**: Refactored capacity tracking to provide high-fidelity EV/BESS breakdowns for grid-aware dispatching.
+- **L6 Engagement Engine (v5.10.0)**: Introduced **Site Harmony** achievement and challenge. Enforced resource-aware physics scoring (10% variance for BESS) and enhanced notification metadata for L5 anti-fatigue batching.
+- **L1 Physics Engine (v10.1.1)**: Implemented **Site Energy Snapshot** integration. Applies confidence penalties for site load exceeding 90% and enforces [L1-120] Confidence Decay for stale vehicle syncs.
+- **L2 Grid Signal (v2.4.6)**: Optimized OpenADR reporting with ISO-specific `regional_confidence` averages. Enforced 10% BESS variance thresholds in the safety consumer.
+- **L4 Market Gateway (v3.8.0)**: `BiddingOptimizer` now prioritizes high-fidelity capacity breakdowns. Enriched bidding audit trails with `ev_capacity_kw` and `bess_capacity_kw` for L11 ML auditing.
+- **L10 Token Engine (v4.3.1)**: Refactored reward processing logic for efficiency. Consistently extracts `resource_type` from Kafka payloads to support differentiated reward auditing.
+- **L7 Device Gateway (v5.6.0)**: Finalized **ISO 15118** certificate simulation (90%) and hardened horizontal scaling via Redis Pub/Sub command routing.
 
 ---
 
@@ -844,7 +843,7 @@ The platform is now actively generating the high-fidelity timeseries data requir
 
 *The Operating System for Sustainable Fleet Electrification*
 
-**Last Updated:** April 2026 • **Platform Version:** 10.1.2 • **Roadmap Status:** 78% Complete (68/87 features)
+**Last Updated:** April 2026 • **Platform Version:** 10.1.1 • **Roadmap Status:** 69% Complete (68/98 features)
 
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-blue.svg)](https://github.com/dcplatforms/Migrid)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)

@@ -132,7 +132,7 @@ function calculatePhysicsMetadata(payload) {
 
   return {
     physicsScore: parseFloat(physicsScore.toFixed(4)),
-    isHighFidelity: physicsScore > 0.95, // [L1-124] Base fidelity
+    isPhysicsHighFidelity: physicsScore > 0.95,
     isSentinelFidelity: physicsScore > 0.99
   };
 }
@@ -146,7 +146,7 @@ async function handlePhysicsAlert(msg) {
 
   const severity = (payload.event_type === 'PHYSICS_FRAUD') ? 'FRAUD' : (payload.event_type === 'CAPACITY_VIOLATION' ? 'CRITICAL' : 'WARNING');
 
-  const { physicsScore, isHighFidelity, isSentinelFidelity } = calculatePhysicsMetadata(payload);
+  const { physicsScore, isPhysicsHighFidelity, isSentinelFidelity } = calculatePhysicsMetadata(payload);
 
   // [L1-114] Sentinel Streak Tracker: Track consecutive 0.99+ sessions in Redis
   if (payload.vehicle_id && (payload.event_type === 'SESSION_COMPLETED' || payload.event_type === 'EFFICIENCY_ALERT')) {
@@ -195,7 +195,7 @@ async function handlePhysicsAlert(msg) {
   // [L1-121] Fetch Site Load Data for Confidence Scoring
   const alertSiteId = payload.site_id || payload.metadata?.site_id || SITE_ID;
   const buildingLoadKw = parseFloat(await redisClient.get(`site:${alertSiteId}:building_load_kw`)) || 0;
-  const siteConfig = (await redisClient.hGetAll(`site:${alertSiteId}:config`)) || {};
+  const siteConfig = await redisClient.hGetAll(`site:${alertSiteId}:config`) || {};
   const limitKw = parseFloat(siteConfig.max_capacity_kw) || 0;
 
   const confidenceScore = calculateConfidenceScore(
@@ -203,6 +203,9 @@ async function handlePhysicsAlert(msg) {
     payload.timestamp || new Date().toISOString(),
     { loadKw: buildingLoadKw, limitKw }
   );
+
+  // [L1-124] April 2026 High-Fidelity Standard: Physics OR Confidence > 0.95
+  const isHighFidelity = isPhysicsHighFidelity || confidenceScore > 0.95;
 
   // 1. Verify the Physics: Set Safety Lock in Redis for critical violations
   if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
@@ -238,15 +241,13 @@ async function handlePhysicsAlert(msg) {
   }
 
   if (isOffline) {
-    // [L1-126] Hardened Offline Mode: Persist scores to local audit log
+    // [L1-126] Hardened Offline Mode: Persist scores to prevent metadata loss
     const offlinePayload = {
       ...payload,
       physics_score: physicsScore.toFixed(4),
       confidence_score: confidenceScore,
-      is_high_fidelity: physicsScore > 0.95 || confidenceScore > 0.95,
-      is_sentinel_fidelity: isSentinelFidelity,
-      source_layer: 'L1',
-      severity: severity
+      is_high_fidelity: isHighFidelity,
+      is_sentinel_fidelity: isSentinelFidelity
     };
     await redisClient.lPush('local_audit_log', JSON.stringify(offlinePayload));
     return;
@@ -343,11 +344,13 @@ async function reconcileLogs() {
       // Map severity correctly
       const severity = (payload.event_type === 'PHYSICS_FRAUD') ? 'FRAUD' : (payload.event_type === 'CAPACITY_VIOLATION' ? 'CRITICAL' : 'WARNING');
 
-      // [L1-126] Hardened Reconciliation: Use persisted scores or re-calculate
-      const physicsScore = payload.physics_score || calculatePhysicsMetadata(payload).physicsScore.toFixed(4);
-      const confidenceScore = payload.confidence_score || 0.5;
-      const isHighFidelity = payload.is_high_fidelity || (parseFloat(physicsScore) > 0.95 || confidenceScore > 0.95);
-      const isSentinelFidelity = payload.is_sentinel_fidelity || parseFloat(physicsScore) > 0.99;
+      // [L1-124] Re-calculate scores for high-fidelity reconciliation
+      // Note: We use the stored scores if available (Hardened Offline Mode)
+      const physicsScore = parseFloat(payload.physics_score || calculatePhysicsMetadata(payload).physicsScore);
+      const isPhysicsHighFidelity = physicsScore > 0.95;
+      const confidenceScore = parseFloat(payload.confidence_score || 0.5);
+      const isHighFidelity = isPhysicsHighFidelity || confidenceScore > 0.95;
+      const isSentinelFidelity = physicsScore > 0.99;
 
       // Re-publish missed alerts to Kafka
       const alert = {
@@ -460,11 +463,20 @@ async function syncDigitalTwin() {
       [fleetId]
     );
 
-    // [L1-121] Fetch Site Load Data once per sync cycle for Confidence Scoring efficiency
-    // [L1-125] Multi-Site Awareness: Per-cycle site load cache
+    // [L1-125] Multi-Site Awareness: Cache site load data for performance
     const siteCache = new Map();
 
     for (const vehicle of result.rows) {
+      const vehicleSiteId = vehicle.site_id || SITE_ID;
+      if (!siteCache.has(vehicleSiteId)) {
+        const buildingLoadKw = parseFloat(await redisClient.get(`site:${vehicleSiteId}:building_load_kw`)) || 0;
+        const siteConfig = await redisClient.hGetAll(`site:${vehicleSiteId}:config`) || {};
+        const limitKw = parseFloat(siteConfig.max_capacity_kw) || 0;
+        siteCache.set(vehicleSiteId, { loadKw: buildingLoadKw, limitKw });
+        console.log(`📡 [L1 Physics] Cached site data for ${vehicleSiteId}: ${buildingLoadKw}kW / ${limitKw}kW`);
+      }
+      const siteLoadData = siteCache.get(vehicleSiteId);
+
       const iso = normalizeIso(vehicle.iso);
       const key = `l1:${iso}:vehicle:${vehicle.id}`;
       const vehicleSiteId = vehicle.site_id || SITE_ID;
@@ -504,11 +516,14 @@ async function syncDigitalTwin() {
 
       const physicsScore = parseFloat(vehicle.physics_score || 1.0);
 
+      // [L1-124] April 2026 High-Fidelity Standard
+      const isHighFidelity = physicsScore > 0.95 || confidenceScore > 0.95;
+
       await redisClient.setEx(key, 60, JSON.stringify({
         ...vehicle,
         resource_type: resourceType,
         physics_score: physicsScore,
-        is_high_fidelity: (physicsScore > 0.95 || confidenceScore > 0.95), // [L1-124] High-Fidelity Alignment
+        is_high_fidelity: isHighFidelity,
         is_sentinel_fidelity: physicsScore > 0.99,
         confidence_score: confidenceScore,
         last_sync: new Date().toISOString()

@@ -362,6 +362,28 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.physics_score).toBe("0.9900");
   });
 
+  test('[L1-124] should flag high-fidelity if confidence_score > 0.95 even if physics is lower', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'SESSION_COMPLETED',
+        vehicle_id: 'vehicle-hf-test',
+        efficiency_pct: 90.0, // Physics Score 0.90
+        timestamp: new Date().toISOString()
+      })
+    };
+
+    // Mock streak = 5. Confidence = 0.5 (base) + 0.4 (max streak) + 0.1 (recent) = 1.0
+    global.mockRedisGet.mockResolvedValueOnce('5'); // streak
+    global.mockRedisGet.mockResolvedValueOnce('0'); // building_load_kw
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.physics_score).toBe("0.9000");
+    expect(alertValue.confidence_score).toBe(1.0);
+    expect(alertValue.is_high_fidelity).toBe(true); // Due to confidence > 0.95
+  });
+
   test('should include is_sentinel_fidelity for ultra-high efficiency', async () => {
     const msg = {
       payload: JSON.stringify({
@@ -542,7 +564,7 @@ describe('L1 Physics Metadata Calculation', () => {
     const payload = { event_type: 'EFFICIENCY_ALERT', efficiency_pct: 96.0 };
     const metadata = physicsEngine.calculatePhysicsMetadata(payload);
     expect(metadata.physicsScore).toBe(0.9600);
-    expect(metadata.isHighFidelity).toBe(true);
+    expect(metadata.isPhysicsHighFidelity).toBe(true);
     expect(metadata.isSentinelFidelity).toBe(false);
   });
 
@@ -658,9 +680,12 @@ describe('L1 Physics Engine Digital Twin Sync', () => {
     thirtyOneDaysAgo.setDate(thirtyOneDaysAgo.getDate() - 31);
 
     global.mockRedisGet
-      .mockResolvedValueOnce('0') // Streak for siteData buildingLoadKw
-      .mockResolvedValueOnce('0') // Streak for vehicle
-      .mockResolvedValueOnce(JSON.stringify({ last_sync: thirtyOneDaysAgo.toISOString() })); // lastSync
+      .mockResolvedValueOnce('0') // building_load_kw (initial cache fill)
+      .mockResolvedValueOnce('0') // streak
+      .mockResolvedValueOnce(JSON.stringify({ last_sync: thirtyOneDaysAgo.toISOString() })) // lastSync
+      .mockResolvedValueOnce(null); // L7 resource_type fallback
+
+    global.mockRedisHGetAll.mockResolvedValueOnce({ max_capacity_kw: '0' });
 
     await physicsEngine.syncDigitalTwin();
 
@@ -678,20 +703,57 @@ describe('L1 Physics Engine Digital Twin Sync', () => {
     });
 
     global.mockRedisGet
-      .mockImplementation((key) => {
-        if (key === 'site:SITE-90:building_load_kw') return Promise.resolve('95.0');
-        if (key === 'l1:streak:sentinel:v-site') return Promise.resolve('0');
-        if (key === 'l1:CAISO:vehicle:v-site') return Promise.resolve(null);
-        return Promise.resolve(null);
-      });
+      .mockResolvedValueOnce('95.0') // building_load_kw (initial cache fill)
+      .mockResolvedValueOnce('0') // streak
+      .mockResolvedValueOnce(null) // lastSync
+      .mockResolvedValueOnce(null); // L7 resource_type fallback
 
-    global.mockRedisHGetAll.mockResolvedValue({ max_capacity_kw: '100.0' });
+    global.mockRedisHGetAll.mockResolvedValueOnce({ max_capacity_kw: '100.0' });
 
     await physicsEngine.syncDigitalTwin();
 
     // Confidence = 0.5 (base) - 0.15 (site penalty) = 0.35
     expect(global.mockRedisSetEx).toHaveBeenCalledWith(
       'l1:CAISO:vehicle:v-site',
+      60,
+      expect.stringContaining('"confidence_score":0.35')
+    );
+  });
+
+  test('[L1-125] should use site-specific load data for multi-site fleets during sync', async () => {
+    global.mockPgQuery.mockResolvedValue({
+      rows: [
+        { id: 'v-site-1', fleet_id: 'f1', iso: 'CAISO', site_id: 'SITE-1' },
+        { id: 'v-site-2', fleet_id: 'f1', iso: 'CAISO', site_id: 'SITE-2' }
+      ]
+    });
+
+    global.mockRedisGet
+      .mockResolvedValueOnce('10.0') // building_load_kw for SITE-1
+      .mockResolvedValueOnce('0') // streak for v-site-1
+      .mockResolvedValueOnce(null) // lastSync for v-site-1
+      .mockResolvedValueOnce(null) // L7 resource_type for v-site-1
+      .mockResolvedValueOnce('95.0') // building_load_kw for SITE-2
+      .mockResolvedValueOnce('0') // streak for v-site-2
+      .mockResolvedValueOnce(null) // lastSync for v-site-2
+      .mockResolvedValueOnce(null); // L7 resource_type for v-site-2
+
+    global.mockRedisHGetAll
+      .mockResolvedValueOnce({ max_capacity_kw: '100.0' }) // site config for SITE-1
+      .mockResolvedValueOnce({ max_capacity_kw: '100.0' }); // site config for SITE-2
+
+    await physicsEngine.syncDigitalTwin();
+
+    // v-site-1: Load 10%, no penalty. Confidence = 0.5 (base) = 0.5
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith(
+      'l1:CAISO:vehicle:v-site-1',
+      60,
+      expect.stringContaining('"confidence_score":0.5')
+    );
+
+    // v-site-2: Load 95%, penalty -0.15. Confidence = 0.5 - 0.15 = 0.35
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith(
+      'l1:CAISO:vehicle:v-site-2',
       60,
       expect.stringContaining('"confidence_score":0.35')
     );
@@ -804,6 +866,35 @@ describe('L1 Physics Engine Reconciliation', () => {
     expect(global.mockPgQuery).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO audit_log'),
       expect.arrayContaining(['recon-session-1', 'PHYSICS_FRAUD', 'PJM', 95.0, '0.0000', false])
+    );
+  });
+
+  test('[L1-126] should use pre-calculated scores from offline log during reconciliation', async () => {
+    const payload = {
+      session_id: 'recon-hf-1',
+      event_type: 'EFFICIENCY_ALERT',
+      physics_score: "0.9100",
+      confidence_score: 0.9800,
+      is_high_fidelity: true,
+      timestamp: '2023-10-28T10:00:00Z'
+    };
+
+    global.mockRedisRPop
+      .mockResolvedValueOnce(JSON.stringify(payload))
+      .mockResolvedValueOnce(null);
+
+    await physicsEngine.reconcileLogs();
+
+    // Verify Kafka Alert dispatch uses the pre-calculated high-fidelity status
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.physics_score).toBe("0.9100");
+    expect(alertValue.confidence_score).toBe(0.98);
+    expect(alertValue.is_high_fidelity).toBe(true);
+
+    // Verify DB Insertion uses the pre-calculated scores
+    expect(global.mockPgQuery).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO audit_log'),
+      expect.arrayContaining(['recon-hf-1', '0.9100', true])
     );
   });
 

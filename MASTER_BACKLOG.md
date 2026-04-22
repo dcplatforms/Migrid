@@ -48,12 +48,11 @@
 - [✓] **Confidence Scoring**: Integrated 0.0-1.0 confidence metrics for L11 training.
 - [✓] **[L1-120] Confidence Decay**: -0.2 penalty for syncs > 30 days old.
 - [✓] **[L1-121] Site Integration**: -0.15 penalty for sites > 90% load utilization.
-- [✓] **[L1-124] High-Fidelity Alignment**: Aligned scoring thresholds for L10/L11 consistency.
-- [✓] **[L1-125] Multi-Site Awareness**: Vehicle-specific site telemetry integration for confidence scoring.
-- [✓] **[L1-126] Hardened Offline Mode**: metadata preservation in local Redis during cloud disconnection.
+- [✓] **Site Energy Snapshot**: Real-time load/capacity fetching for confidence scoring.
 
-### Layer 2: Grid Signal (v2.4.7)
+### Layer 2: Grid Signal (v2.4.6)
 - [✓] **BESS-Aware Safety**: 10% variance threshold enforced for stationary storage.
+- [✓] **Regional Confidence**: Averaging vehicle scores for OpenADR high-fidelity fallback.
 - [✓] **Regional Context**: High-fidelity capacity breakdown (Total/EV/BESS) in OpenADR reports.
 - [✓] **Confidence Propagation**: Forwarding L1 confidence scores to L11 pipelines.
 - [✓] **Unified Context**: Optimized aggregation of digital twin stats into `l2:unified:context`.
@@ -73,7 +72,7 @@
 - [✓] **ERCOT & Nord Pool**: Full activation of Texas and Nordic market adapters.
 - [~] **BESS RL Bidding**: Research phase for reinforcement learning models (10%).
 
-### Layer 6: Engagement Engine (v5.9.0)
+### Layer 6: Engagement Engine (v5.10.0)
 - [✓] **ENTSO-E Pioneer**: European regional grid response achievement.
 - [✓] **Sustainability Refinement**: Optimized recursive CTE for consecutive charging streaks.
 - [✓] **ISO Explorer**: Multi-regional achievement logic using bulk CTE/UNION.
@@ -86,6 +85,7 @@
 - [✓] **Sentinel of the Grid**: L1-integrated 30-day high-fidelity streak tracking.
 - [✓] **BESS Specialist**: Achievements for BESS Power and Precision Specialist.
 - [✓] **Hardened Metadata**: Kafka events enriched with `resource_type`.
+- [✓] **Site Harmony**: Integrated site-level physics score into engagement mechanics.
 
 ### Layer 7: Device Gateway (v5.6.0)
 - [✓] **ISO 15118-20**: Hardened Certificate Exchange and EMAID handling (90%).
