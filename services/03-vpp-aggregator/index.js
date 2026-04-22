@@ -123,16 +123,21 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
     // Check Safe Mode sites from L8
     const safeModeSites = await getSafeModeSites();
 
-    // L1 Physics Confidence Derating (Phase 5 Forward Engineering)
+    // L1 Physics Confidence Derating & High-Fidelity Alignment (v3.3.1)
     let physicsMultiplier = 1.0;
-    let isHighFidelity = false;
+    let confidenceScore = 1.0;
+    let isHighFidelity = true;
     if (safetyContext && typeof safetyContext === 'string') {
       try {
         const context = JSON.parse(safetyContext);
-        if (context.physics_score) {
-          physicsMultiplier = parseFloat(context.physics_score);
-          isHighFidelity = physicsMultiplier > 0.95;
-        }
+        physicsMultiplier = context.physics_score ? parseFloat(context.physics_score) : 1.0;
+        confidenceScore = context.confidence_score ? parseFloat(context.confidence_score) : 1.0;
+
+        // High-Fidelity Standard: (physics_score > 0.95 OR confidence_score > 0.95)
+        isHighFidelity = physicsMultiplier > 0.95 || confidenceScore > 0.95;
+
+        // Apply the lower of the two as the capacity derating factor
+        physicsMultiplier = Math.min(physicsMultiplier, confidenceScore);
       } catch (e) {}
     }
 
@@ -235,6 +240,9 @@ const updateGlobalCapacity = async () => {
     let lockedFleetId = null;
     let physicsMultiplier = 1.0;
 
+    let confidenceScore = 1.0;
+    let rawPhysicsScore = 1.0;
+
     if (safetyContextRaw) {
       try {
         const context = JSON.parse(safetyContextRaw);
@@ -244,9 +252,11 @@ const updateGlobalCapacity = async () => {
         if (context.fleet_id) {
           lockedFleetId = context.fleet_id;
         }
-        if (context.physics_score) {
-          physicsMultiplier = parseFloat(context.physics_score);
-        }
+        rawPhysicsScore = context.physics_score ? parseFloat(context.physics_score) : 1.0;
+        confidenceScore = context.confidence_score ? parseFloat(context.confidence_score) : 1.0;
+
+        // Apply the lower of the two as the global capacity derating factor
+        physicsMultiplier = Math.min(rawPhysicsScore, confidenceScore);
       } catch (e) {
         console.error('[VPP Aggregator] Failed to parse safety context in background job:', e.message);
       }
@@ -286,7 +296,9 @@ const updateGlobalCapacity = async () => {
 
     let totalCapacity = 0;
     const regionalCapacity = {};
-    const isHighFidelity = physicsMultiplier > 0.95;
+
+    // High-Fidelity Alignment Standard: (physics_score > 0.95 OR confidence_score > 0.95)
+    const isHighFidelity = (rawPhysicsScore > 0.95 || confidenceScore > 0.95);
 
     result.rows.forEach(row => {
       // ISO Normalization: Uppercase and remove hyphens (e.g., 'ENTSO-E' to 'ENTSOE')
@@ -336,7 +348,7 @@ const initKafka = async () => {
   try {
     await consumer.connect();
     await consumer.subscribe({
-        topics: ['migrid.physics.alerts', 'grid_signals', 'VPP_PARTICIPATION_CHANGED', 'L8_SAFE_MODE_CHANGED'],
+        topics: ['migrid.physics.alerts', 'grid_signals', 'VPP_PARTICIPATION_CHANGED', 'L8_SAFE_MODE_CHANGED', 'charging_events'],
         fromBeginning: false
     });
 
@@ -368,6 +380,14 @@ const initKafka = async () => {
             console.log(`👤 [VPP Aggregator] VPP Participation changed for driver: ${payload.driver_id}. Active: ${payload.vpp_participation_active}`);
             // Trigger global update
             await updateGlobalCapacity();
+        }
+
+        if (topic === 'charging_events') {
+          const { event, chargePointId } = payload;
+          if (event === 'CHARGER_CONNECTED' || event === 'CHARGER_DISCONNECTED') {
+            console.log(`🔌 [VPP Aggregator] Charging event: ${event} on ${chargePointId}. Re-aggregating capacity...`);
+            await updateGlobalCapacity();
+          }
         }
 
         if (topic === 'L8_SAFE_MODE_CHANGED') {

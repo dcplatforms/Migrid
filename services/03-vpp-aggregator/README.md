@@ -90,7 +90,20 @@ REDIS_URL=redis://localhost:6379
 - [x] **L8 Safe Mode Integration**: Site-level exclusion from aggregation during meter offline events.
 - [x] **Contextual Safety Locks**: Respects L1 `l1:safety:lock:context` for granular physics enforcement.
 - [x] **Physics-Aware Forecasting**: Factor L1 variance data (physics_score) into capacity predictions and reporting.
-- [ ] **ML Demand Forecasting (Phase 6)**: Integration with L11 ML Engine for 24-72h ahead capacity predictions.
+- [x] **High-Fidelity Alignment (v3.3.1)**: Integrated `confidence_score` and `(physics_score > 0.95 || confidence_score > 0.95)` audit standards.
+- [x] **Real-Time Event Re-aggregation**: Added Kafka `charging_events` handlers for instant capacity updates on charger connect/disconnect.
+
+## Phase 6 Backlog: AI & Optimization (Q2 2026)
+
+- [ ] **ML Demand Forecasting**: Full integration with L11 ML Engine for 24-72h ahead capacity predictions.
+- [ ] **Dynamic Pricing Optimizer**: Reinforcement learning for bidding optimization based on L4 price streams.
+- [ ] **Predictive Battery Health**: Factor L1 predictive maintenance models into VPP availability factors.
+
+## Phase 8 Backlog: Advanced Grid Services (Q4 2026)
+
+- [ ] **Fast Frequency Response (FFR)**: Implement sub-500ms dispatch trigger for ancillary services.
+- [ ] **V2G Bidirectional Optimization**: ISO 15118-20 based discharge coordination.
+- [ ] **Synthetic Inertia Emulation**: High-frequency grid stability services.
 
 ## Deployment
 
