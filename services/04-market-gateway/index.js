@@ -12,6 +12,7 @@ const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const BiddingOptimizer = require('./BiddingOptimizer');
 const MarketPricingService = require('./MarketPricingService');
+const GridStatusSyncWorker = require('./GridStatusSyncWorker');
 
 const app = express();
 const port = process.env.PORT || 3004;
@@ -307,6 +308,7 @@ app.get('/health', async (req, res) => {
     service: 'market-gateway',
     version: '3.8.1',
     status: 'healthy',
+    mode: process.env.USE_LIVE_DATA === 'true' ? 'LIVE' : 'SIMULATION',
     layer: 'L4',
     markets: SUPPORTED_ISOS,
     safety_locks: {
@@ -532,7 +534,22 @@ async function start() {
     console.log('✅ [Market Gateway] Grid Signal Consumer running (Listening to L2)');
 
     // Start background tasks
-    await startPriceBroadcaster();
+    const GRID_STATUS_API_KEY = process.env.GRID_STATUS_API_KEY;
+    const USE_LIVE_DATA = process.env.USE_LIVE_DATA === 'true';
+
+    if (USE_LIVE_DATA) {
+      console.log('🚀 [Market Gateway] Starting Live Data Integration via GridStatus.io');
+      const syncWorker = new GridStatusSyncWorker(
+        pool,
+        GRID_STATUS_API_KEY,
+        process.env.KAFKA_BROKERS || 'localhost:9092',
+        process.env.REDIS_URL || 'redis://localhost:6379'
+      );
+      await syncWorker.start();
+    } else {
+      console.log('📉 [Market Gateway] Running in Simulation Mode');
+      await startPriceBroadcaster();
+    }
 
     app.listen(port, () => {
       console.log(`[Market Gateway] Running on port ${port}`);

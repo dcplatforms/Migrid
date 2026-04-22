@@ -23,7 +23,9 @@ describe('BiddingOptimizer', () => {
 
     optimizer = new BiddingOptimizer(mockPool, 'redis://localhost:6379');
     // BiddingOptimizer creates its own MarketPricingService, so we need to access it or mock the constructor
-    mockPricingService = MarketPricingService.prototype;
+    mockPricingService = optimizer.pricingService;
+    mockPricingService.getLatestFuelMix = jest.fn().mockResolvedValue([]);
+    mockPricingService.getDARTSpreadAnalysis = jest.fn().mockResolvedValue({ volatility: 0 });
     delete process.env.DEGRADATION_COST_KWH;
   });
 
