@@ -1,6 +1,6 @@
 # MiGrid Master Backlog & Strategic Dependency Matrix
 
-**Version:** 10.1.1
+**Version:** 10.1.2
 **Last Updated:** April 2026
 **Status:** Phase 5 "Enterprise Scale" (92% Complete)
 
@@ -15,6 +15,8 @@
 | **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 (Market) v3.7.0 Bidding Auditability | Phase 5 |
 | **P3** | **OCPI 2.2 Roaming** | L7 (Device) | 🚧 L9 (Commerce) v5.1.0 tariff engine sync | Phase 5 |
 | **P4** | **BESS RL Bidding** | L4 (Market) | 🚧 L3 BESS Integration (75% Complete) | Phase 6 |
+
+| **P5** | **Resource-Aware Bidding** | L4 (Market) | ✅ L3 v3.3.0 High-Fidelity Breakdown | Phase 5 |
 
 | Priority | Task ID | Description | Primary Layers | Status | Strategic Alignment |
 |:---:|:---:|:---|:---:|:---:|:---|
@@ -34,6 +36,7 @@
 | **L5 Driver DX** | PnC Auth Status | **L7 Device Gateway** | Driver cannot use Plug & Charge sessions | 🚧 90% |
 | **L9 Commerce** | Billing Reconciliation | **L1 Physics / L4 Market** | Inaccurate split-billing or tariff logic | ✅ Active |
 | **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.0 Active |
+| **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal** | Missing high-fidelity metadata for L11 | ✅ v2.4.7 Active |
 | **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine** | Rewards fail for 'ISO Explorer' challenges | ✅ v5.6.0 Sync |
 | **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway** | VTN cannot see market-aware grid signals | ✅ v3.6.0 Sync |
 
@@ -41,19 +44,22 @@
 
 ## 🛠️ Active Engineering Sprints (Phase 5)
 
-### Layer 1: Physics Engine (v10.1.1)
+### Layer 1: Physics Engine (v10.1.2)
 - [✓] **Digital Twin Sync**: Fleet-filtered Redis sync for vehicle states.
 - [✓] **Contextual Safety Locks**: metadata-enriched `l1:safety:lock:context` in Redis.
 - [✓] **High-Fidelity Reconcile**: Preservation of regional metadata in audit logs.
 - [✓] **Confidence Scoring**: Integrated 0.0-1.0 confidence metrics for L11 training.
 - [✓] **[L1-120] Confidence Decay**: -0.2 penalty for syncs > 30 days old.
 - [✓] **[L1-121] Site Integration**: -0.15 penalty for sites > 90% load utilization.
+- [✓] **Site Energy Snapshot**: Real-time load/capacity fetching for confidence scoring.
 
-### Layer 2: Grid Signal (v2.4.5)
+### Layer 2: Grid Signal (v2.4.6)
 - [✓] **BESS-Aware Safety**: 10% variance threshold enforced for stationary storage.
+- [✓] **Regional Confidence**: Averaging vehicle scores for OpenADR high-fidelity fallback.
 - [✓] **Regional Context**: High-fidelity capacity breakdown (Total/EV/BESS) in OpenADR reports.
 - [✓] **Confidence Propagation**: Forwarding L1 confidence scores to L11 pipelines.
 - [✓] **Unified Context**: Optimized aggregation of digital twin stats into `l2:unified:context`.
+- [✓] **Fidelity Alignment**: Updated classification logic for consistency with L1 v10.1.2.
 
 ### Layer 3: VPP Aggregator (v3.3.0)
 - [✓] **Redis Capacity Cache**: Sub-50ms reporting for L4 bidding.
@@ -63,13 +69,15 @@
 - [✓] **Physics-Aware Reporting**: Integration of `physics_score` and `is_high_fidelity` for L11.
 - [~] **BESS Integration**: Support for stationary storage assets (75%).
 
-### Layer 4: Market Gateway (v3.8.0)
+### Layer 4: Market Gateway (v3.8.1)
 - [✓] **Bidding Auditability**: High-fidelity audit context (physics_score, confidence_score, capacity_fidelity) for all bids.
 - [✓] **Regional Grid Lock**: Improved observability and specific ISO lock logging.
 - [✓] **ERCOT & Nord Pool**: Full activation of Texas and Nordic market adapters.
+- [✓] **Resource-Aware Bidding**: Weighted degradation costs for EV vs BESS resources.
+- [✓] **Confidence Fallback**: Integration with L2 regional confidence averages.
 - [~] **BESS RL Bidding**: Research phase for reinforcement learning models (10%).
 
-### Layer 6: Engagement Engine (v5.9.0)
+### Layer 6: Engagement Engine (v5.10.0)
 - [✓] **ENTSO-E Pioneer**: European regional grid response achievement.
 - [✓] **Sustainability Refinement**: Optimized recursive CTE for consecutive charging streaks.
 - [✓] **ISO Explorer**: Multi-regional achievement logic using bulk CTE/UNION.
@@ -82,6 +90,7 @@
 - [✓] **Sentinel of the Grid**: L1-integrated 30-day high-fidelity streak tracking.
 - [✓] **BESS Specialist**: Achievements for BESS Power and Precision Specialist.
 - [✓] **Hardened Metadata**: Kafka events enriched with `resource_type`.
+- [✓] **Site Harmony**: Integrated site-level physics score into engagement mechanics.
 
 ### Layer 7: Device Gateway (v5.6.0)
 - [✓] **ISO 15118-20**: Hardened Certificate Exchange and EMAID handling (90%).

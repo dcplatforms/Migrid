@@ -1,5 +1,5 @@
 /**
- * L4: Market Gateway Service (v3.8.0)
+ * L4: Market Gateway Service (v3.8.1)
  * Wholesale energy market integration (CAISO, PJM, ERCOT)
  */
 
@@ -119,12 +119,13 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
     // Phase 5 Enhancement: Match global safety lock to the current ISO region
     let physicsScore = 1.0;
     let confidenceScore = 1.0;
+    const currentIso = iso.toUpperCase().replace(/-/g, '');
+
     try {
       const lockContext = await redisClient.get('l1:safety:lock:context');
       if (lockContext) {
         const details = JSON.parse(lockContext);
         const lockIso = details.iso_region ? details.iso_region.toUpperCase().replace(/-/g, '') : null;
-        const currentIso = iso.toUpperCase().replace(/-/g, '');
 
         // If the lock is global or specifically for this ISO, use its score
         if (!lockIso || lockIso === currentIso || lockIso === 'SYSTEM_WIDE') {
@@ -134,6 +135,13 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
           if (details.confidence_score !== undefined) {
             confidenceScore = parseFloat(details.confidence_score);
           }
+        }
+      } else {
+        // [L4 v3.8.1] Fallback: Query L2 regional confidence averages
+        const unifiedRaw = await redisClient.get('l2:unified:context');
+        if (unifiedRaw) {
+          const unified = JSON.parse(unifiedRaw);
+          confidenceScore = unified.regional_confidence?.[currentIso] || unified.confidence_score || 1.0;
         }
       }
     } catch (err) {
@@ -297,7 +305,7 @@ app.get('/health', async (req, res) => {
 
   res.json({
     service: 'market-gateway',
-    version: '3.8.0',
+    version: '3.8.1',
     status: 'healthy',
     layer: 'L4',
     markets: SUPPORTED_ISOS,
@@ -333,7 +341,7 @@ app.get('/markets/:iso/prices', authenticateToken, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('[Market Gateway Error]', error);
+    console.error('[Market Gateway Error]', error.message);
     res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
@@ -364,7 +372,7 @@ app.post('/bids/optimize', authenticateToken, async (req, res) => {
       audit: audit // FIX-PROT-AUDIT requirements
     });
   } catch (error) {
-    console.error('[Market Gateway Optimization Error]', error);
+    console.error('[Market Gateway Optimization Error]', error.message);
     res.status(500).json({ error: 'An internal server error occurred during optimization' });
   }
 });
@@ -421,7 +429,7 @@ app.post('/bids/submit', authenticateToken, async (req, res) => {
       message: 'Bid submitted to market with audit metadata'
     });
   } catch (error) {
-    console.error('[Market Gateway Error]', error);
+    console.error('[Market Gateway Error]', error.message);
     res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
@@ -447,7 +455,7 @@ app.get('/data/training/lmp', authenticateToken, async (req, res) => {
       status: 'READY_FOR_L11'
     });
   } catch (error) {
-    console.error('[L11 Data Export Error]', error);
+    console.error('[L11 Data Export Error]', error.message);
     res.status(500).json({ error: 'Failed to export training data' });
   }
 });
