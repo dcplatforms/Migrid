@@ -38,7 +38,9 @@ validators['ocpp2.0.1'] = {
     'BootNotification': compileLegacy(),
     'MeterValues': compileLegacy(),
     'StatusNotification': compileLegacy(),
-    'TransactionEvent': compileLegacy()
+    'TransactionEvent': compileLegacy(),
+    'SignCertificate': compileLegacy(),
+    'Get15118EvCertificate': compileLegacy()
 };
 
 function validateSchema(protocol, action, payload) {

@@ -93,8 +93,8 @@ This section serves as the mathematical source of truth for platform completion 
 
 ### Phase 5: Enterprise Scale (In-Progress)
 - [~] L9 Commerce Engine (Billing & Tariffs) (65%)
-- [~] L7 ISO 15118 Plug & Charge Certification (90%)
-- [~] L7 OCPI 2.2 Roaming Integration (60%)
+- [~] L7 ISO 15118 Plug & Charge Certification (95%)
+- [~] L7 OCPI 2.2 Roaming Integration (70%)
 - [x] L4 ERCOT Market Activation
 - [x] L4 Proactive Price Polling Loop
 - [x] L3 Redis-Based Capacity Cache
@@ -532,9 +532,9 @@ Phase 8: Advanced Grid       ░░░░░░░░░░░░░░░░░
 
 **Priority Tasks:**
 
-1. [~] **ISO 15118** — Complete Plug & Charge (85% done)
+1. [~] **ISO-15118-PC** — Complete Plug & Charge (95% done)
 2. [~] **Commerce Engine** — Finish billing logic (65% done)
-3. [~] **OCPI 2.2** — Deploy roaming support (60% done)
+3. [~] **OCPI-2.2-ROAM** — Deploy roaming support (70% done)
 4. [!] **Redis Capacity Cache** — Sub-50ms latency for L4 (In Progress)
 
 **Timeline:** January - March 2026
@@ -714,13 +714,13 @@ Standards Progress:    ███████████░░░░░░░░
 <tr>
 <td><b>ISO 15118</b></td>
 <td>Plug & Charge with PKI</td>
-<td align="center">90%</td>
+<td align="center">95%</td>
 <td align="center">Q1 2026</td>
 </tr>
 <tr>
 <td><b>OCPI 2.2</b></td>
 <td>Roaming network protocol</td>
-<td align="center">60%</td>
+<td align="center">70%</td>
 <td align="center">Q1 2026</td>
 </tr>
 <tr>
@@ -823,7 +823,7 @@ done
 - **L2 Grid Signal (v2.4.6)**: Optimized OpenADR reporting with ISO-specific `regional_confidence` averages. Enforced 10% BESS variance thresholds in the safety consumer.
 - **L4 Market Gateway (v3.8.0)**: `BiddingOptimizer` now prioritizes high-fidelity capacity breakdowns. Enriched bidding audit trails with `ev_capacity_kw` and `bess_capacity_kw` for L11 ML auditing.
 - **L10 Token Engine (v4.3.1)**: Refactored reward processing logic for efficiency. Consistently extracts `resource_type` from Kafka payloads to support differentiated reward auditing.
-- **L7 Device Gateway (v5.6.0)**: Finalized **ISO 15118** certificate simulation (90%) and hardened horizontal scaling via Redis Pub/Sub command routing.
+- **L7 Device Gateway (v5.6.0)**: Advanced **ISO 15118** certificate management (95%) and hardened **OCPI 2.2** status mapping (70%). Finalized horizontal scaling via Redis Pub/Sub.
 
 ---
 
