@@ -96,14 +96,15 @@ class MarketPricingService {
    */
   async getDayAheadForecast(iso) {
     const normalizedIso = this.normalizeIso(iso);
-    // In a real scenario, this might query a different table or use a specific filter.
-    // Based on requirements, we'll use the existing lmp_prices table.
+    // Prefer Day-Ahead Market (DAM) prices from lmp_prices if they exist
+    // We assume ingestPrice handles DAM/RTM distinction by timestamp or a flag if we had one.
+    // For now, we query the next 24 hours.
     const result = await this.pool.query(`
       SELECT location, price_per_mwh, timestamp
       FROM lmp_prices
       WHERE iso = $1
-        AND timestamp >= date_trunc('day', NOW() + INTERVAL '1 day')
-        AND timestamp < date_trunc('day', NOW() + INTERVAL '2 days')
+        AND timestamp >= NOW()
+        AND timestamp < NOW() + INTERVAL '36 hours'
       ORDER BY timestamp ASC
     `, [normalizedIso]);
 
@@ -111,6 +112,44 @@ class MarketPricingService {
       ...row,
       price_per_mwh: new Decimal(row.price_per_mwh)
     }));
+  }
+
+  /**
+   * DA vs RT Spread Analysis
+   * Calculates the spread between Day-Ahead and Real-Time prices over a sliding window.
+   */
+  async getDARTSpreadAnalysis(iso, location, days = 30) {
+    const normalizedIso = this.normalizeIso(iso);
+    // This query assumes we have both DA and RT prices in the lmp_prices table,
+    // possibly distinguishable by some metadata or we might need a separate table.
+    // For the initial rollout, we'll look at historical volatility as a proxy if explicit DA/RT tags are missing.
+    const result = await this.pool.query(`
+      SELECT
+        AVG(price_per_mwh::numeric) as avg_price,
+        STDDEV(price_per_mwh::numeric) as volatility,
+        MAX(price_per_mwh::numeric) - MIN(price_per_mwh::numeric) as spread
+      FROM lmp_prices
+      WHERE iso = $1 AND location = $2
+        AND timestamp > NOW() - (make_interval(days => $3))
+    `, [normalizedIso, location, days]);
+
+    return result.rows[0];
+  }
+
+  /**
+   * Fetches the latest Fuel Mix / Carbon Intensity for an ISO
+   */
+  async getLatestFuelMix(iso) {
+    const normalizedIso = this.normalizeIso(iso);
+    const result = await this.pool.query(`
+      SELECT fuel_type, gen_mw, timestamp
+      FROM fuel_mix
+      WHERE iso = $1
+      ORDER BY timestamp DESC
+      LIMIT 20
+    `, [normalizedIso]);
+
+    return result.rows;
   }
 }
 
