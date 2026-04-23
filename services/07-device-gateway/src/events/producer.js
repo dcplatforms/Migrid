@@ -47,17 +47,21 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
     // Physics Engine Contextual Data for L11 AI Readiness
     const safetyContextRaw = await redis.get('l1:safety:lock:context');
     let physicsScore = 1.0;
-    let fidelityStatus = 'HIGH_FIDELITY';
+    let confidenceScore = 1.0;
     let isHighFidelity = true;
+    let isSentinelFidelity = true;
+    let fidelityStatus = 'HIGH_FIDELITY';
 
     if (safetyContextRaw) {
         try {
             const context = JSON.parse(safetyContextRaw);
-            if (context.physics_score !== undefined) {
-                physicsScore = parseFloat(context.physics_score);
-                isHighFidelity = physicsScore > 0.95;
-                fidelityStatus = isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD';
-            }
+            physicsScore = context.physics_score !== undefined ? parseFloat(context.physics_score) : 1.0;
+            confidenceScore = context.confidence_score !== undefined ? parseFloat(context.confidence_score) : 1.0;
+
+            // [L1-124] April 2026 High-Fidelity Standard: Physics OR Confidence > 0.95
+            isHighFidelity = (physicsScore > 0.95 || confidenceScore > 0.95);
+            isSentinelFidelity = (physicsScore > 0.99);
+            fidelityStatus = isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD';
         } catch (e) {
             console.error('[L7] Failed to parse safety context for telemetry:', e.message);
         }
@@ -78,7 +82,9 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
         protocol: protocol,
         iso_region: isoRegion,
         physics_score: physicsScore,
+        confidence_score: confidenceScore,
         is_high_fidelity: isHighFidelity,
+        is_sentinel_fidelity: isSentinelFidelity,
         fidelity_status: fidelityStatus,
         resource_type: resourceType,
         source: 'L7_GATEWAY_V5.6.0'

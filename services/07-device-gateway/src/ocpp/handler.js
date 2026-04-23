@@ -53,9 +53,15 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
             case 'StatusNotification':
                 // Update Redis and forward to internal services
                 await redis.set(`charger_status:${chargePointId}`, payload.connectorStatus, 'EX', 86400);
+
+                // OCPI 2.2 Status Mapping (for roaming interoperability)
+                const ocpiStatus = mapToOcpiStatus(payload.connectorStatus);
+                await redis.set(`ocpi_status:${chargePointId}`, ocpiStatus, 'EX', 86400);
+
                 await publishSessionEvent('CHARGER_STATUS_UPDATED', {
                     chargePointId,
                     status: payload.connectorStatus,
+                    ocpi_status: ocpiStatus,
                     evseId: payload.evseId,
                     connectorId: payload.connectorId,
                     timestamp: payload.timestamp || new Date().toISOString()
@@ -113,6 +119,24 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                 // Advance ISO 15118 support: Log OCSP request context for L11 audit trails
                 await redis.hset(`charger_certs:${chargePointId}`, 'ocspStatus', 'Requested', 'ocspTimestamp', new Date().toISOString());
                 ws.send(JSON.stringify([3, messageId, { status: 'Accepted' }]));
+                break;
+
+            case 'SignCertificate':
+                // ISO 15118-20 PnC: Charger requesting CSR signing
+                console.log(`[L7] SignCertificate request from ${chargePointId}`);
+                // In a production system, this would trigger a call to the V2G CA
+                await redis.hset(`charger_certs:${chargePointId}`, 'signingStatus', 'Pending', 'lastRequest', new Date().toISOString());
+                ws.send(JSON.stringify([3, messageId, { status: 'Accepted' }]));
+                break;
+
+            case 'Get15118EvCertificate':
+                // ISO 15118-20 PnC: Charger requesting EV Contract Certificate
+                console.log(`[L7] Get15118EvCertificate request from ${chargePointId} for PnC`);
+                // Simulate V2G CA response for Plug & Charge
+                ws.send(JSON.stringify([3, messageId, {
+                    status: 'Accepted',
+                    exiResponse: 'BASE64_ENCODED_EXI_RESPONSE_MOCK'
+                }]));
                 break;
 
             case 'NotifyDERAlarm':
@@ -186,6 +210,21 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
         }
     } catch (error) {
         console.error('[L7] OCPP Processing Error:', error);
+    }
+}
+
+/**
+ * OCPI 2.2 Status Mapping Utility
+ * Normalizes OCPP status to OCPI 2.2 Location/EVSE status.
+ */
+function mapToOcpiStatus(ocppStatus) {
+    switch (ocppStatus) {
+        case 'Available': return 'AVAILABLE';
+        case 'Occupied': return 'BUSY';
+        case 'Reserved': return 'RESERVED';
+        case 'Unavailable': return 'OUT_OF_ORDER';
+        case 'Faulted': return 'INOPERATIVE';
+        default: return 'UNKNOWN';
     }
 }
 
