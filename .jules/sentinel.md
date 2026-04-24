@@ -34,3 +34,8 @@
 **Vulnerability:** Privilege escalation via a public endpoint that allowed users to trigger their own rewards.
 **Learning:** The `POST /achievements/award` endpoint lacked server-side verification of achievement prerequisites, trusting the client-side request to determine if a reward was deserved. Even with IDOR protection, the existence of such an endpoint is a critical design flaw in an automated engagement system.
 **Prevention:** Never expose endpoints that allow users to claim or award themselves rewards based solely on a request. Reward logic must be fully server-side and triggered by verified internal events or state changes.
+
+## 2026-04-24 - [PII Leakage in Unauthenticated Grid Reports]
+**Vulnerability:** The `/openadr/v3/reports` endpoint was unauthenticated and returned raw `safetyContext` containing PII (`vin`, `vehicle_id`).
+**Learning:** High-fidelity reporting often aggregates data from lower-level services (like L1 Physics) which may include sensitive device identifiers not suitable for broad internal or external APIs.
+**Prevention:** Always apply authentication middleware to reporting endpoints and explicitly mask sensitive fields in objects retrieved from caches (Redis) or other microservices before API delivery.
