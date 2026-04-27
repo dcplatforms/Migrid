@@ -6,9 +6,9 @@
 
 ### *The Operating System for Sustainable Fleet Electrification*
 
-[![Version](https://img.shields.io/badge/version-10.1.0-blue.svg)](https://github.com/dcplatforms/Migrid/releases)
+[![Version](https://img.shields.io/badge/version-10.1.2-blue.svg)](https://github.com/dcplatforms/Migrid/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-63%25%20complete-orange.svg)](docs/roadmap.md)
+[![Platform](https://img.shields.io/badge/platform-69%25%20complete-orange.svg)](docs/roadmap.md)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com)
 
@@ -26,7 +26,7 @@ Our unified 11-layer platform spans from the **physics of energy transfer** to t
 
 # MiGrid: The Operating System for Sustainable Fleets
 
-![Version](https://img.shields.io/badge/version-10.1.0-blue) ![License](https://img.shields.io/badge/license-Apache_2.0-green) ![Status](https://img.shields.io/badge/status-active_development-success)
+![Version](https://img.shields.io/badge/version-10.1.2-blue) ![License](https://img.shields.io/badge/license-Apache_2.0-green) ![Status](https://img.shields.io/badge/status-active_development-success)
 
 **MiGrid** is an open-source, vertically integrated operating system designed to bridge the gap between physical EV assets and digital energy markets. We enable fleets to turn parked vehicles into revenue-generating Virtual Power Plants (VPPs) through physics-verified, standards-compliant orchestration.
 
@@ -74,7 +74,7 @@ The system is decoupled into eleven distinct functional planes to separate conce
 | **L3** | `vpp-aggregator` | Aggregates EVs & BESS for wholesale markets. | IEEE 2030.5 |
 | **L4** | `market-gateway` | Arbitrage engine for CAISO, PJM, and Nord Pool. | FIX / OASIS |
 | **L5** | `driver-dx` | Smart routing, voice commands, and availability. | GraphQL |
-| **L6** | `engagement` | CRM, contextual support, and notifications. | WebSocket |
+| **L6** | `engagement` | Achievement-based driver behavior shaping. | WebSocket |
 | **L7** | `device-gateway` | Hardware abstraction for chargers. | OCPP 2.1 / 2.0.1 / ISO 15118 |
 | **L8** | `energy-manager` | Edge-ready dynamic load management (DLM). | Modbus TCP |
 | **L9** | `commerce-engine`| Flexible billing, tariffs, and split-billing. | Stripe / OCPI |
@@ -209,16 +209,16 @@ graph TB
 
 | Layer | Service | Description | Port | Status |
 |:-----:|---------|-------------|:----:|:------:|
-| **L1** | **Physics Engine** | Energy variance validation (<15% threshold) | `3001` | Complete |
-| **L2** | **Grid Signal** | OpenADR 3.0 VEN for demand response | `3002` | Complete |
-| **L3** | **VPP Aggregator** | Fleet capacity aggregation for markets | `3003` | Complete |
-| **L4** | **Market Gateway** | CAISO/PJM/ERCOT wholesale integration | `3004` | Complete |
-| **L5** | **Driver Experience API** | Mobile backend, auth, smart routing | `3005` | Complete |
-| **L6** | **Engagement Engine** | Gamification, leaderboards, achievements | `3006` | Complete |
-| **L7** | **Device Gateway** | OCPP 2.1, ISO 15118, V2X control | `3007` | In Progress |
-| **L8** | **Energy Manager** | Dynamic Load Management (DLM) | `3008` | Complete |
-| **L9** | **Commerce Engine** | Billing, tariffs, split-billing | `3009` | Complete |
-| **L10** | **Token Engine** | Web3 rewards via Open-Wallet | `3010` | Complete |
+| **L1** | **Physics Engine** | Energy variance validation (<15% threshold) | `3001` | v10.1.2 |
+| **L2** | **Grid Signal** | OpenADR 3.0 VEN for demand response | `3002` | v2.4.7 |
+| **L3** | **VPP Aggregator** | Fleet capacity aggregation for markets | `3003` | v3.3.1 |
+| **L4** | **Market Gateway** | CAISO/PJM/ERCOT wholesale integration | `3004` | v3.8.1 |
+| **L5** | **Driver Experience API** | Mobile backend, auth, smart routing | `3005` | v4.1.0 |
+| **L6** | **Engagement Engine** | Gamification, leaderboards, achievements | `3006` | v5.11.0 |
+| **L7** | **Device Gateway** | OCPP 2.1, ISO 15118, V2X control | `3007` | v5.6.0 |
+| **L8** | **Energy Manager** | Dynamic Load Management (DLM) | `3008` | v2.1.0 |
+| **L9** | **Commerce Engine** | Billing, tariffs, split-billing | `3009` | v5.1.0 |
+| **L10** | **Token Engine** | Web3 rewards via Open-Wallet | `3010` | v4.3.2 |
 | **L11** | **ML Engine** | AI forecasting, predictive maintenance | `3011` | Planned Q2 2026 |
 
 </details>
@@ -447,10 +447,10 @@ Password: demo123
 
 <div align="center">
 
-**Version 10.1.0** • **March 2026** • **63% Complete**
+**Version 10.1.2** • **April 2026** • **69% Complete**
 
 [![Phase](https://img.shields.io/badge/Phase_5-In_Progress-orange.svg)](docs/roadmap.md)
-[![Features](https://img.shields.io/badge/Features-62%2F98-blue.svg)](PLATFORM_STATUS.md)
+[![Features](https://img.shields.io/badge/Features-68%2F98-blue.svg)](PLATFORM_STATUS.md)
 [![Services](https://img.shields.io/badge/Services-11%2F11_Complete-green.svg)](docs/roadmap.md)
 
 </div>
@@ -462,8 +462,8 @@ Phase 1: Foundation          █████████████████
 Phase 2: Grid Integration    ████████████████████ 100%  [✓] Q2 2025
 Phase 3: Market Access       ████████████████████ 100%  [✓] Q3 2025
 Phase 4: Driver Experience   ████████████████████ 100%  [✓] Q4 2025
-Phase 5: Enterprise Scale    ██████████░░░░░░░░░░  50%  [~] Q1 2026
-Phase 6: AI & Optimization   ░░░░░░░░░░░░░░░░░░░░   0%  [ ] Q2 2026
+Phase 5: Enterprise Scale    ██████████████████░░  92%  [~] Q1 2026
+Phase 6: AI & Optimization   ███████░░░░░░░░░░░░░  35%  [ ] Q2 2026
 Phase 7: Global Expansion    ░░░░░░░░░░░░░░░░░░░░   0%  [ ] Q3 2026
 Phase 8: Advanced Grid       ░░░░░░░░░░░░░░░░░░░░   0%  [ ] Q4 2026
 ```
