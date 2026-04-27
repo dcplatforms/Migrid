@@ -814,7 +814,7 @@ done
 | **L7** | Device Gateway | `5.6.0` | ✅ Operational |
 | **L8** | Energy Manager | `2.1.0` | ✅ Operational |
 | **L9** | Commerce Engine | `5.1.0` | ✅ Operational |
-| **L10**| Token Engine | `4.3.1` | ✅ Operational |
+| **L10**| Token Engine | `4.3.2` | ✅ Operational |
 | **L11**| ML Engine | `0.1.0` | ✅ Operational |
 
 ---
@@ -825,7 +825,7 @@ done
 - **L1 Physics Engine (v10.1.1)**: Implemented **Site Energy Snapshot** integration. Applies confidence penalties for site load exceeding 90% and enforces [L1-120] Confidence Decay for stale vehicle syncs.
 - **L2 Grid Signal (v2.4.6)**: Optimized OpenADR reporting with ISO-specific `regional_confidence` averages. Enforced 10% BESS variance thresholds in the safety consumer.
 - **L4 Market Gateway (v3.8.0)**: `BiddingOptimizer` now prioritizes high-fidelity capacity breakdowns. Enriched bidding audit trails with `ev_capacity_kw` and `bess_capacity_kw` for L11 ML auditing.
-- **L10 Token Engine (v4.3.1)**: Refactored reward processing logic for efficiency. Consistently extracts `resource_type` from Kafka payloads to support differentiated reward auditing.
+- **L10 Token Engine (v4.3.2)**: Resolved critical reference error in `index.js` where `resourceTypePersist` (undefined) was used in `logRewardTransaction`. Replaced with `resourceTypeVal` to ensure correct persistence of EV vs BESS resource types in audit logs.
 - **L7 Device Gateway (v5.6.0)**: Advanced **ISO 15118** certificate management (95%) and hardened **OCPI 2.2** status mapping (70%). Finalized horizontal scaling via Redis Pub/Sub.
 
 ---
