@@ -125,7 +125,7 @@ async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '4.3.1',
+    version: '4.3.2',
     status: 'healthy',
     layer: 'L10'
   });
@@ -271,7 +271,7 @@ async function start() {
           isHighFidelityPersist,
           multiplierReason,
           confidenceScorePersist,
-          resourceTypePersist
+          resourceTypeVal
         );
 
         // 6. Execute Blockchain/Wallet Transaction

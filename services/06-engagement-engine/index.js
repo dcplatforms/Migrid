@@ -88,7 +88,7 @@ async function initKafka() {
   await producer.connect();
 
   // Listen for both direct events and session completions
-  await consumer.subscribe({ topics: ['charging_events', 'SESSION_COMPLETED', 'vpp_participation_updates', 'grid_signals', 'MARKET_PRICE_UPDATED'], fromBeginning: false });
+  await consumer.subscribe({ topics: ['charging_events', 'SESSION_COMPLETED', 'vpp_participation_updates', 'grid_signals', 'MARKET_PRICE_UPDATED', 'ADVANCE_CHARGE_SIGNAL'], fromBeginning: false });
 
   await consumer.run({
     eachMessage: async ({ topic, message }) => {
@@ -107,6 +107,8 @@ async function initKafka() {
           const normalizedIso = iso.toUpperCase().replace(/-/g, '');
           await redisClient.hSet('market:profitability', normalizedIso, profitability_index.toString());
           console.log(`[Engagement] Updated Redis Market Profitability for ${normalizedIso}: $${profitability_index}/MWh`);
+        } else if (topic === 'ADVANCE_CHARGE_SIGNAL') {
+          await handleAdvanceChargeSignal(payload);
         }
       } catch (error) {
         console.error('[Engagement] Error processing Kafka message:', error);
@@ -121,7 +123,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-      version: '5.10.0', // Weekly Mission: Site Harmony & High-Fidelity Engagement
+      version: '5.11.0', // Weekly Mission: Solar Ramp Gamification & Forward Engineering
     status: 'healthy',
     layer: 'L6'
   });
@@ -655,6 +657,42 @@ async function checkScarcitySaviorAchievement(driverId, iso, sessionId) {
     }
   } catch (error) {
     console.error('[Engagement] Error checking Scarcity Savior achievement:', error);
+  }
+}
+
+async function handleAdvanceChargeSignal(payload) {
+  const { iso, reason } = payload;
+  const normalizedIso = iso.toUpperCase().replace(/-/g, '');
+  console.log(`[L6] Handling Advance Charge Signal for ${normalizedIso}. Reason: ${reason}`);
+
+  try {
+    // Identify active charging sessions in the target ISO
+    const activeSessions = await pool.query(`
+      SELECT cs.driver_id, f.iso
+      FROM charging_sessions cs
+      JOIN drivers d ON cs.driver_id = d.id
+      JOIN fleets f ON d.fleet_id = f.id
+      WHERE cs.end_time IS NULL
+        AND UPPER(REPLACE(f.iso, '-', '')) = $1
+    `, [normalizedIso]);
+
+    console.log(`[L6] Found ${activeSessions.rows.length} active drivers responding to Advance Charge in ${normalizedIso}`);
+
+    for (const row of activeSessions.rows) {
+      const driverId = row.driver_id;
+
+      // Record solar ramp response action
+      await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
+        [driverId, 'solar_ramp_response', JSON.stringify({ iso: normalizedIso, reason, timestamp: new Date().toISOString() })]);
+
+      // Update challenge progress
+      await updateChallengeProgress(driverId, 'solar_ramp_response');
+
+      // Check for Solar Surge achievement
+      await checkSolarSurgeAchievement(driverId);
+    }
+  } catch (error) {
+    console.error('[Engagement] Error handling Advance Charge signal:', error);
   }
 }
 
@@ -1304,6 +1342,24 @@ async function checkSiteHarmonyAchievement(driver_id, vehicle_id) {
   }
 }
 
+async function checkSolarSurgeAchievement(driver_id) {
+  try {
+    const count = await pool.query(`
+      SELECT COUNT(*) FROM driver_actions
+      WHERE driver_id = $1 AND action_type = 'solar_ramp_response'
+    `, [driver_id]);
+
+    if (parseInt(count.rows[0].count) >= 5) {
+      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Solar Surge'");
+      if (achievement.rows.length > 0) {
+        await awardAchievement(driver_id, achievement.rows[0].id);
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking Solar Surge achievement:', error);
+  }
+}
+
 async function checkSustainabilityChampion(driver_id) {
   // 100% Compliance Check: Verify at least one valid session for each of the last 30 consecutive days.
   // This enforces the "Green Audit" (<15% variance) via the L1-verified 'is_valid' flag.
@@ -1546,5 +1602,7 @@ module.exports = {
   processChargingEvent,
   checkHighConfidenceAchievement,
   checkSiteHarmonyAchievement,
-  updateChallengeProgress
+  updateChallengeProgress,
+  handleAdvanceChargeSignal,
+  checkSolarSurgeAchievement
 };

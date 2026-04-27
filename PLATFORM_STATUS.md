@@ -821,12 +821,12 @@ done
 
 ## Latest Release Wins (April 2026)
 
-- **L6 Engagement Engine (v5.11.0)**: Implemented **Solar Surge** achievement and CAISO solar ramp response tracking (4PM-9PM). Hardened anti-fatigue batching for L5.
-- **L1 Physics Engine (v10.1.2)**: Deployed **Hardened Offline Mode [L1-126]** for Redis metadata preservation and consistent log reconciliation.
-- **L2 Grid Signal (v2.4.7)**: Hardened PII masking in safety contexts and optimized regional confidence fallback logic for OpenADR 3.0 reporting.
-- **L4 Market Gateway (v3.8.1)**: `BiddingOptimizer` prioritized high-fidelity capacity breakdowns. Enriched bidding audit trails for L11 ML auditing.
-- **L10 Token Engine (v4.3.2)**: Resolved critical reference error in reward logging and hardened audit trail idempotency with resource-type persistence.
-- **L7 Device Gateway (v5.6.0)**: Advanced **ISO 15118** certificate management (95%) and hardened **OCPI 2.2** status mapping (70%).
+- **L6 Engagement Engine (v5.10.0)**: Introduced **Site Harmony** achievement and challenge. Enforced resource-aware physics scoring (10% variance for BESS) and enhanced notification metadata for L5 anti-fatigue batching.
+- **L1 Physics Engine (v10.1.1)**: Implemented **Site Energy Snapshot** integration. Applies confidence penalties for site load exceeding 90% and enforces [L1-120] Confidence Decay for stale vehicle syncs.
+- **L2 Grid Signal (v2.4.6)**: Optimized OpenADR reporting with ISO-specific `regional_confidence` averages. Enforced 10% BESS variance thresholds in the safety consumer.
+- **L4 Market Gateway (v3.8.0)**: `BiddingOptimizer` now prioritizes high-fidelity capacity breakdowns. Enriched bidding audit trails with `ev_capacity_kw` and `bess_capacity_kw` for L11 ML auditing.
+- **L10 Token Engine (v4.3.2)**: Resolved critical reference error in `index.js` where `resourceTypePersist` (undefined) was used in `logRewardTransaction`. Replaced with `resourceTypeVal` to ensure correct persistence of EV vs BESS resource types in audit logs.
+- **L7 Device Gateway (v5.6.0)**: Advanced **ISO 15118** certificate management (95%) and hardened **OCPI 2.2** status mapping (70%). Finalized horizontal scaling via Redis Pub/Sub.
 
 ---
 
