@@ -288,7 +288,9 @@ describe('L2 Grid Signal Service', () => {
       return Promise.resolve(null);
     });
 
-    const response = await request(app).get('/openadr/v3/reports');
+    const response = await request(app)
+      .get('/openadr/v3/reports')
+      .set('Authorization', `Bearer ${mockToken}`);
     expect(response.status).toBe(200);
     expect(response.body).toHaveProperty('reports');
     expect(response.body.market_context.iso).toBe('CAISO');
@@ -314,7 +316,9 @@ describe('L2 Grid Signal Service', () => {
       return Promise.resolve(null);
     });
 
-    const response = await request(app).get('/openadr/v3/reports');
+    const response = await request(app)
+      .get('/openadr/v3/reports')
+      .set('Authorization', `Bearer ${mockToken}`);
     expect(response.status).toBe(200);
     expect(response.body.regional_markets.CAISO.price_per_mwh).toBe(45.5);
     expect(response.body.regional_markets.ERCOT.price_per_mwh).toBe(120.0);
@@ -328,7 +332,9 @@ describe('L2 Grid Signal Service', () => {
       return Promise.resolve(null);
     });
 
-    const response = await request(app).get('/openadr/v3/reports');
+    const response = await request(app)
+      .get('/openadr/v3/reports')
+      .set('Authorization', `Bearer ${mockToken}`);
     expect(response.status).toBe(200);
     expect(response.body.regional_capacity.CAISO).toBe(500.5);
     expect(response.body.regional_capacity.ERCOT).toBe(1200.0);
@@ -351,7 +357,9 @@ describe('L2 Grid Signal Service', () => {
       return Promise.resolve(null);
     });
 
-    const response = await request(app).get('/openadr/v3/reports');
+    const response = await request(app)
+      .get('/openadr/v3/reports')
+      .set('Authorization', `Bearer ${mockToken}`);
     expect(response.status).toBe(200);
     expect(response.body.digital_twin.CAISO.vehicle_count).toBe(1);
     expect(response.body.digital_twin.CAISO.high_fidelity_count).toBe(1);
@@ -370,10 +378,39 @@ describe('L2 Grid Signal Service', () => {
       return Promise.resolve(null);
     });
 
-    const response = await request(app).get('/openadr/v3/reports');
+    const response = await request(app)
+      .get('/openadr/v3/reports')
+      .set('Authorization', `Bearer ${mockToken}`);
     expect(response.status).toBe(200);
     expect(response.body.safety_lock.active).toBe(true);
     expect(response.body.safety_lock.context.iso_region).toBe('ERCOT');
+  });
+
+  test('GET /openadr/v3/reports should return 401 when unauthenticated', async () => {
+    const response = await request(app).get('/openadr/v3/reports');
+    expect(response.status).toBe(401);
+  });
+
+  test('GET /openadr/v3/reports should mask PII in safety context', async () => {
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l1:safety:lock') return Promise.resolve('1');
+      if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({
+        event_type: 'PHYSICS_FRAUD',
+        vehicle_id: 'SENSITIVE-ID',
+        vin: 'SENSITIVE-VIN',
+        iso_region: 'ERCOT'
+      }));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app)
+      .get('/openadr/v3/reports')
+      .set('Authorization', `Bearer ${mockToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.safety_lock.context.vehicle_id).toBe('[MASKED]');
+    expect(response.body.safety_lock.context.vin).toBe('[MASKED]');
+    expect(response.body.safety_lock.context.event_type).toBe('PHYSICS_FRAUD');
   });
 
   test('POST /openadr/v3/events should reject when L1 safety lock is active (Phase 5 Alignment)', async () => {
@@ -622,7 +659,9 @@ describe('L2 Grid Signal Service', () => {
       return Promise.resolve(null);
     });
 
-    const response = await request(app).get('/openadr/v3/reports');
+    const response = await request(app)
+      .get('/openadr/v3/reports')
+      .set('Authorization', `Bearer ${mockToken}`);
     expect(response.status).toBe(200);
     expect(response.body.regional_stats.CAISO.vehicle_count).toBe(2);
     expect(response.body.regional_stats.CAISO.ev_count).toBe(1);
@@ -647,7 +686,9 @@ describe('L2 Grid Signal Service', () => {
       return Promise.resolve(null);
     });
 
-    const response = await request(app).get('/openadr/v3/reports');
+    const response = await request(app)
+      .get('/openadr/v3/reports')
+      .set('Authorization', `Bearer ${mockToken}`);
     expect(response.status).toBe(200);
     expect(response.body.site_statuses['SITE-1']).toBe('OPERATIONAL');
     expect(response.body.site_statuses['SITE-2']).toBe('SAFE_MODE');

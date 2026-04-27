@@ -103,8 +103,9 @@ app.get('/health', (req, res) => {
  * Get OpenADR 3.0 Reports (VEN)
  * Returns recent grid events for compliance and auditing
  * [L2 v2.4.3] Optimized: Utilizes unified context for sub-50ms reporting
+ * Security: Enforces authentication and masks PII in safety context.
  */
-app.get('/openadr/v3/reports', async (req, res) => {
+app.get('/openadr/v3/reports', authenticateToken, async (req, res) => {
   try {
     const [result, unifiedContextRaw, safetyLock, safetyContextRaw, gridLock, marketContextRaw, regionalCapacityRaw] = await Promise.all([
       pool.query('SELECT event_id, event_type, status, received_at FROM grid_events ORDER BY received_at DESC LIMIT 50'),
@@ -127,8 +128,14 @@ app.get('/openadr/v3/reports', async (req, res) => {
     };
 
     const marketContext = marketContextRaw ? JSON.parse(marketContextRaw) : null;
-    const safetyContext = safetyContextRaw ? JSON.parse(safetyContextRaw) : null;
+    let safetyContext = safetyContextRaw ? JSON.parse(safetyContextRaw) : null;
     const regionalCapacity = regionalCapacityRaw ? JSON.parse(regionalCapacityRaw) : {};
+
+    // Security Enhancement: Mask PII in safety context for reporting
+    if (safetyContext) {
+      if (safetyContext.vin) safetyContext.vin = '[MASKED]';
+      if (safetyContext.vehicle_id) safetyContext.vehicle_id = '[MASKED]';
+    }
 
     res.json({
       reports: result.rows,
