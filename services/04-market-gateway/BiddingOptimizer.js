@@ -159,8 +159,9 @@ class BiddingOptimizer {
       console.warn('[BiddingOptimizer] Failed to fetch safety lock context for audit:', err.message);
     }
 
-    // High-Fidelity logic: physics_score > 0.95 OR confidence_score > 0.95 (Align with L10 v4.3.1)
-    const capacityFidelity = (physicsScore > 0.95 || confidenceScore > 0.95) ? 'HIGH_FIDELITY' : 'STANDARD';
+    // High-Fidelity logic: physics_score > 0.95 OR confidence_score > 0.95 (Align with L10 v4.3.2)
+    const isHighFidelity = (physicsScore > 0.95 || confidenceScore > 0.95);
+    const capacityFidelity = isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD';
 
     // 3. Handle Halted Bidding
     if (locks.l1 || locks.l4) {
@@ -275,12 +276,14 @@ class BiddingOptimizer {
         locks,
         physics_score: physicsScore,
         confidence_score: confidenceScore,
+        is_high_fidelity: isHighFidelity,
         capacity_fidelity: capacityFidelityFromRedis, // Already normalized in getAggregatedCapacity
         audit_context: {
           ...auditContext,
           ev_capacity_kw: breakdown.ev,
           bess_capacity_kw: breakdown.bess,
-          v3_capacity_fidelity: capacityFidelityFromRedis === 'HIGH_FIDELITY'
+          v3_capacity_fidelity: capacityFidelityFromRedis === 'HIGH_FIDELITY',
+          site_aware_sync: true // L1 v10.1.2 requirement
         },
         pVppKw: pVppKw.toNumber(),
         timestamp: new Date().toISOString()
