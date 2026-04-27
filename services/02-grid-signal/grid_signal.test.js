@@ -862,4 +862,55 @@ describe('L2 Grid Signal Service', () => {
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
     expect(sentValue.confidence_score).toBe(0.85);
   });
+
+  test('startSafetyConsumer should cache ADVANCE_CHARGE_SIGNAL', async () => {
+    const { consumer, startSafetyConsumer } = require('./index');
+    await startSafetyConsumer();
+
+    const eachMessage = consumer.run.mock.calls[0][0].eachMessage;
+
+    const advanceChargePayload = {
+      iso: 'CAISO',
+      reason: 'SOLAR_RAMP_DETECTED',
+      ramp_rate: 0.15,
+      net_load_mw: 15000,
+      timestamp: new Date().toISOString()
+    };
+
+    await eachMessage({
+      topic: 'ADVANCE_CHARGE_SIGNAL',
+      message: { value: Buffer.from(JSON.stringify(advanceChargePayload)) }
+    });
+
+    expect(redisClient.setEx).toHaveBeenCalledWith(
+      'l2:advance_charge:CAISO',
+      600,
+      expect.stringContaining('"reason":"SOLAR_RAMP_DETECTED"')
+    );
+  });
+
+  test('startSafetyConsumer should cache GRID_HEALTH_UPDATED', async () => {
+    const { consumer, startSafetyConsumer } = require('./index');
+    await startSafetyConsumer();
+
+    const eachMessage = consumer.run.mock.calls[0][0].eachMessage;
+
+    const gridHealthPayload = {
+      iso: 'ERCOT',
+      renewable_percentage: 0.65,
+      is_green: true,
+      timestamp: new Date().toISOString()
+    };
+
+    await eachMessage({
+      topic: 'GRID_HEALTH_UPDATED',
+      message: { value: Buffer.from(JSON.stringify(gridHealthPayload)) }
+    });
+
+    expect(redisClient.setEx).toHaveBeenCalledWith(
+      'l2:grid_health:ERCOT',
+      600,
+      expect.stringContaining('"renewable_percentage":0.65')
+    );
+  });
 });
