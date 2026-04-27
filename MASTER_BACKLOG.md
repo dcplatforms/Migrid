@@ -12,11 +12,11 @@
 |:---:|:---|:---:|:---|:---:|
 | **P0** | **ML Demand Forecasting** | L11 (ML Engine) | ✅ Phase 5 High-Fidelity Data Pipelines (L1, L2, L3, L4) | Phase 6 |
 | **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | 🚧 L7 v5.6.0 Hardened (95% Complete) | Phase 5 |
-| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 (Market) v3.7.0 Bidding Auditability | Phase 5 |
+| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 (Market) v3.8.1 Bidding Auditability | Phase 5 |
 | **P3** | **OCPI 2.2 Roaming** | L7 (Device) | 🚧 L9 (Commerce) v5.1.0 tariff engine sync (70%) | Phase 5 |
 | **P4** | **BESS RL Bidding** | L4 (Market) | 🚧 L3 BESS Integration (75% Complete) | Phase 6 |
 
-| **P5** | **Resource-Aware Bidding** | L4 (Market) | ✅ L3 v3.3.0 High-Fidelity Breakdown | Phase 5 |
+| **P5** | **Resource-Aware Bidding** | L4 (Market) | ✅ L3 v3.3.1 High-Fidelity Breakdown | Phase 5 |
 
 | Priority | Task ID | Description | Primary Layers | Status | Strategic Alignment |
 |:---:|:---:|:---|:---:|:---:|:---|
@@ -52,16 +52,17 @@
 - [✓] **[L1-120] Confidence Decay**: -0.2 penalty for syncs > 30 days old.
 - [✓] **[L1-121] Site Integration**: -0.15 penalty for sites > 90% load utilization.
 - [✓] **Site Energy Snapshot**: Real-time load/capacity fetching for confidence scoring.
+- [✓] **[L1-126] Hardened Offline Mode**: Redis metadata preservation during disconnects.
 
-### Layer 2: Grid Signal (v2.4.6)
+### Layer 2: Grid Signal (v2.4.7)
 - [✓] **BESS-Aware Safety**: 10% variance threshold enforced for stationary storage.
 - [✓] **Regional Confidence**: Averaging vehicle scores for OpenADR high-fidelity fallback.
 - [✓] **Regional Context**: High-fidelity capacity breakdown (Total/EV/BESS) in OpenADR reports.
 - [✓] **Confidence Propagation**: Forwarding L1 confidence scores to L11 pipelines.
-- [✓] **Unified Context**: Optimized aggregation of digital twin stats into `l2:unified:context`.
+- [✓] **PII Masking**: Hardened masking for `vin` and `vehicle_id` in safety contexts.
 - [✓] **Fidelity Alignment**: Updated classification logic for consistency with L1 v10.1.2.
 
-### Layer 3: VPP Aggregator (v3.3.0)
+### Layer 3: VPP Aggregator (v3.3.1)
 - [✓] **Redis Capacity Cache**: Sub-50ms reporting for L4 bidding.
 - [✓] **Fuse Rule 2.0**: 20% SoC hard floor integrated into capacity formula.
 - [✓] **ISO Normalization**: Consistent region identifiers (no-hyphen, uppercase) for L4/L10 sync.
@@ -74,11 +75,11 @@
 - [✓] **Regional Grid Lock**: Improved observability and specific ISO lock logging.
 - [✓] **ERCOT & Nord Pool**: Full activation of Texas and Nordic market adapters.
 - [✓] **Resource-Aware Bidding**: Weighted degradation costs for EV vs BESS resources.
-- [✓] **Confidence Fallback**: Integration with L2 regional confidence averages.
+- [✓] **Solar Ramp Detector**: CAISO Solar Ramp Detector (4PM-9PM) for fleet broadcasting.
 - [~] **BESS RL Bidding**: Research phase for reinforcement learning models (10%).
 
-### Layer 6: Engagement Engine (v5.10.0)
-- [✓] **ENTSO-E Pioneer**: European regional grid response achievement.
+### Layer 6: Engagement Engine (v5.11.0)
+- [✓] **Solar Surge**: Achievement for CAISO solar ramp response tracking.
 - [✓] **Sustainability Refinement**: Optimized recursive CTE for consecutive charging streaks.
 - [✓] **ISO Explorer**: Multi-regional achievement logic using bulk CTE/UNION.
 - [✓] **Energy Architect**: Achievement for AI Readiness and historical data contribution.
@@ -99,11 +100,11 @@
 - [✓] **Horizontal Scaling**: Cross-pod command routing via Redis Pub/Sub.
 - [✓] **OCPI 2.2 Mapping**: Implemented OCPP-to-OCPI status normalization (70%).
 
-### Layer 10: Token Engine (v4.3.1)
+### Layer 10: Token Engine (v4.3.2)
 - [✓] **Dynamic Multipliers**: Surplus (1.5x) and Scarcity (2.0x) logic active.
 - [✓] **Reward Idempotency**: PostgreSQL unique constraints + Redis checkIdempotency.
 - [✓] **High-Fidelity Auditing**: Persistence of `physics_score` and `confidence_score` in logs.
-- [✓] **Logic Hardening**: Fixed rule_id/event_id swap and improved malformed message handling.
+- [✓] **Bug Fix**: Resolved critical reference error in `index.js` for reward persistence.
 
 ---
 
