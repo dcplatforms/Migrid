@@ -77,7 +77,7 @@ const authenticateToken = (req, res, next) => {
 app.get('/health', (req, res) => {
   res.json({
     service: 'vpp-aggregator',
-    version: '3.3.0',
+    version: '3.3.1',
     status: 'healthy',
     layer: 'L3'
   });
