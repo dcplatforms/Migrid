@@ -92,7 +92,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.4.7',
+    version: '2.4.8',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -102,7 +102,7 @@ app.get('/health', (req, res) => {
 /**
  * Get OpenADR 3.0 Reports (VEN)
  * Returns recent grid events for compliance and auditing
- * [L2 v2.4.3] Optimized: Utilizes unified context for sub-50ms reporting
+ * [L2 v2.4.8] Optimized: Utilizes unified context for sub-50ms reporting
  * Security: Enforces authentication and masks PII in safety context.
  */
 app.get('/openadr/v3/reports', authenticateToken, async (req, res) => {
@@ -124,6 +124,8 @@ app.get('/openadr/v3/reports', authenticateToken, async (req, res) => {
       site_statuses: {},
       regional_capacity: {},
       regional_confidence: {},
+      grid_health: {},
+      advance_charge: {},
       confidence_score: 1.0
     };
 
@@ -144,6 +146,8 @@ app.get('/openadr/v3/reports', authenticateToken, async (req, res) => {
       regional_capacity: Object.keys(unifiedContext.regional_capacity).length > 0 ? unifiedContext.regional_capacity : regionalCapacity,
       regional_stats: unifiedContext.digital_twin,
       regional_confidence: unifiedContext.regional_confidence,
+      grid_health: unifiedContext.grid_health,
+      advance_charge: unifiedContext.advance_charge,
       safety_lock: {
         active: safetyLock === '1' || safetyLock === 'true',
         context: safetyContext
@@ -370,7 +374,9 @@ const updateRegionalStats = async () => {
     regional_locks: {},
     site_statuses: {},
     regional_capacity: {},
-    regional_confidence: {}
+    regional_confidence: {},
+    grid_health: {},
+    advance_charge: {}
   };
 
   try {
@@ -492,6 +498,37 @@ const updateRegionalStats = async () => {
       context.confidence_score = 1.0; // Default to full confidence if no locks/alerts
     }
 
+    // 7. Aggregate Grid Health and Advance Charge signals (from L4 via L2 cache)
+    let healthCursor = '0';
+    do {
+      const result = await redisClient.scan(healthCursor, { MATCH: 'l2:grid_health:*', COUNT: 100 });
+      healthCursor = result.cursor;
+      if (result.keys && result.keys.length > 0) {
+        const values = await redisClient.mGet(result.keys);
+        result.keys.forEach((key, index) => {
+          const iso = key.split(':').pop().toUpperCase();
+          if (values[index]) {
+            context.grid_health[iso] = JSON.parse(values[index]);
+          }
+        });
+      }
+    } while (healthCursor !== 0 && healthCursor !== '0');
+
+    let chargeCursor = '0';
+    do {
+      const result = await redisClient.scan(chargeCursor, { MATCH: 'l2:advance_charge:*', COUNT: 100 });
+      chargeCursor = result.cursor;
+      if (result.keys && result.keys.length > 0) {
+        const values = await redisClient.mGet(result.keys);
+        result.keys.forEach((key, index) => {
+          const iso = key.split(':').pop().toUpperCase();
+          if (values[index]) {
+            context.advance_charge[iso] = JSON.parse(values[index]);
+          }
+        });
+      }
+    } while (chargeCursor !== 0 && chargeCursor !== '0');
+
     // Cache unified results for 30s to meet sub-500ms SLA
     await redisClient.setEx('l2:unified:context', 30, JSON.stringify(context));
     // Legacy support for digital twin stats
@@ -508,7 +545,7 @@ const updateRegionalStats = async () => {
 async function startSafetyConsumer() {
   await consumer.connect();
   await consumer.subscribe({
-    topics: ['migrid.physics.alerts', 'MARKET_PRICE_UPDATED', 'migrid.l8.status', 'L8_SAFE_MODE_CHANGED'],
+    topics: ['migrid.physics.alerts', 'MARKET_PRICE_UPDATED', 'migrid.l8.status', 'L8_SAFE_MODE_CHANGED', 'ADVANCE_CHARGE_SIGNAL', 'GRID_HEALTH_UPDATED'],
     fromBeginning: false
   });
 
@@ -516,7 +553,15 @@ async function startSafetyConsumer() {
     eachMessage: async ({ topic, partition, message }) => {
       const payload = JSON.parse(message.value.toString());
 
-      if (topic === 'migrid.l8.status') {
+      if (topic === 'ADVANCE_CHARGE_SIGNAL') {
+        const iso = payload.iso.toUpperCase().replace(/-/g, '');
+        console.log(`[L2] Received Advance Charge Signal for ${iso}: ${payload.reason}`);
+        await redisClient.setEx(`l2:advance_charge:${iso}`, 600, JSON.stringify(payload));
+      } else if (topic === 'GRID_HEALTH_UPDATED') {
+        const iso = payload.iso.toUpperCase().replace(/-/g, '');
+        console.log(`[L2] Received Grid Health Update for ${iso}: ${(payload.renewable_percentage * 100).toFixed(1)}% renewable`);
+        await redisClient.setEx(`l2:grid_health:${iso}`, 600, JSON.stringify(payload));
+      } else if (topic === 'migrid.l8.status') {
         console.log(`[L2] Received status update from L8 for site ${payload.site_id}: ${payload.status}`);
         // Cache site status (e.g., SAFE_MODE, METER_OFFLINE)
         await redisClient.setEx(`l8:site:status:${payload.site_id}`, 3600, payload.status);
