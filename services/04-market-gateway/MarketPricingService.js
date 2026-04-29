@@ -151,6 +151,83 @@ class MarketPricingService {
 
     return result.rows;
   }
+
+  /**
+   * Fetches historical Fuel Mix / Carbon Intensity data.
+   * Optimized for L11 ML Engine training.
+   * @param {string} iso - The ISO name
+   * @param {number} days - Number of days of history
+   * @returns {Promise<Array>} List of historical fuel mix records
+   */
+  async getFuelMixHistory(iso, days = 7) {
+    const isoFilter = (iso && iso !== 'ALL') ? this.normalizeIso(iso) : null;
+    const intervalDays = parseInt(days) || 7;
+
+    const result = await this.pool.query(`
+      SELECT iso, fuel_type, gen_mw, timestamp
+      FROM fuel_mix
+      WHERE ($1::text IS NULL OR iso = $1)
+        AND timestamp > NOW() - (make_interval(days => $2))
+      ORDER BY timestamp ASC
+    `, [isoFilter, intervalDays]);
+
+    return result.rows.map(row => ({
+      ...row,
+      gen_mw: new Decimal(row.gen_mw)
+    }));
+  }
+
+  /**
+   * Fetches historical Load Forecast data.
+   * Optimized for L11 ML Engine training.
+   * @param {string} iso - The ISO name
+   * @param {number} days - Number of days of history
+   * @returns {Promise<Array>} List of historical load forecast records
+   */
+  async getLoadForecastHistory(iso, days = 7) {
+    const isoFilter = (iso && iso !== 'ALL') ? this.normalizeIso(iso) : null;
+    const intervalDays = parseInt(days) || 7;
+
+    const result = await this.pool.query(`
+      SELECT iso, location, forecast_mw, forecast_timestamp, publish_time
+      FROM load_forecasts
+      WHERE ($1::text IS NULL OR iso = $1)
+        AND forecast_timestamp > NOW() - (make_interval(days => $2))
+      ORDER BY forecast_timestamp ASC
+    `, [isoFilter, intervalDays]);
+
+    return result.rows.map(row => ({
+      ...row,
+      forecast_mw: new Decimal(row.forecast_mw)
+    }));
+  }
+
+  /**
+   * Fetches historical Net Load data.
+   * Optimized for L11 CAISO "Duck Curve" analysis.
+   * @param {string} iso - The ISO name
+   * @param {number} days - Number of days of history
+   * @returns {Promise<Array>} List of historical net load records
+   */
+  async getNetLoadHistory(iso, days = 7) {
+    const isoFilter = (iso && iso !== 'ALL') ? this.normalizeIso(iso) : null;
+    const intervalDays = parseInt(days) || 7;
+
+    const result = await this.pool.query(`
+      SELECT iso, actual_load_mw, net_load_mw, renewables_mw, timestamp
+      FROM net_load
+      WHERE ($1::text IS NULL OR iso = $1)
+        AND timestamp > NOW() - (make_interval(days => $2))
+      ORDER BY timestamp ASC
+    `, [isoFilter, intervalDays]);
+
+    return result.rows.map(row => ({
+      ...row,
+      net_load_mw: new Decimal(row.net_load_mw),
+      actual_load_mw: row.actual_load_mw ? new Decimal(row.actual_load_mw) : null,
+      renewables_mw: row.renewables_mw ? new Decimal(row.renewables_mw) : null
+    }));
+  }
 }
 
 module.exports = MarketPricingService;

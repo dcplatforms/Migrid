@@ -143,12 +143,14 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
         if (unifiedRaw) {
           const unified = JSON.parse(unifiedRaw);
           confidenceScore = unified.regional_confidence?.[currentIso] || unified.confidence_score || 1.0;
+          console.log(`[Market Gateway] Using L2 regional confidence fallback for ${currentIso}: ${confidenceScore}`);
         }
       }
     } catch (err) {
       console.warn('[Market Gateway] Failed to parse physics score for broadcast:', err.message);
     }
 
+    const isHighFidelity = (physicsScore > 0.95 || confidenceScore > 0.95);
     const payload = {
       iso: iso.toUpperCase().replace(/-/g, ''),
       location: location || 'SYSTEM_WIDE',
@@ -157,7 +159,9 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
       degradation_cost_mwh: degradationCostMwh.toNumber(),
       physics_score: physicsScore,
       confidence_score: confidenceScore,
-      fidelity_status: (physicsScore > 0.95 || confidenceScore > 0.95) ? 'HIGH_FIDELITY' : 'STANDARD',
+      is_high_fidelity: isHighFidelity,
+      fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD',
+      site_aware_sync: true, // L1 v10.1.2 compliance
       timestamp: new Date().toISOString()
     };
 
@@ -448,6 +452,7 @@ app.get('/data/training/lmp', authenticateToken, async (req, res) => {
 
     res.json({
       iso: iso || 'ALL',
+      type: 'LMP_PRICES',
       record_count: prices.length,
       data: prices.map(p => ({
         ...p,
@@ -459,6 +464,89 @@ app.get('/data/training/lmp', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('[L11 Data Export Error]', error.message);
     res.status(500).json({ error: 'Failed to export training data' });
+  }
+});
+
+/**
+ * L11 AI Data Readiness: Export historical Fuel Mix data for training
+ */
+app.get('/data/training/fuel-mix', authenticateToken, async (req, res) => {
+  const { iso, days } = req.query;
+  const daysInt = parseInt(days) || 7;
+
+  try {
+    const data = await pricingService.getFuelMixHistory(iso, daysInt);
+
+    res.json({
+      iso: iso || 'ALL',
+      type: 'FUEL_MIX',
+      record_count: data.length,
+      data: data.map(d => ({
+        ...d,
+        gen_mw: d.gen_mw.toNumber()
+      })),
+      version: '1.1.0',
+      status: 'READY_FOR_L11'
+    });
+  } catch (error) {
+    console.error('[L11 Fuel Mix Export Error]', error.message);
+    res.status(500).json({ error: 'Failed to export fuel mix training data' });
+  }
+});
+
+/**
+ * L11 AI Data Readiness: Export historical Load Forecast data for training
+ */
+app.get('/data/training/load-forecast', authenticateToken, async (req, res) => {
+  const { iso, days } = req.query;
+  const daysInt = parseInt(days) || 7;
+
+  try {
+    const data = await pricingService.getLoadForecastHistory(iso, daysInt);
+
+    res.json({
+      iso: iso || 'ALL',
+      type: 'LOAD_FORECAST',
+      record_count: data.length,
+      data: data.map(d => ({
+        ...d,
+        forecast_mw: d.forecast_mw.toNumber()
+      })),
+      version: '1.1.0',
+      status: 'READY_FOR_L11'
+    });
+  } catch (error) {
+    console.error('[L11 Load Forecast Export Error]', error.message);
+    res.status(500).json({ error: 'Failed to export load forecast training data' });
+  }
+});
+
+/**
+ * L11 AI Data Readiness: Export historical Net Load data for training
+ */
+app.get('/data/training/net-load', authenticateToken, async (req, res) => {
+  const { iso, days } = req.query;
+  const daysInt = parseInt(days) || 7;
+
+  try {
+    const data = await pricingService.getNetLoadHistory(iso, daysInt);
+
+    res.json({
+      iso: iso || 'ALL',
+      type: 'NET_LOAD',
+      record_count: data.length,
+      data: data.map(d => ({
+        ...d,
+        net_load_mw: d.net_load_mw.toNumber(),
+        actual_load_mw: d.actual_load_mw ? d.actual_load_mw.toNumber() : null,
+        renewables_mw: d.renewables_mw ? d.renewables_mw.toNumber() : null
+      })),
+      version: '1.1.0',
+      status: 'READY_FOR_L11'
+    });
+  } catch (error) {
+    console.error('[L11 Net Load Export Error]', error.message);
+    res.status(500).json({ error: 'Failed to export net load training data' });
   }
 });
 
