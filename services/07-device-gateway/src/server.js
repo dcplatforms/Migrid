@@ -39,7 +39,7 @@ app.get('/health', (req, res) => {
     service: 'Device Gateway',
     layer: 'L7',
     status: 'OK',
-    version: '5.5.0',
+    version: '5.6.0',
     podId: process.env.POD_ID || 'gateway-instance-1'
   });
 });
@@ -284,12 +284,18 @@ server.on('upgrade', (request, socket, head) => {
 wss.on('connection', async (ws, request, chargePointId, protocol) => {
     console.log(`[L7] Charger Connected: ${chargePointId} | Protocol: ${protocol}`);
 
-    const chargerRes = await pool.query('SELECT iso_region FROM chargers WHERE serial_number = $1', [chargePointId]);
+    const chargerRes = await pool.query('SELECT iso_region, location_id FROM chargers WHERE serial_number = $1', [chargePointId]);
     const rawRegion = chargerRes.rows[0]?.iso_region || 'CAISO';
     const isoRegion = rawRegion.toUpperCase().replace(/-/g, '');
+    const siteId = chargerRes.rows[0]?.location_id;
 
-    localConnections.set(chargePointId, { ws, protocol, isoRegion });
+    localConnections.set(chargePointId, { ws, protocol, isoRegion, siteId });
     await registerConnection(chargePointId, podId, isoRegion);
+
+    // Cache site metadata for low-latency telemetry (L1 multi-site awareness)
+    if (siteId) {
+        await redis.set(`charger_site:${chargePointId}`, siteId, 'EX', 86400);
+    }
 
     await publishSessionEvent('CHARGER_CONNECTED', {
         chargePointId,
