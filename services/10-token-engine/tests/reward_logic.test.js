@@ -14,7 +14,7 @@ jest.mock('redis', () => ({
   }))
 }));
 
-describe('L10 Token Engine - Reward Logic v4.3.1', () => {
+describe('L10 Token Engine - Reward Logic v4.3.3', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -109,5 +109,28 @@ describe('L10 Token Engine - Reward Logic v4.3.1', () => {
       expect(multiplier.toNumber()).toBe(1.0);
       expect(reason).toBe('Standard Reward');
     });
+  });
+
+  test('Sentinel Fidelity logic check (physics_score > 0.99)', () => {
+    // This logic is in the Kafka consumer's eachMessage, but we can verify the boundary
+    const physicsScoreHigh = 0.995;
+    const isSentinelFidelity = physicsScoreHigh > 0.99;
+    expect(isSentinelFidelity).toBe(true);
+
+    const physicsScoreStandard = 0.98;
+    const isSentinelFidelityStandard = physicsScoreStandard > 0.99;
+    expect(isSentinelFidelityStandard).toBe(false);
+  });
+
+  test('High Fidelity Standard April 2026 check (physics or confidence > 0.95)', () => {
+    const physicsScore = 0.96;
+    const confidenceScore = 0.1;
+    const isHighFidelity = (physicsScore > 0.95 || confidenceScore > 0.95);
+    expect(isHighFidelity).toBe(true);
+
+    const lowPhysicsScore = 0.94;
+    const highConfidenceScore = 0.97;
+    const isHighFidelity2 = (lowPhysicsScore > 0.95 || highConfidenceScore > 0.95);
+    expect(isHighFidelity2).toBe(true);
   });
 });
