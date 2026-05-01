@@ -25,7 +25,9 @@ async function run() {
         source_value: 15.0, // 15 kWh
         event_id: 'session-123',
         iso: 'ENTSO-E',
-        physics_score: 0.98
+        physics_score: 0.995,
+        is_sentinel_fidelity: true,
+        site_id: 'SITE-ALPHA'
       }
     },
     {

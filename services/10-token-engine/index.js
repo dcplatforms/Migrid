@@ -58,10 +58,10 @@ async function getOrCreateDriverWallet(driverId) {
   return res.rows[0];
 }
 
-async function logRewardTransaction(driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status = 'pending', iso = 'CAISO', physicsScore = null, isHighFidelity = false, multiplierReason = 'Standard Reward', confidenceScore = null, resourceType = 'EV') {
+async function logRewardTransaction(driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status = 'pending', iso = 'CAISO', physicsScore = null, isHighFidelity = false, multiplierReason = 'Standard Reward', confidenceScore = null, resourceType = 'EV', isSentinelFidelity = false, siteId = null) {
   const res = await pgClient.query(
-    'INSERT INTO token_reward_log(driver_id, rule_id, triggering_event_id, source_value, points_awarded, status, iso, physics_score, is_high_fidelity, multiplier_reason, confidence_score, resource_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *;',
-    [driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status, iso, physicsScore, isHighFidelity, multiplierReason, confidenceScore, resourceType]
+    'INSERT INTO token_reward_log(driver_id, rule_id, triggering_event_id, source_value, points_awarded, status, iso, physics_score, is_high_fidelity, multiplier_reason, confidence_score, resource_type, is_sentinel_fidelity, site_id) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *;',
+    [driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status, iso, physicsScore, isHighFidelity, multiplierReason, confidenceScore, resourceType, isSentinelFidelity, siteId]
   );
   return res.rows[0];
 }
@@ -125,7 +125,7 @@ async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '4.3.2',
+    version: '4.3.3',
     status: 'healthy',
     layer: 'L10'
   });
@@ -180,13 +180,27 @@ async function start() {
           confidence_score,
           confidenceScore,
           resource_type,
-          resourceType
+          resourceType,
+          is_sentinel_fidelity,
+          isSentinelFidelity,
+          site_id,
+          siteId,
+          location_id,
+          locationId
         } = payload;
 
         const vppAligned = !!(is_vpp_event || isVppEvent);
-        const physicsScoreVal = physics_score !== undefined ? physics_score : physicsScore;
-        const confidenceScoreVal = confidence_score !== undefined ? confidence_score : confidenceScore;
-        const isHighFidelityVal = is_high_fidelity !== undefined ? is_high_fidelity : isHighFidelity;
+
+        // Robust Payload Validation
+        let physicsScoreVal = physics_score !== undefined ? parseFloat(physics_score) : (physicsScore !== undefined ? parseFloat(physicsScore) : null);
+        if (physicsScoreVal !== null && isNaN(physicsScoreVal)) physicsScoreVal = null;
+
+        let confidenceScoreVal = confidence_score !== undefined ? parseFloat(confidence_score) : (confidenceScore !== undefined ? parseFloat(confidenceScore) : null);
+        if (confidenceScoreVal !== null && isNaN(confidenceScoreVal)) confidenceScoreVal = null;
+
+        const isHighFidelityVal = is_high_fidelity !== undefined ? !!is_high_fidelity : (isHighFidelity !== undefined ? !!isHighFidelity : false);
+        const isSentinelFidelityVal = is_sentinel_fidelity !== undefined ? !!is_sentinel_fidelity : (isSentinelFidelity !== undefined ? !!isSentinelFidelity : false);
+        const siteIdVal = site_id || siteId || location_id || locationId || null;
         const resourceTypeVal = resource_type || resourceType || 'EV';
 
         // 1. Ensure Driver Wallet Exists (and get address)
@@ -201,13 +215,16 @@ async function start() {
         let rule_id;
         let multiplierReason = 'Standard Reward';
 
-        let physicsScorePersist = physicsScoreVal !== undefined ? parseFloat(physicsScoreVal) : null;
-        let confidenceScorePersist = confidenceScoreVal !== undefined ? parseFloat(confidenceScoreVal) : null;
+        let physicsScorePersist = physicsScoreVal;
+        let confidenceScorePersist = confidenceScoreVal;
 
         // April 2026 Audit Standard: High fidelity if physics OR confidence > 0.95
-        let isHighFidelityPersist = (isHighFidelityVal === true) ||
+        let isHighFidelityPersist = isHighFidelityVal ||
                                      (physicsScorePersist !== null && physicsScorePersist > 0.95) ||
                                      (confidenceScorePersist !== null && confidenceScorePersist > 0.95);
+
+        // Sentinel Fidelity: Physics > 0.99
+        let isSentinelFidelityPersist = isSentinelFidelityVal || (physicsScorePersist !== null && physicsScorePersist > 0.99);
 
         // Fetch rule early for idempotency check
         const rule = await getRewardRule(action_type);
@@ -271,7 +288,9 @@ async function start() {
           isHighFidelityPersist,
           multiplierReason,
           confidenceScorePersist,
-          resourceTypeVal
+          resourceTypeVal,
+          isSentinelFidelityPersist,
+          siteIdVal
         );
 
         // 6. Execute Blockchain/Wallet Transaction
