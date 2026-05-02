@@ -123,7 +123,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-      version: '5.11.0', // Weekly Mission: Solar Ramp Gamification & Forward Engineering
+      version: '5.12.0', // Weekly Mission: Site Awareness & Sentinel Fidelity Alignment
     status: 'healthy',
     layer: 'L6'
   });
@@ -320,12 +320,17 @@ async function processChargingEvent(event) {
     let isHighFidelity = true;
     let isLowVariance = true;
     let confidence_score = 0.5; // Default confidence
+    const siteId = event.site_id || event.siteId || event.location_id || event.locationId || null;
+    const isSentinelFidelity = !!(event.is_sentinel_fidelity || event.isSentinelFidelity);
 
     // Use event-provided score if available (Backward compatibility for camelCase)
     if (event.physics_score !== undefined) physics_score = parseFloat(event.physics_score);
     else if (event.physicsScore !== undefined) physics_score = parseFloat(event.physicsScore);
 
-    isHighFidelity = physics_score > 0.95;
+    if (event.confidence_score !== undefined) confidence_score = parseFloat(event.confidence_score);
+    else if (event.confidenceScore !== undefined) confidence_score = parseFloat(event.confidenceScore);
+
+    isHighFidelity = physics_score > 0.95 || confidence_score > 0.95;
 
     // [L6-118] Fetch Data Confidence Score from L1 Digital Twin for ML Engine Audit
     if (vehicleId) {
@@ -354,10 +359,10 @@ async function processChargingEvent(event) {
 
       isLowVariance = variance < 5.0;
       physics_score = Math.max(0, Math.min(1, 1 - (variance / varianceThreshold)));
-      isHighFidelity = physics_score > 0.95;
+      isHighFidelity = physics_score > 0.95 || confidence_score > 0.95;
 
       await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
-        [driverId, 'session_completed', JSON.stringify({ sessionId, energyDispensedKwh: event.energyDispensedKwh, isLowVariance, physics_score, isHighFidelity, resource_type: resourceType, variance_percentage: variance })]);
+        [driverId, 'session_completed', JSON.stringify({ sessionId, energyDispensedKwh: event.energyDispensedKwh, isLowVariance, physics_score, isHighFidelity, resource_type: resourceType, variance_percentage: variance, site_id: siteId, is_sentinel_fidelity: isSentinelFidelity })]);
 
       await checkFirstSessionAchievement(driverId);
       await updateStreaks(driverId);
@@ -377,7 +382,7 @@ async function processChargingEvent(event) {
 
       // Phase 6 AI Readiness: Check for ML Contributor (High-fidelity data)
       if (isLowVariance) {
-        await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'low_variance_session', JSON.stringify({ sessionId, variance, physics_score, confidence_score })]);
+        await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)', [driverId, 'low_variance_session', JSON.stringify({ sessionId, variance, physics_score, confidence_score, site_id: siteId, is_sentinel_fidelity: isSentinelFidelity })]);
         await checkMLContributorAchievement(driverId);
         await checkEnergyArchitectAchievement(driverId);
         await checkL11DataGuardianAchievement(driverId);
@@ -439,7 +444,7 @@ async function processChargingEvent(event) {
 
       if (isSurplus && isFinal) {
         await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
-          [driverId, 'surplus_charge', JSON.stringify({ iso, sessionId, physics_score, isHighFidelity })]);
+          [driverId, 'surplus_charge', JSON.stringify({ iso, sessionId, physics_score, isHighFidelity, site_id: siteId })]);
       }
 
       // Notify of points earned
@@ -457,7 +462,8 @@ async function processChargingEvent(event) {
           physics_score: physics_score.toFixed(4),
           confidence_score: confidence_score.toFixed(4),
           fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD',
-          multiplier_reason: multiplierReason
+          multiplier_reason: multiplierReason,
+          site_id: siteId
         }
       };
 
@@ -931,18 +937,19 @@ async function checkFirstSessionAchievement(driver_id) {
 }
 
 async function checkPhysicsSentinelAchievement(driver_id) {
-  // Requirement: 10 consecutive high-fidelity sessions (Physics Score > 0.99)
-  // We check the last 10 'session_completed' actions and ensure they all have physics_score > 0.99.
+  // Requirement: 10 consecutive high-fidelity sessions (Physics Score > 0.99 or is_sentinel_fidelity flag)
+  // We check the last 10 'session_completed' actions and ensure they all meet the sentinel criteria.
   const result = await pool.query(`
     WITH recent_sessions AS (
-      SELECT (metadata->>'physics_score')::float as physics_score
+      SELECT (metadata->>'physics_score')::float as physics_score,
+             COALESCE((metadata->>'is_sentinel_fidelity')::boolean, false) as is_sentinel
       FROM driver_actions
       WHERE driver_id = $1 AND action_type = 'session_completed'
       ORDER BY created_at DESC
       LIMIT 10
     )
     SELECT COUNT(*) as total,
-           COUNT(*) FILTER (WHERE physics_score > 0.99) as sentinel_count
+           COUNT(*) FILTER (WHERE physics_score > 0.99 OR is_sentinel = true) as sentinel_count
     FROM recent_sessions
   `, [driver_id]);
 
@@ -957,7 +964,7 @@ async function checkPhysicsSentinelAchievement(driver_id) {
 }
 
 async function checkL11DataGuardianAchievement(driver_id) {
-  // Requirement: 15 consecutive high-fidelity sessions (Physics Score > 0.95)
+  // Requirement: 15 consecutive high-fidelity sessions (High Fidelity defined as Physics OR Confidence > 0.95)
   // We check the last 15 'session_completed' actions and ensure they all have isHighFidelity = true in metadata.
   const result = await pool.query(`
     WITH recent_sessions AS (
@@ -969,7 +976,7 @@ async function checkL11DataGuardianAchievement(driver_id) {
       LIMIT 15
     )
     SELECT COUNT(*) as total,
-           COUNT(*) FILTER (WHERE is_high_fidelity = true AND physics_score > 0.95) as high_fidelity_count
+           COUNT(*) FILTER (WHERE is_high_fidelity = true) as high_fidelity_count
     FROM recent_sessions
   `, [driver_id]);
 
