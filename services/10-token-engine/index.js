@@ -188,9 +188,17 @@ async function start() {
         } = payload;
 
         const vppAligned = !!(is_vpp_event || isVppEvent);
-        const physicsScoreVal = physics_score !== undefined ? physics_score : physicsScore;
-        const confidenceScoreVal = confidence_score !== undefined ? confidence_score : confidenceScore;
-        const isHighFidelityVal = is_high_fidelity !== undefined ? is_high_fidelity : isHighFidelity;
+
+        // Robust Payload Validation
+        let physicsScoreVal = physics_score !== undefined ? parseFloat(physics_score) : (physicsScore !== undefined ? parseFloat(physicsScore) : null);
+        if (physicsScoreVal !== null && isNaN(physicsScoreVal)) physicsScoreVal = null;
+
+        let confidenceScoreVal = confidence_score !== undefined ? parseFloat(confidence_score) : (confidenceScore !== undefined ? parseFloat(confidenceScore) : null);
+        if (confidenceScoreVal !== null && isNaN(confidenceScoreVal)) confidenceScoreVal = null;
+
+        const isHighFidelityVal = is_high_fidelity !== undefined ? !!is_high_fidelity : (isHighFidelity !== undefined ? !!isHighFidelity : false);
+        const isSentinelFidelityVal = is_sentinel_fidelity !== undefined ? !!is_sentinel_fidelity : (isSentinelFidelity !== undefined ? !!isSentinelFidelity : false);
+        const siteIdVal = site_id || siteId || location_id || locationId || null;
         const resourceTypeVal = resource_type || resourceType || 'EV';
         const siteIdVal = site_id || siteId || location_id || locationId || null;
 

@@ -192,6 +192,7 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                         console.error('[L7] Error extracting energy from TransactionEvent', e);
                     }
 
+                    // Multi-site awareness: site_id will be enriched by publishSessionEvent from Redis
                     await publishSessionEvent('SESSION_COMPLETED', {
                         chargePointId,
                         transactionId: payload.transactionInfo?.transactionId,
