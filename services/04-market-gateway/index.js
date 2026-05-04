@@ -1,5 +1,5 @@
 /**
- * L4: Market Gateway Service (v3.8.1)
+ * L4: Market Gateway Service (v3.8.3)
  * Wholesale energy market integration (CAISO, PJM, ERCOT)
  */
 
@@ -151,6 +151,7 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
     }
 
     const isHighFidelity = (physicsScore > 0.95 || confidenceScore > 0.95);
+    const isSentinelFidelity = physicsScore > 0.99;
     const payload = {
       iso: iso.toUpperCase().replace(/-/g, ''),
       location: location || 'SYSTEM_WIDE',
@@ -160,6 +161,7 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
       physics_score: physicsScore,
       confidence_score: confidenceScore,
       is_high_fidelity: isHighFidelity,
+      is_sentinel_fidelity: isSentinelFidelity,
       fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD',
       site_aware_sync: true, // L1 v10.1.2 compliance
       timestamp: new Date().toISOString()
@@ -310,7 +312,7 @@ app.get('/health', async (req, res) => {
 
   res.json({
     service: 'market-gateway',
-    version: '3.8.1',
+    version: '3.8.3',
     status: 'healthy',
     mode: process.env.USE_LIVE_DATA === 'true' ? 'LIVE' : 'SIMULATION',
     layer: 'L4',

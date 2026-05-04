@@ -161,6 +161,7 @@ class BiddingOptimizer {
 
     // High-Fidelity logic: physics_score > 0.95 OR confidence_score > 0.95 (Align with L10 v4.3.2)
     const isHighFidelity = (physicsScore > 0.95 || confidenceScore > 0.95);
+    const isSentinelFidelity = physicsScore > 0.99;
     const capacityFidelity = isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD';
 
     // 3. Handle Halted Bidding
@@ -184,6 +185,8 @@ class BiddingOptimizer {
           locks,
           physics_score: physicsScore,
           confidence_score: confidenceScore,
+          is_high_fidelity: isHighFidelity,
+          is_sentinel_fidelity: isSentinelFidelity,
           capacity_fidelity: capacityFidelity,
           audit_context: auditContext,
           timestamp: new Date().toISOString()
@@ -277,12 +280,14 @@ class BiddingOptimizer {
         physics_score: physicsScore,
         confidence_score: confidenceScore,
         is_high_fidelity: isHighFidelity,
+        is_sentinel_fidelity: isSentinelFidelity,
         capacity_fidelity: capacityFidelityFromRedis, // Already normalized in getAggregatedCapacity
         audit_context: {
           ...auditContext,
           ev_capacity_kw: breakdown.ev,
           bess_capacity_kw: breakdown.bess,
           v3_capacity_fidelity: capacityFidelityFromRedis === 'HIGH_FIDELITY',
+          is_sentinel_fidelity: isSentinelFidelity,
           site_aware_sync: true // L1 v10.1.2 requirement
         },
         pVppKw: pVppKw.toNumber(),
