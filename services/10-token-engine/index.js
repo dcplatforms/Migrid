@@ -181,8 +181,6 @@ async function start() {
           confidenceScore,
           resource_type,
           resourceType,
-          is_sentinel_fidelity,
-          isSentinelFidelity,
           site_id,
           siteId,
           location_id,
@@ -202,6 +200,7 @@ async function start() {
         const isSentinelFidelityVal = is_sentinel_fidelity !== undefined ? !!is_sentinel_fidelity : (isSentinelFidelity !== undefined ? !!isSentinelFidelity : false);
         const siteIdVal = site_id || siteId || location_id || locationId || null;
         const resourceTypeVal = resource_type || resourceType || 'EV';
+        const siteIdVal = site_id || siteId || location_id || locationId || null;
 
         // 1. Ensure Driver Wallet Exists (and get address)
         const driverWallet = await getOrCreateDriverWallet(driver_id);
@@ -215,16 +214,22 @@ async function start() {
         let rule_id;
         let multiplierReason = 'Standard Reward';
 
-        let physicsScorePersist = physicsScoreVal;
-        let confidenceScorePersist = confidenceScoreVal;
+        // Robust payload validation and parsing
+        let physicsScorePersist = (physicsScoreVal !== undefined && physicsScoreVal !== null) ? parseFloat(physicsScoreVal) : null;
+        let confidenceScorePersist = (confidenceScoreVal !== undefined && confidenceScoreVal !== null) ? parseFloat(confidenceScoreVal) : null;
+
+        if (physicsScoreVal !== undefined && isNaN(physicsScorePersist)) {
+          console.warn(`[L10 Audit] Received NaN physics_score for event ${event_id}. Skipping.`);
+          return;
+        }
 
         // April 2026 Audit Standard: High fidelity if physics OR confidence > 0.95
-        let isHighFidelityPersist = isHighFidelityVal ||
+        let isHighFidelityPersist = (isHighFidelityVal === true || isHighFidelityVal === 'true') ||
                                      (physicsScorePersist !== null && physicsScorePersist > 0.95) ||
                                      (confidenceScorePersist !== null && confidenceScorePersist > 0.95);
 
-        // Sentinel Fidelity: Physics > 0.99
-        let isSentinelFidelityPersist = isSentinelFidelityVal || (physicsScorePersist !== null && physicsScorePersist > 0.99);
+        // L10 v4.3.3 Sentinel Fidelity Tier: physics_score > 0.99
+        let isSentinelFidelityPersist = (physicsScorePersist !== null && physicsScorePersist > 0.99);
 
         // Fetch rule early for idempotency check
         const rule = await getRewardRule(action_type);

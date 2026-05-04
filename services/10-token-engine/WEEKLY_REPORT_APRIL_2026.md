@@ -1,22 +1,20 @@
-# L10 Token Engine: Weekly Product Update (April 2026)
+# L10 Token Engine: Weekly Product Update (April 2026 - v4.3.3)
 
 ## 1. L10 Web3 & Rewards Report
-*   **Strategic Alignment**: Successfully synchronized L10 (v4.3.2) with the L1 Physics Engine (v10.1.2) and L6 Engagement Engine (v5.10.0). Proof of Physics is now the mandatory gate for all energy-based rewards, ensuring MiGrid's "Proof of Value" remains grounded in verified kilowatt-hours.
-*   **High-Fidelity Standard**: In accordance with the April 2026 platform audit, L10 now classifies rewards as `HIGH_FIDELITY` if either `physics_score` or `confidence_score` exceeds **0.95**. This data is being persisted to the `token_reward_log` to serve as "Ground Truth" training data for the L11 ML Engine.
-*   **Dynamic Economics**: LMP-based multipliers are perfectly aligned across the stack.
-    *   **Surplus Bonus (1.5x)**: Triggered when LMP < $30/MWh, incentivizing charging during peak renewable penetration.
-    *   **Scarcity Reward (2.0x)**: Awarded for V2G discharge or VPP-aligned charging when LMP > $100/MWh.
-    *   **Scarcity Surcharge (0.5x)**: Penalizes non-aligned charging during grid stress events.
-*   **Resource Awareness**: Hardened differentiate logic for **EV** vs **BESS** resources, ensuring that stationary storage and mobile assets are audited with appropriate variance thresholds (10% for BESS, 15% for EV).
+*   **Strategic Alignment**: v4.3.3 introduces **Sentinel Fidelity** and **Site Awareness**, ensuring L10 remains the high-resolution ledger for the MiGrid ecosystem. By tracking `site_id`, we now enable site-level load analysis for L11 ML training.
+*   **Sentinel Fidelity Tier**: Aligned with P1 strategic goals, we've introduced a "Sentinel" tier for records where `physics_score > 0.99`. these elite data points are flagged for prioritized ingestion by the Phase 6 ML Engine.
+*   **High-Fidelity Standard**: Maintained the April 2026 platform standard: `is_high_fidelity` is triggered if either `physics_score` or `confidence_score` exceeds **0.95**.
+*   **Robust Ingestion**: Hardened the Kafka consumer with float parsing, NaN checks, and flexible field mapping (`site_id`, `location_id`, etc.) to accommodate evolving payloads from L7 and L1.
+*   **Dynamic Economics**: LMP-based multipliers ($30/$100 thresholds) remain active and synchronized with L4 Market Gateway v3.8.2.
 
 ## 2. Backlog Updates
-*   **[P0] Polygon Gas Protection**: Implement enhanced retry logic and dynamic gas-limit adjustment for Polygon RPC nodes during network congestion.
-*   **[P1] Multi-Tenant Wallet Provisioning**: Refactor `getOrCreateDriverWallet` to support Phase 7 tenant isolation, ensuring wallet keys are partitioned by `fleet_id`.
-*   **[P2] Redis Performance Optimization**: Shift from individual `hGet` lookups to pipelined `mGet` calls for high-throughput reward processing during VPP events.
-*   **[P3] Negative Price Handling**: Refine reward logic for Nord Pool zonal markets to handle negative price scenarios where charging should receive maximum multipliers.
+*   **[P0] Polygon Gas Protection**: (Carried Over) Implement enhanced retry logic and dynamic gas-limit adjustment for Polygon RPC nodes.
+*   **[P1] Site-Level Reward Analytics**: Develop a reporting dashboard for L10 that aggregates rewards by `site_id` to visualize regional grid impact.
+*   **[P2] Multi-Tenant Wallet Partitioning**: (Phase 7 Prep) Refactor wallet provisioning to use `fleet_id` as a tenant isolation boundary.
+*   **[P3] Sentinel Multipliers**: Research the economic impact of providing a small "fidelity bonus" for Sentinel-tier (0.99+) contributions.
 
 ## 3. Engineering Execution
-*   **Bug Fix**: Resolved a critical reference error in `services/10-token-engine/index.js` where `resourceTypePersist` was undefined. Correctly mapped the variable to `resourceTypeVal` to ensure EV vs BESS differentiation is preserved in the audit log.
-*   **Version Bump**: Promoted L10 to **v4.3.2**.
-*   **Logic Verification**: Verified that LMP thresholds ($30/$100) and high-fidelity gates (>0.95) are consistent with L4 (Market Gateway) and L6 (Engagement Engine).
-*   **Test Suite**: All 11 Jest tests passed, confirming the integrity of the Reward Minting Queue and Dynamic Multiplier logic.
+*   **Database Schema**: Deployed Migration `030_l10_v4_3_3_sentinel_and_site_audit.sql` adding `is_sentinel_fidelity` and `site_id` to `token_reward_log`.
+*   **Logic Enhancement**: Updated `index.js` to persist site metadata and sentinel flags.
+*   **Version Bump**: Promoted L10 to **v4.3.3**.
+*   **Test Suite**: Expanded Jest coverage to 13 tests, confirming the integrity of the Sentinel Fidelity and High-Fidelity logic gates.
