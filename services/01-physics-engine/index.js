@@ -366,7 +366,7 @@ async function reconcileLogs() {
         threshold: payload.threshold || (payload.event_type === 'EFFICIENCY_ALERT' ? 0.85 : (payload.event_type === 'CAPACITY_VIOLATION' ? 20.0 : null)),
         expected: payload.expected,
         actual: payload.actual,
-        physics_score: physicsScore,
+        physics_score: physicsScore.toFixed(4),
         is_high_fidelity: isHighFidelity,
         is_sentinel_fidelity: isSentinelFidelity,
         confidence_score: confidenceScore,
@@ -426,7 +426,7 @@ async function reconcileLogs() {
         payload.v2g_active,
         normalizeIso(payload.iso_region),
         payload.market_price_at_session || 0.0,
-        physicsScore,
+        physicsScore.toFixed(4),
         isHighFidelity
       ]);
 
@@ -468,6 +468,8 @@ async function syncDigitalTwin() {
 
     for (const vehicle of result.rows) {
       const vehicleSiteId = vehicle.site_id || SITE_ID;
+
+      // [L1-125] Multi-Site Awareness: Cache site load data for performance
       if (!siteCache.has(vehicleSiteId)) {
         const buildingLoadKw = parseFloat(await redisClient.get(`site:${vehicleSiteId}:building_load_kw`)) || 0;
         const siteConfig = await redisClient.hGetAll(`site:${vehicleSiteId}:config`) || {};
@@ -479,16 +481,6 @@ async function syncDigitalTwin() {
 
       const iso = normalizeIso(vehicle.iso);
       const key = `l1:${iso}:vehicle:${vehicle.id}`;
-      const vehicleSiteId = vehicle.site_id || SITE_ID;
-
-      // [L1-125] Fetch site telemetry if not in cache
-      if (!siteCache.has(vehicleSiteId)) {
-        const loadKw = parseFloat(await redisClient.get(`site:${vehicleSiteId}:building_load_kw`)) || 0;
-        const config = (await redisClient.hGetAll(`site:${vehicleSiteId}:config`)) || {};
-        const limitKw = parseFloat(config.max_capacity_kw) || 0;
-        siteCache.set(vehicleSiteId, { loadKw, limitKw });
-      }
-      const siteLoadData = siteCache.get(vehicleSiteId);
 
       // [L1-118] Implement Data Confidence Score for L11 ML Engine
       const streakKey = `l1:streak:sentinel:${vehicle.id}`;
