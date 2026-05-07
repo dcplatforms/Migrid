@@ -183,9 +183,14 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
 
                             if (energySample) {
                                 energyDispensed = parseFloat(energySample.value) || 0;
-                            } else if (lastMeterValue.sampledValue?.[0]?.value) {
-                                // Fallback: Take the first value if it looks like energy
-                                energyDispensed = parseFloat(lastMeterValue.sampledValue[0].value) || 0;
+                            } else {
+                                // Fallback: Find any value with 'kWh' unit or just the first sample
+                                const unitSample = lastMeterValue.sampledValue?.find(sv => sv.unit === 'kWh' || sv.unit === 'Wh');
+                                if (unitSample) {
+                                    energyDispensed = (unitSample.unit === 'Wh') ? parseFloat(unitSample.value) / 1000 : parseFloat(unitSample.value);
+                                } else if (lastMeterValue.sampledValue?.[0]?.value) {
+                                    energyDispensed = parseFloat(lastMeterValue.sampledValue[0].value) || 0;
+                                }
                             }
                         }
                     } catch (e) {
