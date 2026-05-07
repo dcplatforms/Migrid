@@ -913,4 +913,46 @@ describe('L2 Grid Signal Service', () => {
       expect.stringContaining('"renewable_percentage":0.65')
     );
   });
+
+  test('POST /openadr/v3/events should include is_sentinel_fidelity in broadcast (physics > 0.99)', async () => {
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({ physics_score: '0.9950' }));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-sentinel-check',
+        type: 'demand-response'
+      });
+
+    expect(response.status).toBe(202);
+    const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
+    expect(sentValue.is_sentinel_fidelity).toBe(true);
+  });
+
+  test('GET /openadr/v3/reports should return sentinel_fidelity_count (v2.4.9)', async () => {
+    const mockUnifiedContext = {
+      digital_twin: {
+        CAISO: { vehicle_count: 10, high_fidelity_count: 8, sentinel_fidelity_count: 5, ev_count: 5, bess_count: 5 }
+      },
+      regional_markets: {},
+      regional_locks: {},
+      site_statuses: {},
+      regional_capacity: {}
+    };
+
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l2:unified:context') return Promise.resolve(JSON.stringify(mockUnifiedContext));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app)
+      .get('/openadr/v3/reports')
+      .set('Authorization', `Bearer ${mockToken}`);
+    expect(response.status).toBe(200);
+    expect(response.body.regional_stats.CAISO.sentinel_fidelity_count).toBe(5);
+  });
 });
