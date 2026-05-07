@@ -23,8 +23,8 @@ async function connectProducer() {
  */
 async function getHighFidelityMetadata() {
     const safetyContextRaw = await redis.get('l1:safety:lock:context');
-    let physicsScore = 1.0;
-    let confidenceScore = 1.0;
+    let physicsScore = (1.0).toFixed(4);
+    let confidenceScore = (1.0).toFixed(4);
     let isHighFidelity = true;
     let isSentinelFidelity = true;
     let fidelityStatus = 'HIGH_FIDELITY';
@@ -32,13 +32,17 @@ async function getHighFidelityMetadata() {
     if (safetyContextRaw) {
         try {
             const context = JSON.parse(safetyContextRaw);
-            physicsScore = context.physics_score !== undefined ? parseFloat(context.physics_score) : 1.0;
-            confidenceScore = context.confidence_score !== undefined ? parseFloat(context.confidence_score) : 1.0;
+            const physicsVal = context.physics_score !== undefined ? parseFloat(context.physics_score) : 1.0;
+            const confidenceVal = context.confidence_score !== undefined ? parseFloat(context.confidence_score) : 1.0;
 
             // [L1-124] April 2026 High-Fidelity Standard: Physics OR Confidence > 0.95
-            isHighFidelity = (physicsScore > 0.95 || confidenceScore > 0.95);
-            isSentinelFidelity = (physicsScore > 0.99);
+            isHighFidelity = (physicsVal > 0.95 || confidenceVal > 0.95);
+            isSentinelFidelity = (physicsVal > 0.99);
             fidelityStatus = isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD';
+
+            // [L1-127] Standardize physics/confidence scores as 4-decimal strings for L11 ML readiness
+            physicsScore = physicsVal.toFixed(4);
+            confidenceScore = confidenceVal.toFixed(4);
         } catch (e) {
             console.error('[L7] Failed to parse safety context:', e.message);
         }
@@ -73,6 +77,7 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
         : extractMeterValue(payload, 'Power.Active.Export');
 
     // Physics Engine Contextual Data for L11 AI Readiness
+    // Returns physicsScore and confidenceScore as standardized strings (v10.1.3 format)
     const hf = await getHighFidelityMetadata();
 
     // Fetch Resource Type (EV/BESS) and Site ID from Redis cache (populated at connection/session start)
@@ -97,7 +102,7 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
         is_sentinel_fidelity: hf.isSentinelFidelity,
         fidelity_status: hf.fidelityStatus,
         resource_type: resourceType,
-        source: 'L7_GATEWAY_V5.6.0'
+        source: 'L7_GATEWAY_V5.7.0'
     };
 
     await producer.send({
