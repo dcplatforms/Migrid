@@ -125,7 +125,7 @@ async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '4.3.3',
+    version: '4.3.4',
     status: 'healthy',
     layer: 'L10'
   });
@@ -177,6 +177,8 @@ async function start() {
           isVppEvent,
           is_high_fidelity,
           isHighFidelity,
+          is_sentinel_fidelity,
+          isSentinelFidelity,
           confidence_score,
           confidenceScore,
           resource_type,
@@ -198,7 +200,6 @@ async function start() {
 
         const isHighFidelityVal = is_high_fidelity !== undefined ? !!is_high_fidelity : (isHighFidelity !== undefined ? !!isHighFidelity : false);
         const isSentinelFidelityVal = is_sentinel_fidelity !== undefined ? !!is_sentinel_fidelity : (isSentinelFidelity !== undefined ? !!isSentinelFidelity : false);
-        const siteIdVal = site_id || siteId || location_id || locationId || null;
         const resourceTypeVal = resource_type || resourceType || 'EV';
         const siteIdVal = site_id || siteId || location_id || locationId || null;
 
@@ -229,7 +230,8 @@ async function start() {
                                      (confidenceScorePersist !== null && confidenceScorePersist > 0.95);
 
         // L10 v4.3.3 Sentinel Fidelity Tier: physics_score > 0.99
-        let isSentinelFidelityPersist = (physicsScorePersist !== null && physicsScorePersist > 0.99);
+        let isSentinelFidelityPersist = (isSentinelFidelityVal === true || isSentinelFidelityVal === 'true') ||
+                                         (physicsScorePersist !== null && physicsScorePersist > 0.99);
 
         // Fetch rule early for idempotency check
         const rule = await getRewardRule(action_type);
