@@ -125,7 +125,7 @@ async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '4.3.3',
+    version: '4.3.4',
     status: 'healthy',
     layer: 'L10'
   });
@@ -179,6 +179,8 @@ async function start() {
           isHighFidelity,
           confidence_score,
           confidenceScore,
+          is_sentinel_fidelity,
+          isSentinelFidelity,
           resource_type,
           resourceType,
           site_id,
@@ -196,11 +198,10 @@ async function start() {
         let confidenceScoreVal = confidence_score !== undefined ? parseFloat(confidence_score) : (confidenceScore !== undefined ? parseFloat(confidenceScore) : null);
         if (confidenceScoreVal !== null && isNaN(confidenceScoreVal)) confidenceScoreVal = null;
 
-        const isHighFidelityVal = is_high_fidelity !== undefined ? !!is_high_fidelity : (isHighFidelity !== undefined ? !!isHighFidelity : false);
-        const isSentinelFidelityVal = is_sentinel_fidelity !== undefined ? !!is_sentinel_fidelity : (isSentinelFidelity !== undefined ? !!isSentinelFidelity : false);
+        const isHighFidelityVal = is_high_fidelity !== undefined ? is_high_fidelity : (isHighFidelity !== undefined ? isHighFidelity : false);
+        const isSentinelFidelityVal = is_sentinel_fidelity !== undefined ? is_sentinel_fidelity : (isSentinelFidelity !== undefined ? isSentinelFidelity : false);
         const siteIdVal = site_id || siteId || location_id || locationId || null;
         const resourceTypeVal = resource_type || resourceType || 'EV';
-        const siteIdVal = site_id || siteId || location_id || locationId || null;
 
         // 1. Ensure Driver Wallet Exists (and get address)
         const driverWallet = await getOrCreateDriverWallet(driver_id);
@@ -223,13 +224,14 @@ async function start() {
           return;
         }
 
-        // April 2026 Audit Standard: High fidelity if physics OR confidence > 0.95
+        // April 2026 Audit Standard: Explicit high-fidelity flag OR physics OR confidence > 0.95
         let isHighFidelityPersist = (isHighFidelityVal === true || isHighFidelityVal === 'true') ||
                                      (physicsScorePersist !== null && physicsScorePersist > 0.95) ||
                                      (confidenceScorePersist !== null && confidenceScorePersist > 0.95);
 
-        // L10 v4.3.3 Sentinel Fidelity Tier: physics_score > 0.99
-        let isSentinelFidelityPersist = (physicsScorePersist !== null && physicsScorePersist > 0.99);
+        // L10 v4.3.4 Sentinel Fidelity Tier: Explicit flag OR physics_score > 0.99
+        let isSentinelFidelityPersist = (isSentinelFidelityVal === true || isSentinelFidelityVal === 'true') ||
+                                         (physicsScorePersist !== null && physicsScorePersist > 0.99);
 
         // Fetch rule early for idempotency check
         const rule = await getRewardRule(action_type);
