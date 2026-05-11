@@ -123,7 +123,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-      version: '5.12.0', // Weekly Mission: Site Awareness & Sentinel Fidelity Alignment
+    version: '5.13.0', // Weekly Mission: Sentinel Elite Achievement & Payload Hardening
     status: 'healthy',
     layer: 'L6'
   });
@@ -320,8 +320,9 @@ async function processChargingEvent(event) {
     let isHighFidelity = true;
     let isLowVariance = true;
     let confidence_score = 0.5; // Default confidence
+
+    // Standardize site_id extraction (Multi-key convention)
     const siteId = event.site_id || event.siteId || event.location_id || event.locationId || null;
-    const isSentinelFidelity = !!(event.is_sentinel_fidelity || event.isSentinelFidelity);
 
     // Use event-provided score if available (Backward compatibility for camelCase)
     if (event.physics_score !== undefined) physics_score = parseFloat(event.physics_score);
@@ -329,6 +330,11 @@ async function processChargingEvent(event) {
 
     if (event.confidence_score !== undefined) confidence_score = parseFloat(event.confidence_score);
     else if (event.confidenceScore !== undefined) confidence_score = parseFloat(event.confidenceScore);
+
+    // Robust boolean detection for is_sentinel_fidelity (supporting boolean and string formats)
+    const isSentinelFidelity = (event.is_sentinel_fidelity === true || event.is_sentinel_fidelity === 'true' ||
+                               event.isSentinelFidelity === true || event.isSentinelFidelity === 'true' ||
+                               physics_score > 0.99);
 
     isHighFidelity = physics_score > 0.95 || confidence_score > 0.95;
 
@@ -387,6 +393,7 @@ async function processChargingEvent(event) {
         await checkEnergyArchitectAchievement(driverId);
         await checkL11DataGuardianAchievement(driverId);
         await checkPhysicsSentinelAchievement(driverId);
+      await checkSentinelEliteAchievement(driverId);
         await updateChallengeProgress(driverId, 'low_variance_charging');
 
         // [L6-118] ML Data Pioneer: Specifically for very high fidelity data
@@ -933,6 +940,34 @@ async function checkFirstSessionAchievement(driver_id) {
     if (achievement.rows.length > 0) {
       await awardAchievement(driver_id, achievement.rows[0].id);
     }
+  }
+}
+
+async function checkSentinelEliteAchievement(driver_id) {
+  // Requirement: 50 total sentinel-fidelity sessions (Physics Score > 0.99 or is_sentinel_fidelity flag)
+  // This rewards long-term, ultra-high-fidelity participation for L11 ML ground truth.
+  try {
+    const result = await pool.query(`
+      SELECT COUNT(*) as sentinel_total
+      FROM driver_actions
+      WHERE driver_id = $1 AND action_type = 'session_completed'
+        AND (
+          (metadata->>'physics_score')::float > 0.99
+          OR (metadata->>'is_sentinel_fidelity')::boolean = true
+          OR (metadata->>'is_sentinel_fidelity')::text = 'true'
+        )
+    `, [driver_id]);
+
+    const count = parseInt(result.rows[0]?.sentinel_total || '0');
+
+    if (count >= 50) {
+      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Sentinel Elite'");
+      if (achievement.rows.length > 0) {
+        await awardAchievement(driver_id, achievement.rows[0].id);
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking Sentinel Elite achievement:', error);
   }
 }
 
