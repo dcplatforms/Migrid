@@ -1,5 +1,5 @@
 /**
- * L2: Grid Signal Service
+ * L2: Grid Signal Service (v2.5.0)
  * OpenADR 3.0 VEN implementation for demand response and price signals
  * Enhanced with L1 Physics Safety Guards and Redis Caching
  */
@@ -92,7 +92,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.4.8',
+    version: '2.5.0',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -137,8 +137,9 @@ app.get('/openadr/v3/reports', authenticateToken, async (req, res) => {
     if (safetyContext) {
       if (safetyContext.vin) safetyContext.vin = '[MASKED]';
       if (safetyContext.vehicle_id) safetyContext.vehicle_id = '[MASKED]';
-      // Ensure sentinel flag is explicitly boolean
-      safetyContext.is_sentinel_fidelity = !!(safetyContext.is_sentinel_fidelity || (safetyContext.physics_score > 0.99));
+      // Ensure sentinel flag is explicitly boolean, handling both boolean and string formats (v2.5.0)
+      const rawSentinel = safetyContext.is_sentinel_fidelity;
+      safetyContext.is_sentinel_fidelity = !!(rawSentinel === true || rawSentinel === 'true' || safetyContext.physics_score > 0.99);
     }
 
     res.json({
@@ -289,7 +290,9 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
       const confidenceScore = parseFloat((safetyContext.confidence_score !== undefined) ? safetyContext.confidence_score :
                                          (safetyContext.physics_score !== undefined ? safetyContext.physics_score : regionalAvgConfidence.toString()));
       const physicsScore = parseFloat(safetyContext.physics_score ?? '1.0000');
-      const isSentinelFidelity = !!(safetyContext.is_sentinel_fidelity || physicsScore > 0.99);
+      // [L2 v2.5.0] Hardened sentinel detection supporting boolean and string formats
+      const rawSentinel = safetyContext.is_sentinel_fidelity;
+      const isSentinelFidelity = !!(rawSentinel === true || rawSentinel === 'true' || physicsScore > 0.99);
       // [L1-124] Aligned High-Fidelity Standard: physics > 0.95 OR confidence > 0.95
       const fidelityStatus = (physicsScore > 0.95 || confidenceScore > 0.95) ? 'HIGH_FIDELITY' : 'STANDARD';
 
@@ -311,8 +314,8 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
             market_price_at_session: event.metadata?.market_price_at_session ?? (marketMetadata.price_per_mwh ?? 0), // L2 v2.4.1: Nullish coalescing for 0-price preservation
             profitability_index: marketMetadata.profitability_index,
             degradation_cost_mwh: marketMetadata.degradation_cost_mwh,
-            physics_score: physicsScore,
-            confidence_score: confidenceScore, // L2 v2.4.5: Prioritized confidence score for L11
+            physics_score: physicsScore.toFixed(4),
+            confidence_score: confidenceScore.toFixed(4), // L2 v2.5.0: Hardened string formatting
             fidelity_status: fidelityStatus,
             is_sentinel_fidelity: isSentinelFidelity,
             metadata: event.metadata || {}, // L2 v2.4.1: Full metadata preservation (OpenADR 3.1.0)
@@ -408,7 +411,8 @@ const updateRegionalStats = async () => {
             if (data.is_high_fidelity || data.physics_score > 0.95 || data.confidence_score > 0.95) {
               context.digital_twin[iso].high_fidelity_count++;
             }
-            if (data.is_sentinel_fidelity || data.physics_score > 0.99) {
+            const rawSentinel = data.is_sentinel_fidelity;
+            if (rawSentinel === true || rawSentinel === 'true' || data.physics_score > 0.99) {
               context.digital_twin[iso].sentinel_fidelity_count++;
             }
             if (data.resource_type === 'EV') context.digital_twin[iso].ev_count++;
@@ -607,6 +611,10 @@ async function startSafetyConsumer() {
           await redisClient.setEx(SAFETY_LOCK_KEY, 900, '1');
 
           // Store detailed alert context for UI/Diagnostics and downstream layer alignment
+          // [L2 v2.5.0] Hardened sentinel detection supporting boolean and string formats
+          const rawSentinel = payload.is_sentinel_fidelity;
+          const isSentinelFidelity = !!(rawSentinel === true || rawSentinel === 'true' || payload.physics_score > 0.99);
+
           await redisClient.setEx(`${SAFETY_LOCK_KEY}:context`, 900, JSON.stringify({
             ...payload,
             reason,
@@ -615,7 +623,7 @@ async function startSafetyConsumer() {
             vpp_active: payload.vpp_active,
             v2g_active: payload.v2g_active,
             iso_region: payload.iso_region,
-            is_sentinel_fidelity: payload.is_sentinel_fidelity || (payload.physics_score > 0.99),
+            is_sentinel_fidelity: isSentinelFidelity,
             market_price_at_session: payload.market_price_at_session,
             locked_at: new Date().toISOString()
           }));
