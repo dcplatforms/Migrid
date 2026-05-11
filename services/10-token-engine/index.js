@@ -186,7 +186,9 @@ async function start() {
           site_id,
           siteId,
           location_id,
-          locationId
+          locationId,
+          is_sentinel_fidelity,
+          isSentinelFidelity
         } = payload;
 
         const vppAligned = !!(is_vpp_event || isVppEvent);
@@ -229,7 +231,7 @@ async function start() {
                                      (physicsScorePersist !== null && physicsScorePersist > 0.95) ||
                                      (confidenceScorePersist !== null && confidenceScorePersist > 0.95);
 
-        // L10 v4.3.4 Sentinel Fidelity Tier: Explicit flag OR physics_score > 0.99
+        // L10 v4.3.4 Sentinel Fidelity Tier: physics_score > 0.99 or explicit sentinel flag
         let isSentinelFidelityPersist = (isSentinelFidelityVal === true || isSentinelFidelityVal === 'true') ||
                                          (physicsScorePersist !== null && physicsScorePersist > 0.99);
 
