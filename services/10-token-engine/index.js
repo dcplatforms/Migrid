@@ -186,7 +186,9 @@ async function start() {
           site_id,
           siteId,
           location_id,
-          locationId
+          locationId,
+          is_sentinel_fidelity,
+          isSentinelFidelity
         } = payload;
 
         const vppAligned = !!(is_vpp_event || isVppEvent);
@@ -198,10 +200,10 @@ async function start() {
         let confidenceScoreVal = confidence_score !== undefined ? parseFloat(confidence_score) : (confidenceScore !== undefined ? parseFloat(confidenceScore) : null);
         if (confidenceScoreVal !== null && isNaN(confidenceScoreVal)) confidenceScoreVal = null;
 
-        const isHighFidelityVal = is_high_fidelity !== undefined ? !!is_high_fidelity : (isHighFidelity !== undefined ? !!isHighFidelity : false);
-        const isSentinelFidelityVal = is_sentinel_fidelity !== undefined ? !!is_sentinel_fidelity : (isSentinelFidelity !== undefined ? !!isSentinelFidelity : false);
-        const resourceTypeVal = resource_type || resourceType || 'EV';
+        const isHighFidelityVal = is_high_fidelity !== undefined ? is_high_fidelity : (isHighFidelity !== undefined ? isHighFidelity : false);
+        const isSentinelFidelityVal = is_sentinel_fidelity !== undefined ? is_sentinel_fidelity : (isSentinelFidelity !== undefined ? isSentinelFidelity : false);
         const siteIdVal = site_id || siteId || location_id || locationId || null;
+        const resourceTypeVal = resource_type || resourceType || 'EV';
 
         // 1. Ensure Driver Wallet Exists (and get address)
         const driverWallet = await getOrCreateDriverWallet(driver_id);
@@ -229,7 +231,7 @@ async function start() {
                                      (physicsScorePersist !== null && physicsScorePersist > 0.95) ||
                                      (confidenceScorePersist !== null && confidenceScorePersist > 0.95);
 
-        // L10 v4.3.3 Sentinel Fidelity Tier: physics_score > 0.99
+        // L10 v4.3.4 Sentinel Fidelity Tier: physics_score > 0.99 or explicit sentinel flag
         let isSentinelFidelityPersist = (isSentinelFidelityVal === true || isSentinelFidelityVal === 'true') ||
                                          (physicsScorePersist !== null && physicsScorePersist > 0.99);
 
