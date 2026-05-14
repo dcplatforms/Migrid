@@ -35,9 +35,15 @@ async function getHighFidelityMetadata() {
             const physicsVal = context.physics_score !== undefined ? parseFloat(context.physics_score) : 1.0;
             const confidenceVal = context.confidence_score !== undefined ? parseFloat(context.confidence_score) : 1.0;
 
-            // [L1-124] April 2026 High-Fidelity Standard: Physics OR Confidence > 0.95
-            isHighFidelity = (physicsVal > 0.95 || confidenceVal > 0.95);
-            isSentinelFidelity = (physicsVal > 0.99);
+            // [L1-124] April 2026 High-Fidelity Standard: Physics OR Confidence > 0.95 OR explicit flag
+            const explicitHighFidelity = context.is_high_fidelity === true || context.is_high_fidelity === 'true';
+            isHighFidelity = explicitHighFidelity || (physicsVal > 0.95 || confidenceVal > 0.95);
+
+            // [L7-128] Hardened Sentinel Fidelity: Prioritize explicit flag (boolean or string 'true')
+            // with fallback to physics_score > 0.99. Aligns with L1 v10.1.3 and L10 v4.3.4.
+            const explicitSentinel = context.is_sentinel_fidelity === true || context.is_sentinel_fidelity === 'true';
+            isSentinelFidelity = explicitSentinel || (physicsVal > 0.99);
+
             fidelityStatus = isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD';
 
             // [L1-127] Standardize physics/confidence scores as 4-decimal strings for L11 ML readiness

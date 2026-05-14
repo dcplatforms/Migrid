@@ -469,8 +469,8 @@ Phase 8: Advanced Grid       ░░░░░░░░░░░░░░░░░
 **In Progress:**
 
 - [~] **Commerce engine** — Flexible billing and tariffs (70%)
-- [~] **ISO 15118** — Plug & Charge certification (95%)
-- [~] **OCPI 2.2** — Roaming network integration (70%)
+- [~] **ISO 15118** — Plug & Charge certification (98%)
+- [~] **OCPI 2.2** — Roaming network integration (75%)
 - [x] **ENTSO-E adapter** — European markets (100%)
 - [x] **Nord Pool adapter** — Nordic zonal pricing (100%)
 
@@ -718,13 +718,13 @@ Standards Progress:    ███████████░░░░░░░░
 <tr>
 <td><b>ISO 15118</b></td>
 <td>Plug & Charge with PKI</td>
-<td align="center">95%</td>
+<td align="center">98%</td>
 <td align="center">Q1 2026</td>
 </tr>
 <tr>
 <td><b>OCPI 2.2</b></td>
 <td>Roaming network protocol</td>
-<td align="center">70%</td>
+<td align="center">75%</td>
 <td align="center">Q1 2026</td>
 </tr>
 <tr>
@@ -812,7 +812,7 @@ done
 | **L4** | Market Gateway | `3.8.2` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
 | **L6** | Engagement Engine | `5.12.0` | ✅ Operational |
-| **L7** | Device Gateway | `5.6.0` | ✅ Operational |
+| **L7** | Device Gateway | `5.8.0` | ✅ Operational |
 | **L8** | Energy Manager | `2.1.0` | ✅ Operational |
 | **L9** | Commerce Engine | `5.1.0` | ✅ Operational |
 | **L10**| Token Engine | `4.3.3` | ✅ Operational |
@@ -826,7 +826,7 @@ done
 - **L6 Engagement Engine (v5.12.0)**: Deployed **Physics Sentinel** and **L11 Data Guardian** achievements. Integrated site_id extraction from L7/L10 Kafka payloads for localized engagement.
 - **L4 Market Gateway (v3.8.2)**: Exposed `/data/training/fuel-mix` and `/data/training/load-forecast` endpoints for L11 ML readiness. Hardened high-fidelity synchronization with L1/L2 fallbacks.
 - **L2 Grid Signal (v2.4.8)**: Secured `/openadr/v3/reports` with PII masking and `authenticateToken` middleware. Implemented proactive signal caching for `ADVANCE_CHARGE_SIGNAL` (CAISO solar ramp).
-- **L7 Device Gateway (v5.6.0)**: Finalized **site_id** (location_id) fetch/cache logic in Redis (`charger_site:${id}`). Included `is_sentinel_fidelity` flag in all telemetry for Phase 6 AI auditing.
+- **L7 Device Gateway (v5.8.0)**: Hardened **Sentinel Fidelity** logic and string-formatted scores (.toFixed(4)) for L11 parity. Integrated **helmet()** middleware and enhanced ISO 15118 certificate validation. Advanced OCPI 2.2 mapping to 75%.
 - **L1 Physics Engine (v10.1.2)**: Deployed **Hardened Offline Mode [L1-126]** for Redis metadata preservation during disconnects.
 
 ---
