@@ -14,7 +14,7 @@ jest.mock('redis', () => ({
   }))
 }));
 
-describe('L10 Token Engine - Reward Logic v4.3.4', () => {
+describe('L10 Token Engine - Reward Logic v4.3.5', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -132,5 +132,24 @@ describe('L10 Token Engine - Reward Logic v4.3.4', () => {
     const highConfidenceScore = 0.97;
     const isHighFidelity2 = (lowPhysicsScore > 0.95 || highConfidenceScore > 0.95);
     expect(isHighFidelity2).toBe(true);
+  });
+
+  test('getSiteMultiplier should return multiplier from Redis', async () => {
+    const { getSiteMultiplier } = require('../index');
+    redisClient.get.mockResolvedValue('1.25');
+
+    const result = await getSiteMultiplier('SITE-123');
+    expect(result.multiplier.toNumber()).toBe(1.25);
+    expect(result.reason).toBe('Site Optimization Bonus (1.25x)');
+    expect(redisClient.get).toHaveBeenCalledWith('site:multiplier:SITE-123');
+  });
+
+  test('getSiteMultiplier should return 1.0x if no multiplier in Redis', async () => {
+    const { getSiteMultiplier } = require('../index');
+    redisClient.get.mockResolvedValue(null);
+
+    const result = await getSiteMultiplier('SITE-456');
+    expect(result.multiplier.toNumber()).toBe(1.0);
+    expect(result.reason).toBe('Standard Site Rate');
   });
 });
