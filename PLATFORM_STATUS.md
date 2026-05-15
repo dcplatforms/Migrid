@@ -281,11 +281,12 @@ Sell: LMP > $100/MWh (grid services revenue)
 
 Strategic alignment and high-fidelity data integrity updates:
 
-- [✓] **L6 Engagement Engine (v5.11.0)**: Implemented **Solar Surge** achievement and CAISO solar ramp response tracking (4PM-9PM).
-- [✓] **L10 Token Engine (v4.3.2)**: Resolved critical reference error in reward logging and hardened audit trail idempotency.
-- [✓] **L2 Grid Signal (v2.4.7)**: Hardened PII masking for OpenADR reports and optimized regional confidence fallback logic.
-- [✓] **L1 Physics Engine (v10.1.2)**: Deployed **Hardened Offline Mode [L1-126]** for Redis metadata preservation during disconnects.
-- [✓] **L7 Device Gateway (v5.6.0)**: Advanced **ISO 15118** certificate management (95%) and hardened **OCPI 2.2** status mapping (70%).
+- [✓] **L6 Engagement Engine (v5.13.0)**: Added **Sentinel Elite** achievement and hardened `site_id` extraction for multi-site awareness.
+- [✓] **L10 Token Engine (v4.3.4)**: Hardened Kafka consumer with robust float parsing and resolved critical duplicate variable declaration.
+- [✓] **L2 Grid Signal (v2.4.9)**: Secured `/openadr/v3/reports` with PII masking and explicitly typed fidelity context.
+- [✓] **L1 Physics Engine (v10.1.3)**: Deployed **Multi-Site Load Penalties [L1-125]** for site-aware confidence scoring.
+- [✓] **L7 Device Gateway (v5.7.0)**: Centralized high-fidelity metadata enrichment and hardened meter sample extraction for V2X.
+- [✓] **L4 Market Gateway (v3.8.3)**: Implemented **Sentinel Fidelity** (>0.99) bidding audits and high-fidelity price broadcasts.
 - [✓] **L3 VPP Aggregator (v3.3.1)**: Hardened **High-Fidelity Capacity Breakdown** for sub-50ms Redis accuracy and FERC 2222 compliance.
 
 </details>
@@ -806,28 +807,28 @@ done
 
 | Layer | Service | Version | Status |
 | :--- | :--- | :--- | :--- |
-| **L1** | Physics Engine | `10.1.2` | ✅ Operational |
-| **L2** | Grid Signal | `2.4.8` | ✅ Operational |
+| **L1** | Physics Engine | `10.1.3` | ✅ Operational |
+| **L2** | Grid Signal | `2.4.9` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.1` | ✅ Operational |
-| **L4** | Market Gateway | `3.8.2` | ✅ Operational |
+| **L4** | Market Gateway | `3.8.3` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
-| **L6** | Engagement Engine | `5.12.0` | ✅ Operational |
-| **L7** | Device Gateway | `5.6.0` | ✅ Operational |
+| **L6** | Engagement Engine | `5.13.0` | ✅ Operational |
+| **L7** | Device Gateway | `5.7.0` | ✅ Operational |
 | **L8** | Energy Manager | `2.1.0` | ✅ Operational |
 | **L9** | Commerce Engine | `5.1.0` | ✅ Operational |
-| **L10**| Token Engine | `4.3.3` | ✅ Operational |
+| **L10**| Token Engine | `4.3.4` | ✅ Operational |
 | **L11**| ML Engine | `0.1.0` | ✅ Operational |
 
 ---
 
 ## Latest Release Wins (April 2026)
 
-- **L10 Token Engine (v4.3.3)**: Implemented **Sentinel Fidelity** logic (physics_score > 0.99) and site-aware auditing. Hardened Kafka consumer with robust float parsing and boolean casting.
-- **L6 Engagement Engine (v5.12.0)**: Deployed **Physics Sentinel** and **L11 Data Guardian** achievements. Integrated site_id extraction from L7/L10 Kafka payloads for localized engagement.
-- **L4 Market Gateway (v3.8.2)**: Exposed `/data/training/fuel-mix` and `/data/training/load-forecast` endpoints for L11 ML readiness. Hardened high-fidelity synchronization with L1/L2 fallbacks.
-- **L2 Grid Signal (v2.4.8)**: Secured `/openadr/v3/reports` with PII masking and `authenticateToken` middleware. Implemented proactive signal caching for `ADVANCE_CHARGE_SIGNAL` (CAISO solar ramp).
-- **L7 Device Gateway (v5.6.0)**: Finalized **site_id** (location_id) fetch/cache logic in Redis (`charger_site:${id}`). Included `is_sentinel_fidelity` flag in all telemetry for Phase 6 AI auditing.
-- **L1 Physics Engine (v10.1.2)**: Deployed **Hardened Offline Mode [L1-126]** for Redis metadata preservation during disconnects.
+- **L10 Token Engine (v4.3.4)**: Hardened Kafka consumer with robust `parseFloat` validation and boolean casting. Resolved critical duplicate variable declaration (`siteIdVal`) causing consumer crashes.
+- **L6 Engagement Engine (v5.13.0)**: Added **Sentinel Elite** achievement for drivers completing 50 sentinel-fidelity sessions. Standardized `site_id` extraction across Kafka telemetry events.
+- **L4 Market Gateway (v3.8.3)**: Implemented **Sentinel Fidelity** (>0.99 physics_score) classification for bidding and price broadcasts. Hardened L11 AI training data exports.
+- **L2 Grid Signal (v2.4.9)**: Secured `/openadr/v3/reports` with PII masking for `vin` and `vehicle_id`. Ensures explicit boolean typing for `is_sentinel_fidelity` in reported context.
+- **L7 Device Gateway (v5.7.0)**: Centralized `getHighFidelityMetadata` in `producer.js`. Hardened meter sample extraction for accurate `energyDispensed` telemetry in V2X sessions.
+- **L1 Physics Engine (v10.1.3)**: Implemented **Multi-Site Load Penalties [L1-125]**, utilizing site-specific building load data to penalize confidence scores when sites exceed 90% utilization.
 
 ---
 
