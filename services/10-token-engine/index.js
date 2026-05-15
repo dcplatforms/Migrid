@@ -181,6 +181,8 @@ async function start() {
           isSentinelFidelity,
           confidence_score,
           confidenceScore,
+          is_sentinel_fidelity,
+          isSentinelFidelity,
           resource_type,
           resourceType,
           site_id,
@@ -226,7 +228,7 @@ async function start() {
           return;
         }
 
-        // April 2026 Audit Standard: High fidelity if physics OR confidence > 0.95
+        // April 2026 Audit Standard: Explicit high-fidelity flag OR physics OR confidence > 0.95
         let isHighFidelityPersist = (isHighFidelityVal === true || isHighFidelityVal === 'true') ||
                                      (physicsScorePersist !== null && physicsScorePersist > 0.95) ||
                                      (confidenceScorePersist !== null && confidenceScorePersist > 0.95);
