@@ -323,4 +323,27 @@ describe('L3 VPP Aggregator Service', () => {
             );
         });
     });
+
+    describe('GET /data/training/capacity', () => {
+        test('should return 403 if token contains a fleet_id (driver token)', async () => {
+            const response = await request(app)
+                .get('/data/training/capacity')
+                .set('Authorization', `Bearer ${mockToken}`);
+
+            expect(response.status).toBe(403);
+            expect(response.body.error).toContain('Forbidden');
+        });
+
+        test('should return 200 if token does not contain a fleet_id (system token)', async () => {
+            const systemToken = jwt.sign({ sub: 'admin-service' }, JWT_SECRET);
+            mockPool.query.mockResolvedValue({ rows: [] });
+
+            const response = await request(app)
+                .get('/data/training/capacity')
+                .set('Authorization', `Bearer ${systemToken}`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.status).toBe('READY_FOR_L11');
+        });
+    });
 });

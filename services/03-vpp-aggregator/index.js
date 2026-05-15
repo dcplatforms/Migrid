@@ -4,6 +4,7 @@
  */
 
 const express = require('express');
+const helmet = require('helmet');
 const { Pool } = require('pg');
 const redis = require('redis');
 const jwt = require('jsonwebtoken');
@@ -34,6 +35,7 @@ const kafka = new Kafka({
 
 const consumer = kafka.consumer({ groupId: 'vpp-aggregator-group' });
 
+app.use(helmet());
 app.use(express.json());
 
 const SAFETY_LOCK_KEY = 'l1:safety:lock';
@@ -477,6 +479,12 @@ const initKafka = async () => {
 app.get('/data/training/capacity', authenticateToken, async (req, res) => {
     const { days } = req.query;
     const daysInt = parseInt(days) || 7;
+
+    // Security: Restrict global capacity data export to system/admin tokens (no fleet_id)
+    if (req.user.fleet_id) {
+        console.warn(`[Security] Unauthorized global capacity data export attempt by fleet_id: ${req.user.fleet_id}`);
+        return res.status(403).json({ error: 'Forbidden: Unauthorized access to global training data.' });
+    }
 
     try {
         const result = await pool.query(
