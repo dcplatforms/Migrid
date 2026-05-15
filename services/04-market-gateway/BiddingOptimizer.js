@@ -135,6 +135,7 @@ class BiddingOptimizer {
     // 2. Fetch safety lock context for audit (L11 ML Engine readiness)
     let physicsScore = 1.0;
     let confidenceScore = 1.0;
+    let isSentinelFidelity = false;
     let auditContext = null;
     try {
       const lockContextRaw = await this.redisClient.get('l1:safety:lock:context');
@@ -146,6 +147,8 @@ class BiddingOptimizer {
         if (auditContext.confidence_score !== undefined) {
           confidenceScore = parseFloat(auditContext.confidence_score);
         }
+        // [L4 v3.8.4] Hardened Sentinel Fidelity Detection
+        isSentinelFidelity = auditContext.is_sentinel_fidelity === true || auditContext.is_sentinel_fidelity === 'true';
       } else {
         // [L4 v3.8.1] Fallback: Query L2 Unified Context for regional confidence averages
         const unifiedRaw = await this.redisClient.get('l2:unified:context');
@@ -159,9 +162,10 @@ class BiddingOptimizer {
       console.warn('[BiddingOptimizer] Failed to fetch safety lock context for audit:', err.message);
     }
 
-    // High-Fidelity logic: physics_score > 0.95 OR confidence_score > 0.95 (Align with L10 v4.3.2)
+    // High-Fidelity logic: physics_score > 0.95 OR confidence_score > 0.95 (Align with L10 v4.3.4)
     const isHighFidelity = (physicsScore > 0.95 || confidenceScore > 0.95);
-    const isSentinelFidelity = physicsScore > 0.99;
+    // [L4 v3.8.4] Standardized Sentinel logic with fallback
+    isSentinelFidelity = isSentinelFidelity || physicsScore > 0.99;
     const capacityFidelity = isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD';
 
     // 3. Handle Halted Bidding
@@ -183,8 +187,8 @@ class BiddingOptimizer {
         bids: [],
         audit: {
           locks,
-          physics_score: physicsScore,
-          confidence_score: confidenceScore,
+          physics_score: physicsScore.toFixed(4), // [L4 v3.8.4] String format
+          confidence_score: confidenceScore.toFixed(4), // [L4 v3.8.4] String format
           is_high_fidelity: isHighFidelity,
           is_sentinel_fidelity: isSentinelFidelity,
           capacity_fidelity: capacityFidelity,
@@ -277,8 +281,8 @@ class BiddingOptimizer {
       bids,
       audit: {
         locks,
-        physics_score: physicsScore,
-        confidence_score: confidenceScore,
+        physics_score: physicsScore.toFixed(4), // [L4 v3.8.4] String format
+        confidence_score: confidenceScore.toFixed(4), // [L4 v3.8.4] String format
         is_high_fidelity: isHighFidelity,
         is_sentinel_fidelity: isSentinelFidelity,
         capacity_fidelity: capacityFidelityFromRedis, // Already normalized in getAggregatedCapacity
@@ -288,7 +292,7 @@ class BiddingOptimizer {
           bess_capacity_kw: breakdown.bess,
           v3_capacity_fidelity: capacityFidelityFromRedis === 'HIGH_FIDELITY',
           is_sentinel_fidelity: isSentinelFidelity,
-          site_aware_sync: true // L1 v10.1.2 requirement
+          site_aware_sync: true // L1 v10.1.3 requirement
         },
         pVppKw: pVppKw.toNumber(),
         timestamp: new Date().toISOString()

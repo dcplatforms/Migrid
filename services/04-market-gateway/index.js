@@ -120,6 +120,7 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
     // Phase 5 Enhancement: Match global safety lock to the current ISO region
     let physicsScore = 1.0;
     let confidenceScore = 1.0;
+    let isSentinelFidelity = false;
     const currentIso = iso.toUpperCase().replace(/-/g, '');
 
     try {
@@ -136,6 +137,8 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
           if (details.confidence_score !== undefined) {
             confidenceScore = parseFloat(details.confidence_score);
           }
+          // [L4 v3.8.4] Hardened Sentinel Fidelity Detection
+          isSentinelFidelity = details.is_sentinel_fidelity === true || details.is_sentinel_fidelity === 'true';
         }
       } else {
         // [L4 v3.8.1] Fallback: Query L2 regional confidence averages
@@ -151,19 +154,21 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
     }
 
     const isHighFidelity = (physicsScore > 0.95 || confidenceScore > 0.95);
-    const isSentinelFidelity = physicsScore > 0.99;
+    // [L4 v3.8.4] Standardized Sentinel logic with fallback
+    isSentinelFidelity = isSentinelFidelity || physicsScore > 0.99;
+
     const payload = {
       iso: iso.toUpperCase().replace(/-/g, ''),
       location: location || 'SYSTEM_WIDE',
       price_per_mwh: price.toNumber(),
       profitability_index: profitabilityIndex.toDecimalPlaces(2).toNumber(),
       degradation_cost_mwh: degradationCostMwh.toNumber(),
-      physics_score: physicsScore,
-      confidence_score: confidenceScore,
+      physics_score: physicsScore.toFixed(4), // [L4 v3.8.4] String format
+      confidence_score: confidenceScore.toFixed(4), // [L4 v3.8.4] String format
       is_high_fidelity: isHighFidelity,
       is_sentinel_fidelity: isSentinelFidelity,
       fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD',
-      site_aware_sync: true, // L1 v10.1.2 compliance
+      site_aware_sync: true, // L1 v10.1.3 compliance
       timestamp: new Date().toISOString()
     };
 
