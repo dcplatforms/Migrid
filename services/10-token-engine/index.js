@@ -177,6 +177,8 @@ async function start() {
           isVppEvent,
           is_high_fidelity,
           isHighFidelity,
+          is_sentinel_fidelity,
+          isSentinelFidelity,
           confidence_score,
           confidenceScore,
           resource_type,
