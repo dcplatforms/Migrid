@@ -299,10 +299,10 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body).toHaveProperty('timestamp');
   });
 
-  test('GET /health should return correct version (v2.5.0)', async () => {
+  test('GET /health should return correct version (v2.5.1)', async () => {
     const response = await request(app).get('/health');
     expect(response.status).toBe(200);
-    expect(response.body.version).toBe('2.5.0');
+    expect(response.body.version).toBe('2.5.1');
   });
 
   test('GET /openadr/v3/reports should return regional market contexts', async () => {
@@ -937,6 +937,32 @@ describe('L2 Grid Signal Service', () => {
     expect(response.status).toBe(202);
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
     expect(sentValue.is_sentinel_fidelity).toBe(true);
+  });
+
+  test('POST /openadr/v3/events should support robust site ID extraction (v2.5.1)', async () => {
+    redisClient.get.mockResolvedValue(null);
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-site-id-check',
+        type: 'demand-response',
+        locationId: 'SITE-ALPHA-99'
+      });
+
+    expect(response.status).toBe(202);
+    const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
+    expect(sentValue.site_id).toBe('SITE-ALPHA-99');
+  });
+
+  test('app should use helmet middleware for security (v2.5.1)', async () => {
+    const response = await request(app).get('/health');
+    // Helmet sets several headers, X-Content-Type-Options is one of them
+    expect(response.headers).toHaveProperty('x-content-type-options', 'nosniff');
+    expect(response.headers).toHaveProperty('x-dns-prefetch-control', 'off');
+    expect(response.headers).toHaveProperty('x-frame-options', 'SAMEORIGIN');
+    expect(response.headers).toHaveProperty('x-xss-protection', '0');
   });
 
   test('GET /openadr/v3/reports should return sentinel_fidelity_count (v2.4.9)', async () => {

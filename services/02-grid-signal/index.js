@@ -1,11 +1,12 @@
 /**
- * L2: Grid Signal Service (v2.5.0)
+ * L2: Grid Signal Service (v2.5.1)
  * OpenADR 3.0 VEN implementation for demand response and price signals
  * Enhanced with L1 Physics Safety Guards and Redis Caching
  */
 
 require('dotenv').config();
 const express = require('express');
+const helmet = require('helmet');
 const { Pool } = require('pg');
 const { Kafka } = require('kafkajs');
 const redis = require('redis');
@@ -61,6 +62,7 @@ const redisClient = redis.createClient({
   url: process.env.REDIS_URL || 'redis://localhost:6379'
 });
 
+app.use(helmet());
 app.use(express.json());
 
 /**
@@ -92,7 +94,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.5.0',
+    version: '2.5.1',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -232,15 +234,18 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
     }
 
     // 1.2 Check L8 Safe Mode (Site Specific)
-    if (event.site_id) {
-      const safeMode = await redisClient.get(`l8:site:${event.site_id}:safe_mode`);
+    // [L2 v2.5.1] Robust multi-key site identification (site_id, siteId, location_id, locationId)
+    const siteIdVal = event.site_id || event.siteId || event.location_id || event.locationId || null;
+
+    if (siteIdVal) {
+      const safeMode = await redisClient.get(`l8:site:${siteIdVal}:safe_mode`);
       if (safeMode === 'true' || safeMode === '1') {
-        console.warn(`🚨 [L2] DISPATCH REJECTED: Site ${event.site_id} in L8 Safe Mode`);
+        console.warn(`🚨 [L2] DISPATCH REJECTED: Site ${siteIdVal} in L8 Safe Mode`);
         return res.status(503).json({
           status: 'REJECTED',
           reason: 'SITE_IN_SAFE_MODE',
           message: 'Grid dispatch suspended: Site energy manager is in Safe Mode (Meter Offline)',
-          site_id: event.site_id,
+          site_id: siteIdVal,
           timestamp: new Date().toISOString()
         });
       }
@@ -272,7 +277,7 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
     await redisClient.setEx(`event:${event.id}`, 3600, JSON.stringify(event));
 
     // 1.2 Check L8 Site Status (Safe Mode / Meter Offline)
-    const siteStatus = event.site_id ? await redisClient.get(`l8:site:status:${event.site_id}`) : null;
+    const siteStatus = siteIdVal ? await redisClient.get(`l8:site:status:${siteIdVal}`) : null;
 
     // 4. Broadcast enriched event to other services via Kafka
     // Enhanced resilience: Wrap in try-catch with retry awareness
@@ -305,7 +310,7 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
             program_id: event.program_id || 'DEFAULT',
             type: event.type,
             priority: event.priority || 'NORMAL',
-            site_id: event.site_id || 'ALL',
+            site_id: siteIdVal || 'ALL',
             site_status: siteStatus || 'OPERATIONAL',
             v2g_requested: v2gRequested,
             der_control: Object.keys(derControl).length > 0 ? derControl : null,

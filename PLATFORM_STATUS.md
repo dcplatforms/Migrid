@@ -2,7 +2,7 @@
 
 # MiGrid Platform Status Report
 
-**Version 10.1.3** • **April 2026**
+**Version 10.1.4** • **April 2026**
 
 [![Phase](https://img.shields.io/badge/Phase_5-Enterprise_Scale-blue.svg)](../docs/roadmap.md)
 [![Progress](https://img.shields.io/badge/Progress-70%25_Complete-blue.svg)](PLATFORM_STATUS.md)
@@ -281,10 +281,10 @@ Sell: LMP > $100/MWh (grid services revenue)
 
 Strategic alignment and high-fidelity data integrity updates:
 
-- [✓] **L6 Engagement Engine (v5.13.0)**: Added **Sentinel Elite** achievement and hardened `site_id` extraction for multi-site awareness.
-- [✓] **L10 Token Engine (v4.3.4)**: Hardened Kafka consumer with robust float parsing and resolved critical duplicate variable declaration.
-- [✓] **L2 Grid Signal (v2.4.9)**: Secured `/openadr/v3/reports` with PII masking and explicitly typed fidelity context.
-- [✓] **L1 Physics Engine (v10.1.3)**: Deployed **Multi-Site Load Penalties [L1-125]** for site-aware confidence scoring.
+- [✓] **L6 Engagement Engine (v5.14.0)**: Deployed **Multi-Site Maestro** and **AI Model Master** achievements to incentivize data diversity.
+- [✓] **L10 Token Engine (v4.3.5)**: Hardened `is_sentinel_fidelity` flag extraction and standardized `siteIdVal` for robust cross-layer auditing.
+- [✓] **L2 Grid Signal (v2.5.1)**: Integrated `helmet` security and implemented robust multi-key site identification for Phase 6 tracking.
+- [✓] **L1 Physics Engine (v10.1.4)**: Enforced strict string-formatting (.toFixed(4)) for all telemetry scores to ensure deterministic audit trails.
 - [✓] **L7 Device Gateway (v5.7.0)**: Centralized high-fidelity metadata enrichment and hardened meter sample extraction for V2X.
 - [✓] **L4 Market Gateway (v3.8.3)**: Implemented **Sentinel Fidelity** (>0.99) bidding audits and high-fidelity price broadcasts.
 - [✓] **L3 VPP Aggregator (v3.3.1)**: Hardened **High-Fidelity Capacity Breakdown** for sub-50ms Redis accuracy and FERC 2222 compliance.
@@ -807,28 +807,28 @@ done
 
 | Layer | Service | Version | Status |
 | :--- | :--- | :--- | :--- |
-| **L1** | Physics Engine | `10.1.3` | ✅ Operational |
-| **L2** | Grid Signal | `2.4.9` | ✅ Operational |
+| **L1** | Physics Engine | `10.1.4` | ✅ Operational |
+| **L2** | Grid Signal | `2.5.1` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.1` | ✅ Operational |
-| **L4** | Market Gateway | `3.8.3` | ✅ Operational |
+| **L4** | Market Gateway | `3.8.4` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
-| **L6** | Engagement Engine | `5.13.0` | ✅ Operational |
-| **L7** | Device Gateway | `5.7.0` | ✅ Operational |
+| **L6** | Engagement Engine | `5.14.0` | ✅ Operational |
+| **L7** | Device Gateway | `5.8.0` | ✅ Operational |
 | **L8** | Energy Manager | `2.1.0` | ✅ Operational |
 | **L9** | Commerce Engine | `5.1.0` | ✅ Operational |
-| **L10**| Token Engine | `4.3.4` | ✅ Operational |
+| **L10**| Token Engine | `4.3.5` | ✅ Operational |
 | **L11**| ML Engine | `0.1.0` | ✅ Operational |
 
 ---
 
 ## Latest Release Wins (April 2026)
 
-- **L10 Token Engine (v4.3.4)**: Hardened Kafka consumer with robust `parseFloat` validation and boolean casting. Resolved critical duplicate variable declaration (`siteIdVal`) causing consumer crashes.
-- **L6 Engagement Engine (v5.13.0)**: Added **Sentinel Elite** achievement for drivers completing 50 sentinel-fidelity sessions. Standardized `site_id` extraction across Kafka telemetry events.
-- **L4 Market Gateway (v3.8.3)**: Implemented **Sentinel Fidelity** (>0.99 physics_score) classification for bidding and price broadcasts. Hardened L11 AI training data exports.
-- **L2 Grid Signal (v2.4.9)**: Secured `/openadr/v3/reports` with PII masking for `vin` and `vehicle_id`. Ensures explicit boolean typing for `is_sentinel_fidelity` in reported context.
-- **L7 Device Gateway (v5.7.0)**: Centralized `getHighFidelityMetadata` in `producer.js`. Hardened meter sample extraction for accurate `energyDispensed` telemetry in V2X sessions.
-- **L1 Physics Engine (v10.1.3)**: Implemented **Multi-Site Load Penalties [L1-125]**, utilizing site-specific building load data to penalize confidence scores when sites exceed 90% utilization.
+- **L2 Grid Signal (v2.5.1)**: Integrated `helmet` security middleware and implemented robust multi-key site identification (`site_id`, `siteId`, `location_id`, `locationId`) for Phase 6 alignment.
+- **L10 Token Engine (v4.3.5)**: Resolved Kafka consumer redundancies and standardized `siteIdVal` extraction. Hardened `is_high_fidelity` and `is_sentinel_fidelity` flag extraction.
+- **L6 Engagement Engine (v5.14.0)**: Deployed **Multi-Site Maestro** and **AI Model Master** achievements to incentivize data diversity for Phase 6 L11 ML training.
+- **L1 Physics Engine (v10.1.4)**: Enforced strict string-formatting (`.toFixed(4)`) for all telemetry scores. Hardened sentinel detection logic to prioritize explicit payload flags.
+- **L7 Device Gateway (v5.8.0)**: Integrated `helmet()` middleware and hardened `/iso15118/authenticate` endpoint with stricter payload validation.
+- **L4 Market Gateway (v3.8.4)**: Hardened **Sentinel Fidelity** detection and ensured all physics/confidence scores are transmitted as four-decimal strings.
 
 ---
 
@@ -848,7 +848,7 @@ The platform is now actively generating the high-fidelity timeseries data requir
 
 *The Operating System for Sustainable Fleet Electrification*
 
-**Last Updated:** April 2026 • **Platform Version:** 10.1.3 • **Roadmap Status:** 70% Complete (69/98 features)
+**Last Updated:** April 2026 • **Platform Version:** 10.1.4 • **Roadmap Status:** 70% Complete (69/98 features)
 
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-blue.svg)](https://github.com/dcplatforms/Migrid)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
