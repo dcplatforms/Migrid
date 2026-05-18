@@ -103,7 +103,7 @@ function calculateConfidenceScore(streak, lastSync, siteLoadData) {
     }
   }
 
-  return parseFloat(Math.max(0, Math.min(1.0, score)).toFixed(4));
+  return Math.max(0, Math.min(1.0, score)).toFixed(4);
 }
 
 /**
@@ -130,10 +130,13 @@ function calculatePhysicsMetadata(payload) {
     physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
   }
 
+  const scoreStr = physicsScore.toFixed(4);
+  const explicitSentinel = payload.is_sentinel_fidelity === true || payload.is_sentinel_fidelity === 'true';
+
   return {
-    physicsScore: parseFloat(physicsScore.toFixed(4)),
+    physicsScore: scoreStr,
     isPhysicsHighFidelity: physicsScore > 0.95,
-    isSentinelFidelity: physicsScore > 0.99
+    isSentinelFidelity: explicitSentinel || physicsScore > 0.99
   };
 }
 
@@ -205,7 +208,7 @@ async function handlePhysicsAlert(msg) {
   );
 
   // [L1-124] April 2026 High-Fidelity Standard: Physics OR Confidence > 0.95
-  const isHighFidelity = isPhysicsHighFidelity || confidenceScore > 0.95;
+  const isHighFidelity = isPhysicsHighFidelity || parseFloat(confidenceScore) > 0.95;
 
   // 1. Verify the Physics: Set Safety Lock in Redis for critical violations
   if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
@@ -220,7 +223,7 @@ async function handlePhysicsAlert(msg) {
         vehicle_id: payload.vehicle_id,
         vin: payload.vin,
         variance_pct: payload.variance_pct,
-        physics_score: physicsScore.toFixed(4),
+        physics_score: physicsScore,
         is_high_fidelity: isHighFidelity,
         is_sentinel_fidelity: isSentinelFidelity,
         confidence_score: confidenceScore,
@@ -234,7 +237,7 @@ async function handlePhysicsAlert(msg) {
       };
       await redisClient.setEx(SAFETY_LOCK_CONTEXT_KEY, SAFETY_LOCK_TTL, JSON.stringify(context));
 
-      console.log(`🔒 [L1 Physics] Safety Lock and Context activated in Redis: ${SAFETY_LOCK_KEY} (Physics Score: ${physicsScore.toFixed(4)})`);
+      console.log(`🔒 [L1 Physics] Safety Lock and Context activated in Redis: ${SAFETY_LOCK_KEY} (Physics Score: ${physicsScore})`);
     } catch (redisErr) {
       console.error('❌ [L1 Physics] Failed to set safety lock in Redis:', redisErr.message);
     }
@@ -244,7 +247,7 @@ async function handlePhysicsAlert(msg) {
     // [L1-126] Hardened Offline Mode: Persist scores to prevent metadata loss
     const offlinePayload = {
       ...payload,
-      physics_score: physicsScore.toFixed(4),
+      physics_score: physicsScore,
       confidence_score: confidenceScore,
       is_high_fidelity: isHighFidelity,
       is_sentinel_fidelity: isSentinelFidelity
@@ -268,8 +271,8 @@ async function handlePhysicsAlert(msg) {
       threshold: payload.threshold || (payload.event_type === 'EFFICIENCY_ALERT' ? 0.85 : (payload.event_type === 'CAPACITY_VIOLATION' ? 20.0 : null)),
       expected: payload.expected,
       actual: payload.actual,
-      physics_score: physicsScore.toFixed(4),
-      is_high_fidelity: (physicsScore > 0.95 || confidenceScore > 0.95), // [L1-124] High-Fidelity Alignment
+      physics_score: physicsScore,
+      is_high_fidelity: isHighFidelity,
       is_sentinel_fidelity: isSentinelFidelity,
       confidence_score: confidenceScore,
       billing_mode: payload.billing_mode,
@@ -346,11 +349,13 @@ async function reconcileLogs() {
 
       // [L1-124] Re-calculate scores for high-fidelity reconciliation
       // Note: We use the stored scores if available (Hardened Offline Mode)
-      const physicsScore = parseFloat(payload.physics_score || calculatePhysicsMetadata(payload).physicsScore);
-      const isPhysicsHighFidelity = physicsScore > 0.95;
-      const confidenceScore = parseFloat(payload.confidence_score || 0.5);
-      const isHighFidelity = isPhysicsHighFidelity || confidenceScore > 0.95;
-      const isSentinelFidelity = physicsScore > 0.99;
+      const physicsMetadata = calculatePhysicsMetadata(payload);
+      const physicsScore = payload.physics_score || physicsMetadata.physicsScore;
+      const isPhysicsHighFidelity = parseFloat(physicsScore) > 0.95;
+      const confidenceScore = payload.confidence_score || (0.5).toFixed(4);
+      const isHighFidelity = isPhysicsHighFidelity || parseFloat(confidenceScore) > 0.95;
+      const explicitSentinel = payload.is_sentinel_fidelity === true || payload.is_sentinel_fidelity === 'true';
+      const isSentinelFidelity = explicitSentinel || parseFloat(physicsScore) > 0.99;
 
       // Re-publish missed alerts to Kafka
       const alert = {
@@ -366,7 +371,7 @@ async function reconcileLogs() {
         threshold: payload.threshold || (payload.event_type === 'EFFICIENCY_ALERT' ? 0.85 : (payload.event_type === 'CAPACITY_VIOLATION' ? 20.0 : null)),
         expected: payload.expected,
         actual: payload.actual,
-        physics_score: physicsScore.toFixed(4),
+        physics_score: physicsScore,
         is_high_fidelity: isHighFidelity,
         is_sentinel_fidelity: isSentinelFidelity,
         confidence_score: confidenceScore,
@@ -426,7 +431,7 @@ async function reconcileLogs() {
         payload.v2g_active,
         normalizeIso(payload.iso_region),
         payload.market_price_at_session || 0.0,
-        physicsScore.toFixed(4),
+        physicsScore,
         isHighFidelity
       ]);
 
@@ -506,17 +511,18 @@ async function syncDigitalTwin() {
         }
       }
 
-      const physicsScore = parseFloat(vehicle.physics_score || 1.0);
+      const physicsScore = parseFloat(vehicle.physics_score || 1.0).toFixed(4);
 
       // [L1-124] April 2026 High-Fidelity Standard
-      const isHighFidelity = physicsScore > 0.95 || confidenceScore > 0.95;
+      const isHighFidelity = parseFloat(physicsScore) > 0.95 || parseFloat(confidenceScore) > 0.95;
+      const explicitSentinel = vehicle.is_sentinel_fidelity === true || vehicle.is_sentinel_fidelity === 'true';
 
       await redisClient.setEx(key, 60, JSON.stringify({
         ...vehicle,
         resource_type: resourceType,
         physics_score: physicsScore,
         is_high_fidelity: isHighFidelity,
-        is_sentinel_fidelity: physicsScore > 0.99,
+        is_sentinel_fidelity: explicitSentinel || parseFloat(physicsScore) > 0.99,
         confidence_score: confidenceScore,
         last_sync: new Date().toISOString()
       }));
