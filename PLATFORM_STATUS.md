@@ -810,7 +810,7 @@ done
 | **L1** | Physics Engine | `10.1.3` | ✅ Operational |
 | **L2** | Grid Signal | `2.4.9` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.1` | ✅ Operational |
-| **L4** | Market Gateway | `3.8.3` | ✅ Operational |
+| **L4** | Market Gateway | `3.8.5` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
 | **L6** | Engagement Engine | `5.13.0` | ✅ Operational |
 | **L7** | Device Gateway | `5.7.0` | ✅ Operational |
@@ -825,7 +825,7 @@ done
 
 - **L10 Token Engine (v4.3.4)**: Hardened Kafka consumer with robust `parseFloat` validation and boolean casting. Resolved critical duplicate variable declaration (`siteIdVal`) causing consumer crashes.
 - **L6 Engagement Engine (v5.13.0)**: Added **Sentinel Elite** achievement for drivers completing 50 sentinel-fidelity sessions. Standardized `site_id` extraction across Kafka telemetry events.
-- **L4 Market Gateway (v3.8.3)**: Implemented **Sentinel Fidelity** (>0.99 physics_score) classification for bidding and price broadcasts. Hardened L11 AI training data exports.
+- **L4 Market Gateway (v3.8.5)**: Integrated `helmet` security, standardized string-formatted telemetry (.toFixed(4)), and hardened multi-site identification for Phase 6 alignment.
 - **L2 Grid Signal (v2.4.9)**: Secured `/openadr/v3/reports` with PII masking for `vin` and `vehicle_id`. Ensures explicit boolean typing for `is_sentinel_fidelity` in reported context.
 - **L7 Device Gateway (v5.7.0)**: Centralized `getHighFidelityMetadata` in `producer.js`. Hardened meter sample extraction for accurate `energyDispensed` telemetry in V2X sessions.
 - **L1 Physics Engine (v10.1.3)**: Implemented **Multi-Site Load Penalties [L1-125]**, utilizing site-specific building load data to penalize confidence scores when sites exceed 90% utilization.
