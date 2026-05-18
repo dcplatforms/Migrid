@@ -1,6 +1,6 @@
 # MiGrid Master Backlog & Strategic Dependency Matrix
 
-**Version:** 10.1.3
+**Version:** 10.1.4
 **Last Updated:** April 2026
 **Status:** Phase 5 "Enterprise Scale" (92% Complete)
 
@@ -45,7 +45,7 @@
 
 ## 🛠️ Active Engineering Sprints (Phase 5)
 
-### Layer 1: Physics Engine (v10.1.3)
+### Layer 1: Physics Engine (v10.1.4)
 - [✓] **Digital Twin Sync**: Fleet-filtered Redis sync for vehicle states.
 - [✓] **Contextual Safety Locks**: metadata-enriched `l1:safety:lock:context` in Redis.
 - [✓] **High-Fidelity Reconcile**: Preservation of regional metadata in audit logs.
@@ -56,15 +56,17 @@
 - [✓] **Site Energy Snapshot**: Real-time load/capacity fetching for confidence scoring.
 - [✓] **[L1-126] Hardened Offline Mode**: Redis metadata preservation during disconnects.
 
-### Layer 2: Grid Signal (v2.4.9)
+### Layer 2: Grid Signal (v2.5.1)
 - [✓] **BESS-Aware Safety**: 10% variance threshold enforced for stationary storage.
 - [✓] **Regional Confidence**: Averaging vehicle scores for OpenADR high-fidelity fallback.
 - [✓] **Regional Context**: High-fidelity capacity breakdown (Total/EV/BESS) in OpenADR reports.
 - [✓] **Confidence Propagation**: Forwarding L1 confidence scores to L11 pipelines.
 - [✓] **PII Masking**: Hardened masking for `vin` and `vehicle_id` in safety contexts.
-- [✓] **Fidelity Alignment**: Updated classification logic for consistency with L1 v10.1.3.
+- [✓] **Fidelity Alignment**: Updated classification logic for consistency with L1 v10.1.4.
 - [✓] **Secure Reporting**: authenticateToken and PII masking applied to `/openadr/v3/reports`.
 - [✓] **Signal Caching**: Redis-based ADVANCE_CHARGE_SIGNAL (CAISO solar ramp) cache.
+- [✓] **Security Hardening**: Integrated `helmet` middleware for standard security headers.
+- [✓] **Multi-Site Readiness**: Implemented robust site identification (`site_id`, `siteId`, `location_id`, `locationId`).
 
 ### Layer 3: VPP Aggregator (v3.3.1)
 - [✓] **Redis Capacity Cache**: Sub-50ms reporting for L4 bidding.
@@ -85,7 +87,7 @@
 - [✓] **Sentinel Fidelity**: Detection and classification of >0.99 physics scores.
 - [~] **BESS RL Bidding**: Research phase for reinforcement learning models (10%).
 
-### Layer 6: Engagement Engine (v5.13.0)
+### Layer 6: Engagement Engine (v5.14.0)
 - [✓] **Solar Surge**: Achievement for CAISO solar ramp response tracking.
 - [✓] **Sustainability Refinement**: Optimized recursive CTE for consecutive charging streaks.
 - [✓] **ISO Explorer**: Multi-regional achievement logic using bulk CTE/UNION.
@@ -102,6 +104,8 @@
 - [✓] **Physics Sentinel**: Achievement for physics_score > 0.99 records.
 - [✓] **L11 Data Guardian**: Achievement for consistent high-fidelity data contribution.
 - [✓] **Sentinel Elite**: Achievement for 50 total sentinel-fidelity sessions.
+- [✓] **Multi-Site Maestro**: Achievement for high-fidelity sessions at 3+ distinct sites.
+- [✓] **AI Model Master**: Achievement for 100+ cumulative high-fidelity sessions.
 
 ### Layer 7: Device Gateway (v5.7.0)
 - [✓] **ISO 15118-20**: Hardened Certificate Exchange and EMAID handling (98%).
@@ -111,7 +115,7 @@
 - [✓] **OCPI 2.2 Mapping**: Implemented OCPP-to-OCPI status normalization (75%).
 - [✓] **Shared Enrichment**: Centralized high-fidelity metadata scoring.
 
-### Layer 10: Token Engine (v4.3.4)
+### Layer 10: Token Engine (v4.3.5)
 - [✓] **Dynamic Multipliers**: Surplus (1.5x) and Scarcity (2.0x) logic active.
 - [✓] **Reward Idempotency**: PostgreSQL unique constraints + Redis checkIdempotency.
 - [✓] **High-Fidelity Auditing**: Persistence of `physics_score` and `confidence_score` in logs.
@@ -119,6 +123,8 @@
 - [✓] **Site Awareness**: persistence of site_id/location_id in token reward logs.
 - [✓] **Kafka Hardening**: Robust float parsing and boolean casting for telemetry.
 - [✓] **Security Fix**: Resolved duplicate variable declaration in consumer logic.
+- [✓] **Consumer Streamlining**: Removed redundant destructuring and standardized payload extraction.
+- [✓] **AI Export**: Deployed `/data/training/rewards` for L11 ML Engine training.
 
 ---
 
