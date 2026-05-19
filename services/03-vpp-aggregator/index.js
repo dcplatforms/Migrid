@@ -4,6 +4,7 @@
  */
 
 const express = require('express');
+const helmet = require('helmet');
 const { Pool } = require('pg');
 const redis = require('redis');
 const jwt = require('jsonwebtoken');
@@ -11,6 +12,8 @@ const { Kafka } = require('kafkajs');
 const { connectProducer, dispatchV2G } = require('./src/events/producer');
 
 const app = express();
+app.use(helmet());
+
 const port = process.env.PORT || 3003;
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
@@ -35,6 +38,13 @@ const kafka = new Kafka({
 const consumer = kafka.consumer({ groupId: 'vpp-aggregator-group' });
 
 app.use(express.json());
+
+/**
+ * Helper: Standardized site ID extraction for multi-key parity (L10/L4 v3.8.5)
+ */
+const extractSiteId = (payload) => {
+  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || 'UNKNOWN_SITE';
+};
 
 const SAFETY_LOCK_KEY = 'l1:safety:lock';
 const SAFETY_CONTEXT_KEY = 'l1:safety:lock:context';
@@ -77,7 +87,7 @@ const authenticateToken = (req, res, next) => {
 app.get('/health', (req, res) => {
   res.json({
     service: 'vpp-aggregator',
-    version: '3.3.1',
+    version: '3.3.2',
     status: 'healthy',
     layer: 'L3'
   });
@@ -140,7 +150,7 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
         isHighFidelity = physicsScoreVal > 0.95 || confidenceScoreVal > 0.95;
 
         // Sentinel Fidelity: (physics_score > 0.99 OR explicit flag)
-        isSentinelFidelity = context.is_sentinel_fidelity === true || context.is_sentinel_fidelity === 'true' || physicsScoreVal > 0.99;
+        isSentinelFidelity = context.is_sentinel_fidelity === true || context.is_sentinel_fidelity === 'true' || context.is_sentinel_fidelity === 1 || physicsScoreVal > 0.99;
 
         // Apply the lower of the two as the capacity derating factor
         physicsMultiplier = Math.min(physicsScoreVal, confidenceScoreVal);
@@ -265,8 +275,8 @@ const updateGlobalCapacity = async () => {
         rawPhysicsScore = context.physics_score ? parseFloat(context.physics_score) : 1.0;
         confidenceScore = context.confidence_score ? parseFloat(context.confidence_score) : 1.0;
 
-        // Sentinel Fidelity logic
-        isSentinelFidelity = context.is_sentinel_fidelity === true || context.is_sentinel_fidelity === 'true' || rawPhysicsScore > 0.99;
+        // Sentinel Fidelity logic: Prioritize explicit flag (boolean, string, or integer)
+        isSentinelFidelity = context.is_sentinel_fidelity === true || context.is_sentinel_fidelity === 'true' || context.is_sentinel_fidelity === 1 || rawPhysicsScore > 0.99;
 
         // Apply the lower of the two as the global capacity derating factor
         physicsMultiplier = Math.min(rawPhysicsScore, confidenceScore);
@@ -386,10 +396,10 @@ const initKafka = async () => {
         console.log(`📥 [VPP Aggregator] Received Kafka message [${topic}]:`, payload);
 
         if (topic === 'migrid.physics.alerts') {
-          const siteId = payload.site_id || payload.siteId || payload.location_id || payload.locationId;
+          const siteId = extractSiteId(payload);
           const physicsScore = payload.physics_score ? parseFloat(payload.physics_score) : 1.0;
           const confidenceScore = payload.confidence_score ? parseFloat(payload.confidence_score) : 1.0;
-          const isSentinelFidelity = payload.is_sentinel_fidelity === true || payload.is_sentinel_fidelity === 'true' || physicsScore > 0.99;
+          const isSentinelFidelity = payload.is_sentinel_fidelity === true || payload.is_sentinel_fidelity === 'true' || payload.is_sentinel_fidelity === 1 || physicsScore > 0.99;
 
           if (payload.event_type === 'CAPACITY_VIOLATION' || payload.event_type === 'PHYSICS_FRAUD') {
             console.warn(`⚠️ [VPP Aggregator] Physics alert: Resource ${payload.vehicle_id} | Type: ${payload.event_type} | Severity: ${payload.severity}`);
@@ -432,7 +442,7 @@ const initKafka = async () => {
 
         if (topic === 'grid_signals') {
           const { event_id, program_id, market_context, priority, v2g_requested, der_control } = payload;
-          const siteId = payload.site_id || payload.siteId || payload.location_id || payload.locationId;
+          const siteId = extractSiteId(payload);
           console.log(`⚡ [VPP Aggregator] Grid Signal received: ${event_id}. Program: ${program_id}, Market: ${market_context}, Site: ${siteId}, Priority: ${priority}`);
 
           if (v2g_requested || der_control) {

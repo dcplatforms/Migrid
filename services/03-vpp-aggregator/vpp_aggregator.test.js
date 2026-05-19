@@ -91,22 +91,40 @@ describe('L3 VPP Aggregator Service', () => {
         expect(response.body.is_sentinel_fidelity).toBe(false);
     });
 
-    test('GET /capacity/available should identify sentinel fidelity', async () => {
+    test('GET /capacity/available should identify sentinel fidelity (hardened logic)', async () => {
+        // Test with explicit boolean
         mockRedisClient.get.mockImplementation((key) => {
-            if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({ physics_score: "0.9950", confidence_score: "0.9900" }));
+            if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({ is_sentinel_fidelity: true, physics_score: 0.96 }));
             return Promise.resolve(null);
         });
-        mockPool.query.mockResolvedValue({
-            rows: [{ raw_capacity_kwh: 100, vehicle_count: 2 }]
-        });
+        mockPool.query.mockResolvedValue({ rows: [{ raw_capacity_kwh: 100, vehicle_count: 2 }] });
 
-        const response = await request(app)
-            .get('/capacity/available')
-            .set('Authorization', `Bearer ${mockToken}`);
-
-        expect(response.status).toBe(200);
+        let response = await request(app).get('/capacity/available').set('Authorization', `Bearer ${mockToken}`);
         expect(response.body.is_sentinel_fidelity).toBe(true);
-        expect(response.body.physics_score).toBe("0.9950");
+
+        // Test with string 'true'
+        mockRedisClient.get.mockImplementation((key) => {
+            if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({ is_sentinel_fidelity: 'true', physics_score: 0.96 }));
+            return Promise.resolve(null);
+        });
+        response = await request(app).get('/capacity/available').set('Authorization', `Bearer ${mockToken}`);
+        expect(response.body.is_sentinel_fidelity).toBe(true);
+
+        // Test with integer 1
+        mockRedisClient.get.mockImplementation((key) => {
+            if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({ is_sentinel_fidelity: 1, physics_score: 0.96 }));
+            return Promise.resolve(null);
+        });
+        response = await request(app).get('/capacity/available').set('Authorization', `Bearer ${mockToken}`);
+        expect(response.body.is_sentinel_fidelity).toBe(true);
+
+        // Test with physics score fallback
+        mockRedisClient.get.mockImplementation((key) => {
+            if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({ physics_score: 0.995 }));
+            return Promise.resolve(null);
+        });
+        response = await request(app).get('/capacity/available').set('Authorization', `Bearer ${mockToken}`);
+        expect(response.body.is_sentinel_fidelity).toBe(true);
     });
 
     test('GET /capacity/available should return 0 when L1 safety lock is active', async () => {
@@ -292,6 +310,20 @@ describe('L3 VPP Aggregator Service', () => {
     });
 
     describe('updateGlobalCapacity', () => {
+        test('should handle hardened sentinel fidelity flags correctly', async () => {
+            mockRedisClient.get.mockImplementation((key) => {
+                if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({ is_sentinel_fidelity: 'true', physics_score: 0.96 }));
+                return Promise.resolve(null);
+            });
+            mockPool.query.mockResolvedValueOnce({ rows: [{ region: 'CAISO', resource_type: 'EV', raw_capacity_kwh: 100 }] });
+
+            await updateGlobalCapacity();
+
+            const highFidelityCall = mockRedisClient.set.mock.calls.find(call => call[0] === 'vpp:capacity:regional:high_fidelity');
+            const highFidelityData = JSON.parse(highFidelityCall[1]);
+            expect(highFidelityData.CAISO.is_sentinel_fidelity).toBe(true);
+        });
+
         test('should aggregate EV and BESS correctly for regional breakdown and high-fidelity alignment', async () => {
             mockRedisClient.get.mockImplementation((key) => {
                 if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({ physics_score: 0.94, confidence_score: 0.98 }));
