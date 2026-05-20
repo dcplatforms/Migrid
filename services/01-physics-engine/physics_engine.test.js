@@ -95,9 +95,25 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.event_type).toBe('PHYSICS_FRAUD');
     expect(alertValue.severity).toBe('FRAUD');
     expect(alertValue.variance_pct).toBe(18.5);
+    expect(typeof alertValue.physics_score).toBe('string');
     expect(alertValue.physics_score).toBe("0.0000"); // 1 - (18.5/15) = -0.23 -> clamp to 0
     expect(alertValue.is_high_fidelity).toBe(false);
     expect(alertValue.is_sentinel_fidelity).toBe(false);
+  });
+
+  test('should prioritize explicit is_sentinel_fidelity flag in alert', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'SESSION_COMPLETED',
+        physics_score: 0.90,
+        is_sentinel_fidelity: 'true'
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.is_sentinel_fidelity).toBe(true);
   });
 
   test('should calculate physics_score and is_high_fidelity correctly for moderate variance', async () => {
@@ -111,6 +127,7 @@ describe('L1 Physics Engine Alert Handling', () => {
     await physicsEngine.handlePhysicsAlert(msg);
 
     const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(typeof alertValue.physics_score).toBe('string');
     expect(alertValue.physics_score).toBe("0.5000"); // 1 - (7.5/15) = 0.5
     expect(alertValue.is_high_fidelity).toBe(false);
   });
@@ -582,14 +599,20 @@ describe('L1 Physics Metadata Calculation', () => {
   test('should correctly calculate sentinel fidelity for > 0.99', () => {
     const payload = { event_type: 'EFFICIENCY_ALERT', efficiency_pct: 99.1 };
     const metadata = physicsEngine.calculatePhysicsMetadata(payload);
-    expect(metadata.physicsScore).toBe(0.9910);
+    expect(metadata.physicsScore).toBe("0.9910");
+    expect(metadata.isSentinelFidelity).toBe(true);
+  });
+
+  test('should prioritize explicit is_sentinel_fidelity in metadata calculation', () => {
+    const payload = { event_type: 'EFFICIENCY_ALERT', efficiency_pct: 90.0, is_sentinel_fidelity: true };
+    const metadata = physicsEngine.calculatePhysicsMetadata(payload);
     expect(metadata.isSentinelFidelity).toBe(true);
   });
 
   test('should correctly calculate high fidelity for > 0.95', () => {
     const payload = { event_type: 'EFFICIENCY_ALERT', efficiency_pct: 96.0 };
     const metadata = physicsEngine.calculatePhysicsMetadata(payload);
-    expect(metadata.physicsScore).toBe(0.9600);
+    expect(metadata.physicsScore).toBe("0.9600");
     expect(metadata.isPhysicsHighFidelity).toBe(true);
     expect(metadata.isSentinelFidelity).toBe(false);
   });
@@ -602,7 +625,7 @@ describe('L1 Physics Metadata Calculation', () => {
     };
     const metadata = physicsEngine.calculatePhysicsMetadata(payload);
     // 1 - (8 / 10) = 0.2
-    expect(metadata.physicsScore).toBe(0.2000);
+    expect(metadata.physicsScore).toBe("0.2000");
   });
 
   test('[L1-117] should use standard 15% threshold for EV', () => {
@@ -613,7 +636,7 @@ describe('L1 Physics Metadata Calculation', () => {
     };
     const metadata = physicsEngine.calculatePhysicsMetadata(payload);
     // 1 - (8 / 15) = 0.4666666666666667
-    expect(metadata.physicsScore).toBe(0.4667);
+    expect(metadata.physicsScore).toBe("0.4667");
   });
 });
 
