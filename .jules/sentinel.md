@@ -39,3 +39,8 @@
 **Vulnerability:** The `/openadr/v3/reports` endpoint was unauthenticated and returned raw `safetyContext` containing PII (`vin`, `vehicle_id`).
 **Learning:** High-fidelity reporting often aggregates data from lower-level services (like L1 Physics) which may include sensitive device identifiers not suitable for broad internal or external APIs.
 **Prevention:** Always apply authentication middleware to reporting endpoints and explicitly mask sensitive fields in objects retrieved from caches (Redis) or other microservices before API delivery.
+
+## 2026-04-25 - [Boolean Flag Evaluation Risk in Event Consumers]
+**Vulnerability:** Incorrect evaluation of security-critical boolean flags (e.g., `is_sentinel_fidelity`) received from Kafka.
+**Learning:** Using double negation (`!!`) on fields from parsed JSON payloads is dangerous if the field might be a string. For example, `!!"false"` evaluates to `true`, which could bypass fidelity checks or trigger unauthorized logic.
+**Prevention:** Always use explicit boolean and string comparisons (e.g., `val === true || val === 'true'`) when extracting status flags from external event streams to ensure intent is preserved.

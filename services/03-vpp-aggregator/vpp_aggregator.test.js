@@ -87,6 +87,26 @@ describe('L3 VPP Aggregator Service', () => {
         expect(response.body.available_capacity_kwh).toBe(90);
         // isHighFidelity = (0.96 > 0.95 || 0.90 > 0.95) = true
         expect(response.body.is_high_fidelity).toBe(true);
+        expect(response.body.physics_score).toBe("0.9600");
+        expect(response.body.is_sentinel_fidelity).toBe(false);
+    });
+
+    test('GET /capacity/available should identify sentinel fidelity', async () => {
+        mockRedisClient.get.mockImplementation((key) => {
+            if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({ physics_score: "0.9950", confidence_score: "0.9900" }));
+            return Promise.resolve(null);
+        });
+        mockPool.query.mockResolvedValue({
+            rows: [{ raw_capacity_kwh: 100, vehicle_count: 2 }]
+        });
+
+        const response = await request(app)
+            .get('/capacity/available')
+            .set('Authorization', `Bearer ${mockToken}`);
+
+        expect(response.status).toBe(200);
+        expect(response.body.is_sentinel_fidelity).toBe(true);
+        expect(response.body.physics_score).toBe("0.9950");
     });
 
     test('GET /capacity/available should return 0 when L1 safety lock is active', async () => {
@@ -292,7 +312,7 @@ describe('L3 VPP Aggregator Service', () => {
             // isHighFidelity = (0.94 > 0.95 || 0.98 > 0.95) = true
             expect(mockRedisClient.set).toHaveBeenCalledWith(
                 'vpp:capacity:regional:high_fidelity',
-                expect.stringContaining('"CAISO":{"total":141,"ev":94,"bess":47,"is_high_fidelity":true}')
+                expect.stringContaining('"CAISO":{"total":141,"ev":94,"bess":47,"is_high_fidelity":true,"is_sentinel_fidelity":false,"physics_score":"0.9400","confidence_score":"0.9800"}')
             );
 
             // Verify legacy Redis key (should be just the total number)

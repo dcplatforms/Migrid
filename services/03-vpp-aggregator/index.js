@@ -125,19 +125,25 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
 
     // L1 Physics Confidence Derating & High-Fidelity Alignment (v3.3.1)
     let physicsMultiplier = 1.0;
-    let confidenceScore = 1.0;
+    let physicsScoreVal = 1.0;
+    let confidenceScoreVal = 1.0;
     let isHighFidelity = true;
+    let isSentinelFidelity = false;
+
     if (safetyContext && typeof safetyContext === 'string') {
       try {
         const context = JSON.parse(safetyContext);
-        physicsMultiplier = context.physics_score ? parseFloat(context.physics_score) : 1.0;
-        confidenceScore = context.confidence_score ? parseFloat(context.confidence_score) : 1.0;
+        physicsScoreVal = context.physics_score ? parseFloat(context.physics_score) : 1.0;
+        confidenceScoreVal = context.confidence_score ? parseFloat(context.confidence_score) : 1.0;
 
         // High-Fidelity Standard: (physics_score > 0.95 OR confidence_score > 0.95)
-        isHighFidelity = physicsMultiplier > 0.95 || confidenceScore > 0.95;
+        isHighFidelity = physicsScoreVal > 0.95 || confidenceScoreVal > 0.95;
+
+        // Sentinel Fidelity: (physics_score > 0.99 OR explicit flag)
+        isSentinelFidelity = context.is_sentinel_fidelity === true || context.is_sentinel_fidelity === 'true' || physicsScoreVal > 0.99;
 
         // Apply the lower of the two as the capacity derating factor
-        physicsMultiplier = Math.min(physicsMultiplier, confidenceScore);
+        physicsMultiplier = Math.min(physicsScoreVal, confidenceScoreVal);
       } catch (e) {}
     }
 
@@ -165,8 +171,11 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
     const response = {
       available_capacity_kwh: totalCapacityKwh,
       available_capacity_kw: totalCapacityKwh, // Assuming 1-hour discharge for kW estimate
+      physics_score: physicsScoreVal.toFixed(4),
+      confidence_score: confidenceScoreVal.toFixed(4),
       physics_multiplier: physicsMultiplier,
       is_high_fidelity: isHighFidelity,
+      is_sentinel_fidelity: isSentinelFidelity,
       resource_count: parseInt(capacity.vehicle_count || 0),
       timestamp: new Date().toISOString(),
       source: 'database'
@@ -242,6 +251,7 @@ const updateGlobalCapacity = async () => {
 
     let confidenceScore = 1.0;
     let rawPhysicsScore = 1.0;
+    let isSentinelFidelity = false;
 
     if (safetyContextRaw) {
       try {
@@ -254,6 +264,9 @@ const updateGlobalCapacity = async () => {
         }
         rawPhysicsScore = context.physics_score ? parseFloat(context.physics_score) : 1.0;
         confidenceScore = context.confidence_score ? parseFloat(context.confidence_score) : 1.0;
+
+        // Sentinel Fidelity logic
+        isSentinelFidelity = context.is_sentinel_fidelity === true || context.is_sentinel_fidelity === 'true' || rawPhysicsScore > 0.99;
 
         // Apply the lower of the two as the global capacity derating factor
         physicsMultiplier = Math.min(rawPhysicsScore, confidenceScore);
@@ -310,7 +323,15 @@ const updateGlobalCapacity = async () => {
       totalCapacity += deratedCapacity;
 
       if (!regionalCapacity[normalizedRegion]) {
-        regionalCapacity[normalizedRegion] = { total: 0, ev: 0, bess: 0, is_high_fidelity: isHighFidelity };
+        regionalCapacity[normalizedRegion] = {
+          total: 0,
+          ev: 0,
+          bess: 0,
+          is_high_fidelity: isHighFidelity,
+          is_sentinel_fidelity: isSentinelFidelity,
+          physics_score: rawPhysicsScore.toFixed(4),
+          confidence_score: confidenceScore.toFixed(4)
+        };
       }
 
       regionalCapacity[normalizedRegion].total += deratedCapacity;
@@ -331,11 +352,11 @@ const updateGlobalCapacity = async () => {
 
     // Save historical state for L11 ML Engine Training
     await pool.query(
-      'INSERT INTO vpp_capacity_history (total_capacity_kwh, regional_data, physics_multiplier, is_high_fidelity, safety_context, timestamp) VALUES ($1, $2, $3, $4, $5, NOW())',
-      [totalCapacity, JSON.stringify(regionalCapacity), physicsMultiplier, isHighFidelity, safetyContextRaw]
+      'INSERT INTO vpp_capacity_history (total_capacity_kwh, regional_data, physics_multiplier, is_high_fidelity, is_sentinel_fidelity, safety_context, timestamp) VALUES ($1, $2, $3, $4, $5, $6, NOW())',
+      [totalCapacity, JSON.stringify(regionalCapacity), physicsMultiplier, isHighFidelity, isSentinelFidelity, safetyContextRaw]
     ).catch(e => console.error('[VPP Aggregator] Failed to log history for L11:', e.message));
 
-    console.log(`[VPP Aggregator] Global Capacity Updated: ${totalCapacity.toFixed(2)} kWh (Multiplier: ${physicsMultiplier}, Fidelity: ${isHighFidelity})`);
+    console.log(`[VPP Aggregator] Global Capacity Updated: ${totalCapacity.toFixed(2)} kWh (Multiplier: ${physicsMultiplier}, Fidelity: ${isHighFidelity}, Sentinel: ${isSentinelFidelity})`);
   } catch (error) {
     console.error('[VPP Aggregator] Global capacity update error:', error);
   }
@@ -365,9 +386,14 @@ const initKafka = async () => {
         console.log(`📥 [VPP Aggregator] Received Kafka message [${topic}]:`, payload);
 
         if (topic === 'migrid.physics.alerts') {
+          const siteId = payload.site_id || payload.siteId || payload.location_id || payload.locationId;
+          const physicsScore = payload.physics_score ? parseFloat(payload.physics_score) : 1.0;
+          const confidenceScore = payload.confidence_score ? parseFloat(payload.confidence_score) : 1.0;
+          const isSentinelFidelity = payload.is_sentinel_fidelity === true || payload.is_sentinel_fidelity === 'true' || physicsScore > 0.99;
+
           if (payload.event_type === 'CAPACITY_VIOLATION' || payload.event_type === 'PHYSICS_FRAUD') {
             console.warn(`⚠️ [VPP Aggregator] Physics alert: Resource ${payload.vehicle_id} | Type: ${payload.event_type} | Severity: ${payload.severity}`);
-            console.log(`[VPP Aggregator] Alert Context: Site=${payload.site_id}, BillingMode=${payload.billing_mode}, VPP_Active=${payload.vpp_active}`);
+            console.log(`[VPP Aggregator] Alert Context: Site=${siteId}, BillingMode=${payload.billing_mode}, VPP_Active=${payload.vpp_active}, Fidelity=${isSentinelFidelity}`);
 
             // Invalidate cache
             await redisClient.del(`vpp:capacity:available:${payload.fleet_id}`);
@@ -405,8 +431,9 @@ const initKafka = async () => {
         }
 
         if (topic === 'grid_signals') {
-          const { event_id, program_id, market_context, site_id, priority, v2g_requested, der_control } = payload;
-          console.log(`⚡ [VPP Aggregator] Grid Signal received: ${event_id}. Program: ${program_id}, Market: ${market_context}, Site: ${site_id}, Priority: ${priority}`);
+          const { event_id, program_id, market_context, priority, v2g_requested, der_control } = payload;
+          const siteId = payload.site_id || payload.siteId || payload.location_id || payload.locationId;
+          console.log(`⚡ [VPP Aggregator] Grid Signal received: ${event_id}. Program: ${program_id}, Market: ${market_context}, Site: ${siteId}, Priority: ${priority}`);
 
           if (v2g_requested || der_control) {
             console.log(`🔋 [IEEE 2030.5] Initiating Automated V2G Dispatch Sequence for Event: ${event_id}`);
@@ -419,13 +446,13 @@ const initKafka = async () => {
                 // OpMode Logic: Select and dispatch assets based on grid service type
                 switch(op_mode) {
                   case 'PEAK_SHAVING':
-                    console.log(`[IEEE 2030.5] Executing Peak Shaving Strategy: Prioritizing BESS discharge to site ${site_id}`);
+                    console.log(`[IEEE 2030.5] Executing Peak Shaving Strategy: Prioritizing BESS discharge to site ${siteId}`);
                     break;
                   case 'FREQUENCY_RESPONSE':
-                    console.log(`[IEEE 2030.5] Executing Fast Frequency Response: Sub-500ms dispatch trigger enabled for site ${site_id}`);
+                    console.log(`[IEEE 2030.5] Executing Fast Frequency Response: Sub-500ms dispatch trigger enabled for site ${siteId}`);
                     break;
                   case 'VOLT_VAR_OPTIMIZATION':
-                    console.log(`[IEEE 2030.5] Executing Volt-VAR Optimization for site ${site_id}`);
+                    console.log(`[IEEE 2030.5] Executing Volt-VAR Optimization for site ${siteId}`);
                     break;
                   default:
                     console.log(`[IEEE 2030.5] Executing Standard V2G Dispatch for OpMode: ${op_mode}`);

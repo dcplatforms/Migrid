@@ -45,7 +45,7 @@ describe('BiddingOptimizer', () => {
     const fixMsg = bids[0];
 
     // FIX-PROT-AUDIT: Check audit metadata
-    expect(audit.physics_score).toBe(1.0);
+    expect(audit.physics_score).toBe("1.0000");
     expect(audit.capacity_fidelity).toBe('STANDARD');
 
     // FIX tag 38 is OrderQty
@@ -95,7 +95,7 @@ describe('BiddingOptimizer', () => {
     expect(bids).toHaveLength(2);
     expect(bids[0]).toContain('38=0.00');
     expect(bids[1]).toContain('38=1.00');
-    expect(audit.physics_score).toBe(1.0);
+    expect(audit.physics_score).toBe("1.0000");
   });
 
   test('should return no bids when L1 safety lock is active', async () => {
@@ -138,8 +138,8 @@ describe('BiddingOptimizer', () => {
 
     const { audit } = await optimizer.generateDayAheadBids('CAISO');
 
-    expect(audit.physics_score).toBe(0.0);
-    expect(audit.confidence_score).toBe(0.0);
+    expect(audit.physics_score).toBe("0.0000");
+    expect(audit.confidence_score).toBe("0.0000");
     expect(audit.capacity_fidelity).toBe('STANDARD');
     expect(audit.audit_context.event_type).toBe('PHYSICS_FRAUD');
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('L1 safety lock is active'));
@@ -168,8 +168,8 @@ describe('BiddingOptimizer', () => {
 
     const { audit } = await optimizer.generateDayAheadBids('PJM');
 
-    expect(audit.physics_score).toBe(0.85);
-    expect(audit.confidence_score).toBe(0.80);
+    expect(audit.physics_score).toBe("0.8500");
+    expect(audit.confidence_score).toBe("0.8000");
     expect(audit.capacity_fidelity).toBe('STANDARD'); // Both <= 0.95
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Score: 0.85'));
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Confidence: 0.8'));
