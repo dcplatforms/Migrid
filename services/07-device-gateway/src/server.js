@@ -1,6 +1,7 @@
 const WebSocket = require('ws');
 const http = require('http');
 const express = require('express');
+const helmet = require('helmet');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const { redis, redisSub, registerConnection, removeConnection } = require('./state/connectionMgr');
@@ -10,6 +11,7 @@ const { connectConsumer } = require('./events/consumer');
 const config = require('./config');
 
 const app = express();
+app.use(helmet());
 app.use(express.json());
 
 const pool = new Pool({
@@ -39,15 +41,25 @@ app.get('/health', (req, res) => {
     service: 'Device Gateway',
     layer: 'L7',
     status: 'OK',
-    version: '5.6.0',
+    version: '5.8.0',
     podId: process.env.POD_ID || 'gateway-instance-1'
   });
 });
 
 app.post('/iso15118/authenticate', async (req, res) => {
   const { contract_id, certificate_chain } = req.body;
-  if (!certificate_chain || certificate_chain.length < 2) {
+
+  // [L7-SEC-001] Hardened Certificate Chain Validation
+  // In Phase 5, we enforce strict length checks and placeholder for PKI verification
+  if (!certificate_chain || !Array.isArray(certificate_chain) || certificate_chain.length < 2) {
+    console.warn(`[L7] Security Alert: Invalid certificate chain format for contract_id: ${contract_id}`);
     return res.status(400).json({ status: 'FAILED', reason: 'Invalid certificate chain' });
+  }
+
+  // Placeholder for ISO 15118-20 PKI Chain Verification (P1 Strategy)
+  const isChainValid = true; // TODO: Implement crypto.verify with V2G Root CA
+  if (!isChainValid) {
+    return res.status(401).json({ status: 'FAILED', reason: 'CERTIFICATE_CHAIN_UNTRUSTED' });
   }
 
   try {

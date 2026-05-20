@@ -11,9 +11,9 @@
 | Priority | Feature / Task | Primary Layer | Blocking Dependencies | Target Phase |
 |:---:|:---|:---:|:---|:---:|
 | **P0** | **ML Demand Forecasting** | L11 (ML Engine) | ✅ Phase 5 High-Fidelity Data Pipelines (L1, L2, L3, L4) | Phase 6 |
-| **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | ✅ L7 v5.6.0 Hardened (95% Complete) | Phase 5 |
+| **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | ✅ L7 v5.8.0 Hardened (98% Complete) | Phase 5 |
 | **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 (Market) v3.8.2 AI Readiness | Phase 5 |
-| **P3** | **OCPI 2.2 Roaming** | L7 (Device) | ✅ L9 (Commerce) v5.1.0 tariff engine sync (70%) | Phase 5 |
+| **P3** | **OCPI 2.2 Roaming** | L7 (Device) | ✅ L9 (Commerce) v5.1.0 tariff engine sync (75%) | Phase 5 |
 | **P4** | **BESS RL Bidding** | L4 (Market) | 🚧 L3 BESS Integration (75% Complete) | Phase 6 |
 
 | **P5** | **Resource-Aware Bidding** | L4 (Market) | ✅ L3 v3.3.1 High-Fidelity Breakdown | Phase 5 |
@@ -21,10 +21,10 @@
 | Priority | Task ID | Description | Primary Layers | Status | Strategic Alignment |
 |:---:|:---:|:---|:---:|:---:|:---|
 | 1 | **ISO-15118-PC** | Full ISO 15118-20 Bidirectional Certificate Exchange & Plug & Charge UI (OCPP 2.1) | L7, L5, L1 | 98% | Phase 5: Enterprise Scale |
-| 2 | **COMMERCE-BILLING** | Complete L9 Commerce Engine Tariff Engine and Flexible Billing Logic | L9, L5 | 70% | Phase 5: Commerce Sync |
-| 3 | **OCPI-2.2-ROAM** | OCPI 2.2 Roaming Integration for cross-network orchestration | L7, L9 | 70% | Phase 5: Global Expansion |
+| 2 | **COMMERCE-BILLING** | Complete L9 Commerce Engine Tariff Engine and Flexible Billing Logic | L9, L5 | 65% | Phase 5: Commerce Sync |
+| 3 | **OCPI-2.2-ROAM** | OCPI 2.2 Roaming Integration for cross-network orchestration | L7, L9 | 75% | Phase 5: Global Expansion |
 | 4 | **REGIONAL-CHALLENGE** | Implementation of L6 Regional Team Challenges & Live Grid Events | L6, L2 | ✅ 100%| Phase 5: Grid-Aware Gamification |
-| 5 | **ML-FORECASTING** | L11 ML Engine: Demand Forecasting and Predictive Analytics Foundation | L11, L3 | 35% | Phase 6: AI & Optimization |
+| 5 | **ML-FORECASTING** | L11 ML Engine: Demand Forecasting and Predictive Analytics Foundation | L11, L3 | 40% | Phase 6: AI & Optimization |
 
 ---
 
@@ -32,14 +32,14 @@
 
 | Downstream Layer | Dependency | Upstream Source | Impact of Failure | Status |
 |:---|:---|:---|:---|:---|
-| **L11 ML Engine** | High-Fidelity Logs | **L1 Physics (v10.1.3)** | ML training data lacks regional context | ✅ Active |
+| **L11 ML Engine** | High-Fidelity Logs | **L1 Physics (v10.1.2)** | ML training data lacks regional context | ✅ Active |
 | **L5 Driver DX** | PnC Auth Status | **L7 Device Gateway** | Driver cannot use Plug & Charge sessions | ✅ 98% |
 | **L9 Commerce** | Billing Reconciliation | **L1 Physics / L4 Market** | Inaccurate split-billing or tariff logic | ✅ Active |
 | **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.1 Active |
-| **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal** | Missing high-fidelity metadata for L11 | ✅ v2.4.9 Active |
-| **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine** | Rewards fail for 'ISO Explorer' challenges | ✅ v5.13.0 Sync |
-| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway** | VTN cannot see market-aware grid signals | ✅ v3.8.3 Sync |
-| **L11 ML Engine** | Sentinel Audit | **L10 Token Engine** | Phase 6 AI auditing lacks ground truth | ✅ v4.3.4 Active |
+| **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal (v2.5.0)** | Missing high-fidelity metadata for L11 | ✅ Active |
+| **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine (v5.14.0)** | Rewards fail for 'ISO Explorer' challenges | ✅ Sync |
+| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway (v3.8.4)** | VTN cannot see market-aware grid signals | ✅ Sync |
+| **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.3.5)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
 
 ---
 
@@ -56,7 +56,7 @@
 - [✓] **Site Energy Snapshot**: Real-time load/capacity fetching for confidence scoring.
 - [✓] **[L1-126] Hardened Offline Mode**: Redis metadata preservation during disconnects.
 
-### Layer 2: Grid Signal (v2.5.1)
+### Layer 2: Grid Signal (v2.5.0)
 - [✓] **BESS-Aware Safety**: 10% variance threshold enforced for stationary storage.
 - [✓] **Regional Confidence**: Averaging vehicle scores for OpenADR high-fidelity fallback.
 - [✓] **Regional Context**: High-fidelity capacity breakdown (Total/EV/BESS) in OpenADR reports.
@@ -65,8 +65,7 @@
 - [✓] **Fidelity Alignment**: Updated classification logic for consistency with L1 v10.1.4.
 - [✓] **Secure Reporting**: authenticateToken and PII masking applied to `/openadr/v3/reports`.
 - [✓] **Signal Caching**: Redis-based ADVANCE_CHARGE_SIGNAL (CAISO solar ramp) cache.
-- [✓] **Security Hardening**: Integrated `helmet` middleware for standard security headers.
-- [✓] **Multi-Site Readiness**: Implemented robust site identification (`site_id`, `siteId`, `location_id`, `locationId`).
+- [✓] **Sentinel Hardening**: Explicit boolean/string support for `is_sentinel_fidelity` flags.
 
 ### Layer 3: VPP Aggregator (v3.3.1)
 - [✓] **Redis Capacity Cache**: Sub-50ms reporting for L4 bidding.
@@ -76,7 +75,7 @@
 - [✓] **Physics-Aware Reporting**: Integration of `physics_score` and `is_high_fidelity` for L11.
 - [~] **BESS Integration**: Support for stationary storage assets (75%).
 
-### Layer 4: Market Gateway (v3.8.3)
+### Layer 4: Market Gateway (v3.8.4)
 - [✓] **Bidding Auditability**: High-fidelity audit context (physics_score, confidence_score, capacity_fidelity) for all bids.
 - [✓] **Regional Grid Lock**: Improved observability and specific ISO lock logging.
 - [✓] **ERCOT & Nord Pool**: Full activation of Texas and Nordic market adapters.
@@ -85,6 +84,7 @@
 - [✓] **AI Readiness**: Training endpoints for fuel-mix, load-forecast, and net-load active.
 - [✓] **High-Fidelity Sync**: Hardened L1/L2 fallback logic for bidding accuracy.
 - [✓] **Sentinel Fidelity**: Detection and classification of >0.99 physics scores.
+- [✓] **Standardized Metrics**: Enforced string formatting (`.toFixed(4)`) for all scores.
 - [~] **BESS RL Bidding**: Research phase for reinforcement learning models (10%).
 
 ### Layer 6: Engagement Engine (v5.14.0)
@@ -107,13 +107,14 @@
 - [✓] **Multi-Site Maestro**: Achievement for high-fidelity sessions at 3+ distinct sites.
 - [✓] **AI Model Master**: Achievement for 100+ cumulative high-fidelity sessions.
 
-### Layer 7: Device Gateway (v5.7.0)
+### Layer 7: Device Gateway (v5.8.0)
 - [✓] **ISO 15118-20**: Hardened Certificate Exchange and EMAID handling (98%).
 - [✓] **OCPP 2.1 V2X**: Native bidirectional profile support.
 - [✓] **Resource Caching**: Redis-based `resource_type` (EV/BESS) lifecycle management.
 - [✓] **Horizontal Scaling**: Cross-pod command routing via Redis Pub/Sub.
 - [✓] **OCPI 2.2 Mapping**: Implemented OCPP-to-OCPI status normalization (75%).
-- [✓] **Shared Enrichment**: Centralized high-fidelity metadata scoring.
+- [✓] **Sentinel Fidelity**: Hardened detection logic for L11 parity.
+- [✓] **Security Hardening**: Integrated helmet() and enhanced certificate validation.
 
 ### Layer 10: Token Engine (v4.3.5)
 - [✓] **Dynamic Multipliers**: Surplus (1.5x) and Scarcity (2.0x) logic active.
@@ -121,10 +122,8 @@
 - [✓] **High-Fidelity Auditing**: Persistence of `physics_score` and `confidence_score` in logs.
 - [✓] **Sentinel Fidelity**: Detection and flag (is_sentinel_fidelity) for score > 0.99.
 - [✓] **Site Awareness**: persistence of site_id/location_id in token reward logs.
-- [✓] **Kafka Hardening**: Robust float parsing and boolean casting for telemetry.
-- [✓] **Security Fix**: Resolved duplicate variable declaration in consumer logic.
-- [✓] **Consumer Streamlining**: Removed redundant destructuring and standardized payload extraction.
-- [✓] **AI Export**: Deployed `/data/training/rewards` for L11 ML Engine training.
+- [✓] **Kafka Hardening**: Standardized `siteIdVal` extraction and hardened fidelity flags.
+- [✓] **L11 AI Export**: Implemented `/data/training/rewards` for ML Engine ingestion.
 
 ---
 
