@@ -36,32 +36,33 @@
 | **L5 Driver DX** | PnC Auth Status | **L7 Device Gateway** | Driver cannot use Plug & Charge sessions | ✅ 98% |
 | **L9 Commerce** | Billing Reconciliation | **L1 Physics / L4 Market** | Inaccurate split-billing or tariff logic | ✅ Active |
 | **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.1 Active |
-| **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal** | Missing high-fidelity metadata for L11 | ✅ v2.4.8 Active |
-| **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine** | Rewards fail for 'ISO Explorer' challenges | ✅ v5.12.0 Sync |
-| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway** | VTN cannot see market-aware grid signals | ✅ v3.8.2 Sync |
-| **L11 ML Engine** | Sentinel Audit | **L10 Token Engine** | Phase 6 AI auditing lacks ground truth | ✅ v4.3.3 Active |
+| **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal** | Missing high-fidelity metadata for L11 | ✅ v2.4.9 Active |
+| **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine** | Rewards fail for 'ISO Explorer' challenges | ✅ v5.13.0 Sync |
+| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway** | VTN cannot see market-aware grid signals | ✅ v3.8.3 Sync |
+| **L11 ML Engine** | Sentinel Audit | **L10 Token Engine** | Phase 6 AI auditing lacks ground truth | ✅ v4.3.4 Active |
 
 ---
 
 ## 🛠️ Active Engineering Sprints (Phase 5)
 
-### Layer 1: Physics Engine (v10.1.2)
+### Layer 1: Physics Engine (v10.1.3)
 - [✓] **Digital Twin Sync**: Fleet-filtered Redis sync for vehicle states.
 - [✓] **Contextual Safety Locks**: metadata-enriched `l1:safety:lock:context` in Redis.
 - [✓] **High-Fidelity Reconcile**: Preservation of regional metadata in audit logs.
 - [✓] **Confidence Scoring**: Integrated 0.0-1.0 confidence metrics for L11 training.
 - [✓] **[L1-120] Confidence Decay**: -0.2 penalty for syncs > 30 days old.
 - [✓] **[L1-121] Site Integration**: -0.15 penalty for sites > 90% load utilization.
+- [✓] **[L1-125] Multi-Site Load Penalties**: Granular site-aware confidence scoring using building load.
 - [✓] **Site Energy Snapshot**: Real-time load/capacity fetching for confidence scoring.
 - [✓] **[L1-126] Hardened Offline Mode**: Redis metadata preservation during disconnects.
 
-### Layer 2: Grid Signal (v2.4.8)
+### Layer 2: Grid Signal (v2.4.9)
 - [✓] **BESS-Aware Safety**: 10% variance threshold enforced for stationary storage.
 - [✓] **Regional Confidence**: Averaging vehicle scores for OpenADR high-fidelity fallback.
 - [✓] **Regional Context**: High-fidelity capacity breakdown (Total/EV/BESS) in OpenADR reports.
 - [✓] **Confidence Propagation**: Forwarding L1 confidence scores to L11 pipelines.
 - [✓] **PII Masking**: Hardened masking for `vin` and `vehicle_id` in safety contexts.
-- [✓] **Fidelity Alignment**: Updated classification logic for consistency with L1 v10.1.2.
+- [✓] **Fidelity Alignment**: Updated classification logic for consistency with L1 v10.1.3.
 - [✓] **Secure Reporting**: authenticateToken and PII masking applied to `/openadr/v3/reports`.
 - [✓] **Signal Caching**: Redis-based ADVANCE_CHARGE_SIGNAL (CAISO solar ramp) cache.
 
@@ -73,7 +74,7 @@
 - [✓] **Physics-Aware Reporting**: Integration of `physics_score` and `is_high_fidelity` for L11.
 - [~] **BESS Integration**: Support for stationary storage assets (75%).
 
-### Layer 4: Market Gateway (v3.8.2)
+### Layer 4: Market Gateway (v3.8.3)
 - [✓] **Bidding Auditability**: High-fidelity audit context (physics_score, confidence_score, capacity_fidelity) for all bids.
 - [✓] **Regional Grid Lock**: Improved observability and specific ISO lock logging.
 - [✓] **ERCOT & Nord Pool**: Full activation of Texas and Nordic market adapters.
@@ -81,9 +82,10 @@
 - [✓] **Solar Ramp Detector**: CAISO Solar Ramp Detector (4PM-9PM) for fleet broadcasting.
 - [✓] **AI Readiness**: Training endpoints for fuel-mix, load-forecast, and net-load active.
 - [✓] **High-Fidelity Sync**: Hardened L1/L2 fallback logic for bidding accuracy.
+- [✓] **Sentinel Fidelity**: Detection and classification of >0.99 physics scores.
 - [~] **BESS RL Bidding**: Research phase for reinforcement learning models (10%).
 
-### Layer 6: Engagement Engine (v5.12.0)
+### Layer 6: Engagement Engine (v5.13.0)
 - [✓] **Solar Surge**: Achievement for CAISO solar ramp response tracking.
 - [✓] **Sustainability Refinement**: Optimized recursive CTE for consecutive charging streaks.
 - [✓] **ISO Explorer**: Multi-regional achievement logic using bulk CTE/UNION.
@@ -99,6 +101,7 @@
 - [✓] **Site Harmony**: Integrated site-level physics score into engagement mechanics.
 - [✓] **Physics Sentinel**: Achievement for physics_score > 0.99 records.
 - [✓] **L11 Data Guardian**: Achievement for consistent high-fidelity data contribution.
+- [✓] **Sentinel Elite**: Achievement for 50 total sentinel-fidelity sessions.
 
 ### Layer 7: Device Gateway (v5.8.0)
 - [✓] **ISO 15118-20**: Hardened Certificate Exchange and EMAID handling (98%).
@@ -109,13 +112,14 @@
 - [✓] **Sentinel Fidelity**: Hardened detection logic for L11 parity.
 - [✓] **Security Hardening**: Integrated helmet() and enhanced certificate validation.
 
-### Layer 10: Token Engine (v4.3.3)
+### Layer 10: Token Engine (v4.3.4)
 - [✓] **Dynamic Multipliers**: Surplus (1.5x) and Scarcity (2.0x) logic active.
 - [✓] **Reward Idempotency**: PostgreSQL unique constraints + Redis checkIdempotency.
 - [✓] **High-Fidelity Auditing**: Persistence of `physics_score` and `confidence_score` in logs.
 - [✓] **Sentinel Fidelity**: Detection and flag (is_sentinel_fidelity) for score > 0.99.
 - [✓] **Site Awareness**: persistence of site_id/location_id in token reward logs.
 - [✓] **Kafka Hardening**: Robust float parsing and boolean casting for telemetry.
+- [✓] **Security Fix**: Resolved duplicate variable declaration in consumer logic.
 
 ---
 
