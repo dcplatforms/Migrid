@@ -44,3 +44,8 @@
 **Vulnerability:** Incorrect evaluation of security-critical boolean flags (e.g., `is_sentinel_fidelity`) received from Kafka.
 **Learning:** Using double negation (`!!`) on fields from parsed JSON payloads is dangerous if the field might be a string. For example, `!!"false"` evaluates to `true`, which could bypass fidelity checks or trigger unauthorized logic.
 **Prevention:** Always use explicit boolean and string comparisons (e.g., `val === true || val === 'true'`) when extracting status flags from external event streams to ensure intent is preserved.
+
+## 2026-05-15 - [Unverified Global Data Enumeration in L3]
+**Vulnerability:** The `/data/training/capacity` endpoint in the VPP Aggregator service allowed any authenticated user (including drivers) to export global historical capacity data.
+**Learning:** While the endpoint was protected by `authenticateToken`, it lacked granular authorization checks. Drivers, whose tokens contain a `fleet_id`, could access aggregate data for the entire platform, which should be restricted to system-level or administrative roles.
+**Prevention:** Endpoints that export global or cross-tenant data must explicitly verify that the requesting user has the appropriate administrative privileges or a system-level token (e.g., by checking for the absence of tenant-restricting fields like `fleet_id`).
