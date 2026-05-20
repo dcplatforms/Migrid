@@ -380,7 +380,7 @@ describe('L1 Physics Engine Alert Handling', () => {
 
     const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
     expect(alertValue.physics_score).toBe("0.9000");
-    expect(alertValue.confidence_score).toBe(1.0);
+    expect(alertValue.confidence_score).toBe("1.0000");
     expect(alertValue.is_high_fidelity).toBe(true); // Due to confidence > 0.95
   });
 
@@ -456,7 +456,7 @@ describe('L1 Physics Engine Alert Handling', () => {
     await physicsEngine.handlePhysicsAlert(msg);
 
     const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
-    expect(alertValue.confidence_score).toBe(0.9);
+    expect(alertValue.confidence_score).toBe("0.9000");
   });
 
   test('[L1-120] should apply confidence decay for 30+ days inactivity', async () => {
@@ -479,7 +479,7 @@ describe('L1 Physics Engine Alert Handling', () => {
     await physicsEngine.handlePhysicsAlert(msg);
 
     const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
-    expect(alertValue.confidence_score).toBe(0.3);
+    expect(alertValue.confidence_score).toBe("0.3000");
   });
 
   test('[L1-121] should apply penalty for high site load (>90%)', async () => {
@@ -501,7 +501,7 @@ describe('L1 Physics Engine Alert Handling', () => {
     await physicsEngine.handlePhysicsAlert(msg);
 
     const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
-    expect(alertValue.confidence_score).toBe(0.45);
+    expect(alertValue.confidence_score).toBe("0.4500");
   });
 
   test('should increment sentinel streak for score > 0.99', async () => {
@@ -549,6 +549,32 @@ describe('L1 Physics Engine Alert Handling', () => {
 
     expect(global.mockRedisTtl).toHaveBeenCalledWith(streakKey);
     expect(global.mockRedisSet).toHaveBeenCalledWith(streakKey, '1');
+  });
+
+  test('[L1-10.1.3] should ensure physics_score and confidence_score are string-formatted with four decimal places', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'SESSION_COMPLETED',
+        vehicle_id: 'vehicle-string-test',
+        efficiency_pct: 95.0, // Physics Score 0.9500
+        timestamp: new Date().toISOString()
+      })
+    };
+
+    // Mock streak = 0. Base = 0.5. Frequency bonus = 0.1. Confidence = 0.6000
+    global.mockRedisGet.mockResolvedValueOnce('0'); // Streak
+    global.mockRedisGet.mockResolvedValueOnce('0'); // building_load_kw
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+
+    // Explicitly check for string type and 4 decimal places
+    expect(typeof alertValue.physics_score).toBe('string');
+    expect(alertValue.physics_score).toBe("0.9500");
+
+    expect(typeof alertValue.confidence_score).toBe('string');
+    expect(alertValue.confidence_score).toBe("0.6000");
   });
 });
 
@@ -667,7 +693,7 @@ describe('L1 Physics Engine Digital Twin Sync', () => {
     expect(global.mockRedisSetEx).toHaveBeenCalledWith(
       'l1:CAISO:vehicle:v-fallback',
       60,
-      expect.stringContaining('"confidence_score":0.9')
+      expect.stringContaining('"confidence_score":"0.9000"')
     );
   });
 
@@ -693,7 +719,7 @@ describe('L1 Physics Engine Digital Twin Sync', () => {
     expect(global.mockRedisSetEx).toHaveBeenCalledWith(
       'l1:CAISO:vehicle:v-old',
       60,
-      expect.stringContaining('"confidence_score":0.3')
+      expect.stringContaining('"confidence_score":"0.3000"')
     );
   });
 
@@ -716,7 +742,7 @@ describe('L1 Physics Engine Digital Twin Sync', () => {
     expect(global.mockRedisSetEx).toHaveBeenCalledWith(
       'l1:CAISO:vehicle:v-site',
       60,
-      expect.stringContaining('"confidence_score":0.35')
+      expect.stringContaining('"confidence_score":"0.3500"')
     );
   });
 
@@ -748,14 +774,14 @@ describe('L1 Physics Engine Digital Twin Sync', () => {
     expect(global.mockRedisSetEx).toHaveBeenCalledWith(
       'l1:CAISO:vehicle:v-site-1',
       60,
-      expect.stringContaining('"confidence_score":0.5')
+      expect.stringContaining('"confidence_score":"0.5000"')
     );
 
     // v-site-2: Load 95%, penalty -0.15. Confidence = 0.5 - 0.15 = 0.35
     expect(global.mockRedisSetEx).toHaveBeenCalledWith(
       'l1:CAISO:vehicle:v-site-2',
       60,
-      expect.stringContaining('"confidence_score":0.35')
+      expect.stringContaining('"confidence_score":"0.3500"')
     );
   });
 });
@@ -859,6 +885,7 @@ describe('L1 Physics Engine Reconciliation', () => {
     expect(alertValue.v2g_active).toBe(true);
     expect(alertValue.reconciled).toBe(true);
     expect(alertValue.physics_score).toBe("0.0000");
+    expect(alertValue.confidence_score).toBe("0.5000"); // default to 0.5 when missing in payload
     expect(alertValue.is_high_fidelity).toBe(false);
     expect(alertValue.is_sentinel_fidelity).toBe(false);
 
@@ -888,7 +915,7 @@ describe('L1 Physics Engine Reconciliation', () => {
     // Verify Kafka Alert dispatch uses the pre-calculated high-fidelity status
     const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
     expect(alertValue.physics_score).toBe("0.9100");
-    expect(alertValue.confidence_score).toBe(0.98);
+    expect(alertValue.confidence_score).toBe("0.9800");
     expect(alertValue.is_high_fidelity).toBe(true);
 
     // Verify DB Insertion uses the pre-calculated scores
