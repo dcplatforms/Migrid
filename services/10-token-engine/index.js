@@ -87,6 +87,21 @@ async function checkIdempotency(driverId, triggeringEventId, ruleId) {
 
 // --- Reward Multiplier Logic ---
 
+async function getSiteMultiplier(siteId) {
+  if (!siteId) return { multiplier: new Decimal(1.0), reason: 'No Site ID' };
+  try {
+    const siteMultiplierStr = await redisClient.get(`site:multiplier:${siteId}`);
+    if (siteMultiplierStr) {
+      const multiplier = new Decimal(siteMultiplierStr);
+      console.log(`[L10 Strategy] Site-specific multiplier found for ${siteId}: ${multiplier.toNumber()}x`);
+      return { multiplier, reason: `Site Optimization Bonus (${multiplier.toNumber()}x)` };
+    }
+  } catch (err) {
+    console.error(`[L10] Error fetching site multiplier from Redis for ${siteId}:`, err.message);
+  }
+  return { multiplier: new Decimal(1.0), reason: 'Standard Site Rate' };
+}
+
 async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
   const iso = isoRaw.toUpperCase().replace(/-/g, '');
   let latestPrice = new Decimal(50.0);
@@ -125,10 +140,42 @@ async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '4.3.4',
+    version: '4.3.5',
     status: 'healthy',
     layer: 'L10'
   });
+});
+
+/**
+ * [Phase 6 AI Readiness]
+ * GET /data/training/rewards
+ * Exposes high-fidelity reward data for L11 ML Engine training.
+ */
+app.get('/data/training/rewards', async (req, res) => {
+  const { site_id, limit = 100 } = req.query;
+  try {
+    let query = 'SELECT * FROM token_reward_log WHERE is_sentinel_fidelity = TRUE';
+    const params = [];
+
+    if (site_id) {
+      query += ' AND site_id = $1';
+      params.push(site_id);
+    }
+
+    query += ` ORDER BY created_at DESC LIMIT $${params.length + 1}`;
+    params.push(parseInt(limit));
+
+    const result = await pgClient.query(query, params);
+    res.json({
+      count: result.rows.length,
+      data: result.rows,
+      source: 'L10_TOKEN_ENGINE_V4.3.5',
+      fidelity_tier: 'SENTINEL'
+    });
+  } catch (error) {
+    console.error('[L10 AI Export Error]', error);
+    res.status(500).json({ error: 'Failed to retrieve training data' });
+  }
 });
 
 // --- Main Application Logic ---
@@ -191,7 +238,7 @@ async function start() {
 
         const vppAligned = !!(is_vpp_event || isVppEvent);
 
-        // Robust Payload Validation
+        // Robust Payload Validation and Standardization (Snake_case & CamelCase support)
         let physicsScoreVal = physics_score !== undefined ? parseFloat(physics_score) : (physicsScore !== undefined ? parseFloat(physicsScore) : null);
         if (physicsScoreVal !== null && isNaN(physicsScoreVal)) physicsScoreVal = null;
 
@@ -270,11 +317,16 @@ async function start() {
 
           // 2. Calculate Reward with Dynamic Boosting (Energy-based)
           const marketMultiplier = await getDynamicMultiplier(iso, action_type, vppAligned);
-          multiplierReason = marketMultiplier.reason;
-          const baseReward = new Decimal(source_value || 0).times(rule.reward_multiplier);
-          pointsAwarded = baseReward.times(marketMultiplier.multiplier).toDecimalPlaces(8);
+          const siteMultiplier = await getSiteMultiplier(siteIdVal);
 
-          console.log(`[L10] Reward calculated: ${pointsAwarded.toNumber()} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Market Mult: ${marketMultiplier.multiplier.toNumber()})`);
+          // Compound Multipliers
+          const totalMultiplier = marketMultiplier.multiplier.times(siteMultiplier.multiplier);
+          multiplierReason = marketMultiplier.multiplier.eq(1.0) ? siteMultiplier.reason : `${marketMultiplier.reason} + ${siteMultiplier.reason}`;
+
+          const baseReward = new Decimal(source_value || 0).times(rule.reward_multiplier);
+          pointsAwarded = baseReward.times(totalMultiplier).toDecimalPlaces(8);
+
+          console.log(`[L10] Reward calculated: ${pointsAwarded.toNumber()} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Total Mult: ${totalMultiplier.toNumber()})`);
         }
 
         if (pointsAwarded.isZero()) {
@@ -338,4 +390,4 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
-module.exports = { app, getDynamicMultiplier, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY, redisClient };
+module.exports = { app, getDynamicMultiplier, getSiteMultiplier, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY, redisClient };
