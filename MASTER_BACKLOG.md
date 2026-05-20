@@ -1,6 +1,6 @@
 # MiGrid Master Backlog & Strategic Dependency Matrix
 
-**Version:** 10.1.3
+**Version:** 10.1.4
 **Last Updated:** April 2026
 **Status:** Phase 5 "Enterprise Scale" (92% Complete)
 
@@ -45,7 +45,7 @@
 
 ## 🛠️ Active Engineering Sprints (Phase 5)
 
-### Layer 1: Physics Engine (v10.1.3)
+### Layer 1: Physics Engine (v10.1.4)
 - [✓] **Digital Twin Sync**: Fleet-filtered Redis sync for vehicle states.
 - [✓] **Contextual Safety Locks**: metadata-enriched `l1:safety:lock:context` in Redis.
 - [✓] **High-Fidelity Reconcile**: Preservation of regional metadata in audit logs.
@@ -62,7 +62,7 @@
 - [✓] **Regional Context**: High-fidelity capacity breakdown (Total/EV/BESS) in OpenADR reports.
 - [✓] **Confidence Propagation**: Forwarding L1 confidence scores to L11 pipelines.
 - [✓] **PII Masking**: Hardened masking for `vin` and `vehicle_id` in safety contexts.
-- [✓] **Fidelity Alignment**: Updated classification logic for consistency with L1 v10.1.3.
+- [✓] **Fidelity Alignment**: Updated classification logic for consistency with L1 v10.1.4.
 - [✓] **Secure Reporting**: authenticateToken and PII masking applied to `/openadr/v3/reports`.
 - [✓] **Signal Caching**: Redis-based ADVANCE_CHARGE_SIGNAL (CAISO solar ramp) cache.
 - [✓] **Sentinel Hardening**: Explicit boolean/string support for `is_sentinel_fidelity` flags.
