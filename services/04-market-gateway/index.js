@@ -4,6 +4,7 @@
  */
 
 const express = require('express');
+const helmet = require('helmet');
 const { Pool } = require('pg');
 const { Kafka } = require('kafkajs');
 const redis = require('redis');
@@ -16,6 +17,8 @@ const GridStatusSyncWorker = require('./GridStatusSyncWorker');
 
 const app = express();
 const port = process.env.PORT || 3004;
+
+app.use(helmet());
 
 // PostgreSQL connection
 const pool = new Pool({
@@ -137,8 +140,10 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
           if (details.confidence_score !== undefined) {
             confidenceScore = parseFloat(details.confidence_score);
           }
-          // [L4 v3.8.4] Hardened Sentinel Fidelity Detection
-          isSentinelFidelity = details.is_sentinel_fidelity === true || details.is_sentinel_fidelity === 'true';
+          // [L4 v3.8.5] Hardened Sentinel Fidelity Detection
+          isSentinelFidelity = details.is_sentinel_fidelity === true ||
+                               details.is_sentinel_fidelity === 'true' ||
+                               details.is_sentinel_fidelity === 1;
         }
       } else {
         // [L4 v3.8.1] Fallback: Query L2 regional confidence averages
@@ -154,12 +159,13 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
     }
 
     const isHighFidelity = (physicsScore > 0.95 || confidenceScore > 0.95);
-    // [L4 v3.8.4] Standardized Sentinel logic with fallback
-    isSentinelFidelity = isSentinelFidelity || physicsScore > 0.99;
+    // [L4 v3.8.5] Standardized Sentinel logic with fallback
+    isSentinelFidelity = !!isSentinelFidelity || physicsScore > 0.99;
 
     const payload = {
       iso: iso.toUpperCase().replace(/-/g, ''),
       location: location || 'SYSTEM_WIDE',
+      site_id: location || 'SYSTEM_WIDE', // L10 v4.3.5 site-aware reward parity
       price_per_mwh: price.toNumber(),
       profitability_index: profitabilityIndex.toDecimalPlaces(2).toNumber(),
       degradation_cost_mwh: degradationCostMwh.toNumber(),
@@ -192,27 +198,40 @@ async function startGridSignalConsumer() {
 
   await consumer.run({
     eachMessage: async ({ topic, partition, message }) => {
-      const signal = JSON.parse(message.value.toString());
-      console.log(`[Market Gateway] Received grid signal: ${signal.event_id} (Type: ${signal.type}, Priority: ${signal.priority})`);
+      try {
+        const signal = JSON.parse(message.value.toString());
 
-      if (signal.priority === 'HIGH' || signal.priority === 'CRITICAL') {
-        console.warn(`⚠️ [Market Gateway] High priority grid signal received. Market bidding should be reviewed for site ${signal.site_id}.`);
+        // [L4 v3.8.5] Robust Payload Extraction & Validation (Parity with L10)
+        const siteIdVal = signal.site_id || signal.siteId || signal.location_id || signal.locationId || 'SYSTEM_WIDE';
+        const physicsScore = signal.physics_score !== undefined ? parseFloat(signal.physics_score).toFixed(4) : "1.0000";
+        const confidenceScore = signal.confidence_score !== undefined ? parseFloat(signal.confidence_score).toFixed(4) : "1.0000";
+        const isSentinelFidelity = signal.is_sentinel_fidelity === true ||
+                                    signal.is_sentinel_fidelity === 'true' ||
+                                    signal.is_sentinel_fidelity === 1;
 
-        // Phase 5 Forward Engineering: Halt market participation during high-priority grid events
-        // Set a 15-minute TTL lock (900 seconds)
-        const lockDuration = 900;
-        await redisClient.setEx('l4:grid:lock', lockDuration, 'true');
+        console.log(`[Market Gateway] Received grid signal: ${signal.event_id} (Site: ${siteIdVal}, Physics: ${physicsScore}, Sentinel: ${isSentinelFidelity})`);
 
-        // Regional locking: if signal targets a specific ISO/Region
-        const targetRegion = signal.targets?.find(t => t.type === 'region')?.value;
-        if (targetRegion) {
-          const iso = targetRegion.toUpperCase().replace(/-/g, '');
-          const regionLockKey = `l4:grid:lock:${iso}`;
-          await redisClient.setEx(regionLockKey, lockDuration, 'true');
-          console.warn(`[Market Gateway] L4 Regional Grid Lock ACTIVATED for ${iso} for ${lockDuration}s due to signal ${signal.event_id}`);
+        if (signal.priority === 'HIGH' || signal.priority === 'CRITICAL') {
+          console.warn(`⚠️ [Market Gateway] High priority grid signal received. Market bidding should be reviewed for site ${siteIdVal}.`);
+
+          // Phase 5 Forward Engineering: Halt market participation during high-priority grid events
+          // Set a 15-minute TTL lock (900 seconds)
+          const lockDuration = 900;
+          await redisClient.setEx('l4:grid:lock', lockDuration, 'true');
+
+          // Regional locking: if signal targets a specific ISO/Region
+          const targetRegion = signal.targets?.find(t => t.type === 'region')?.value;
+          if (targetRegion) {
+            const iso = targetRegion.toUpperCase().replace(/-/g, '');
+            const regionLockKey = `l4:grid:lock:${iso}`;
+            await redisClient.setEx(regionLockKey, lockDuration, 'true');
+            console.warn(`[Market Gateway] L4 Regional Grid Lock ACTIVATED for ${iso} for ${lockDuration}s due to signal ${signal.event_id}`);
+          }
+
+          console.log(`[Market Gateway] L4 Global Grid Lock activated for 15 minutes due to signal ${signal.event_id}`);
         }
-
-        console.log(`[Market Gateway] L4 Global Grid Lock activated for 15 minutes due to signal ${signal.event_id}`);
+      } catch (err) {
+        console.error(`[Market Gateway] Failed to process grid signal: ${err.message}`);
       }
     }
   });
@@ -413,7 +432,8 @@ app.post('/bids/submit', authenticateToken, async (req, res) => {
     const quantity_mwh = new Decimal(quantity_kw).dividedBy(1000);
     const total_value = quantity_mwh.times(price_per_mwh);
 
-    // Insert bid record with auditing columns (v3.8.0)
+    // Insert bid record with auditing columns (v3.8.5)
+    // Enforce string formatting for scores as per L1 v10.1.4 standard
     const result = await pool.query(`
       INSERT INTO market_bids (
         iso, market_type, quantity_kw, price_per_mwh,
@@ -429,8 +449,8 @@ app.post('/bids/submit', authenticateToken, async (req, res) => {
       price_per_mwh,
       total_value.toFixed(2),
       delivery_hour,
-      physics_score || 1.0,
-      confidence_score || 1.0,
+      (physics_score ? parseFloat(physics_score).toFixed(4) : "1.0000"),
+      (confidence_score ? parseFloat(confidence_score).toFixed(4) : "1.0000"),
       capacity_fidelity || 'STANDARD',
       JSON.stringify(audit_context || {})
     ]);
