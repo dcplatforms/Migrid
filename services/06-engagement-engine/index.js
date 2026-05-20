@@ -123,7 +123,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.13.0', // Weekly Mission: Sentinel Elite Achievement & Payload Hardening
+    version: '5.14.0', // Weekly Mission: Phase 6 AI Readiness & Multi-Site Achievements
     status: 'healthy',
     layer: 'L6'
   });
@@ -394,6 +394,8 @@ async function processChargingEvent(event) {
         await checkL11DataGuardianAchievement(driverId);
         await checkPhysicsSentinelAchievement(driverId);
       await checkSentinelEliteAchievement(driverId);
+      await checkAIModelMasterAchievement(driverId);
+      await checkMultiSiteMaestroAchievement(driverId);
         await updateChallengeProgress(driverId, 'low_variance_charging');
 
         // [L6-118] ML Data Pioneer: Specifically for very high fidelity data
@@ -582,6 +584,30 @@ async function processChargingEvent(event) {
         await awardAchievement(driverId, achievement.rows[0].id);
       }
     }
+
+    // [L6-v5.14.0] Standardized Notification for V2G
+    const v2gNotification = {
+      driver_id: driverId,
+      type: 'points_earned',
+      category: 'reward',
+      sub_category: 'v2g',
+      title: 'Grid Support Reward! 🔋',
+      body: `You earned ${points} points for supporting the grid via V2G.`,
+      priority: 'normal',
+      data: {
+        session_id: sessionId,
+        points,
+        fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD',
+        site_id: siteId
+      }
+    };
+
+    await producer.send({
+      topic: 'engagement_notifications',
+      messages: [{ key: driverId, value: JSON.stringify(v2gNotification) }]
+    });
+
+    io.to(`driver:${driverId}`).emit('notification', v2gNotification);
   }
 
   // Periodic check for Plug & Charge Ready status
@@ -940,6 +966,68 @@ async function checkFirstSessionAchievement(driver_id) {
     if (achievement.rows.length > 0) {
       await awardAchievement(driver_id, achievement.rows[0].id);
     }
+  }
+}
+
+async function checkMultiSiteMaestroAchievement(driver_id) {
+  // Requirement: High-fidelity sessions at 3+ distinct site IDs
+  // Supports Phase 6 AI Readiness by ensuring diversity of training data across sites.
+  // Standardized to check multi-key site identification (site_id, siteId, location_id, locationId).
+  try {
+    const result = await pool.query(`
+      SELECT COUNT(DISTINCT (
+        COALESCE(
+          metadata->>'site_id',
+          metadata->>'siteId',
+          metadata->>'location_id',
+          metadata->>'locationId'
+        )
+      )) as site_count
+      FROM driver_actions
+      WHERE driver_id = $1 AND action_type = 'session_completed'
+        AND (metadata->>'isHighFidelity')::boolean = true
+        AND (
+          (metadata->>'site_id') IS NOT NULL OR
+          (metadata->>'siteId') IS NOT NULL OR
+          (metadata->>'location_id') IS NOT NULL OR
+          (metadata->>'locationId') IS NOT NULL
+        )
+    `, [driver_id]);
+
+    const count = parseInt(result.rows[0]?.site_count || '0');
+
+    if (count >= 3) {
+      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Multi-Site Maestro'");
+      if (achievement.rows.length > 0) {
+        await awardAchievement(driver_id, achievement.rows[0].id);
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking Multi-Site Maestro achievement:', error);
+  }
+}
+
+async function checkAIModelMasterAchievement(driver_id) {
+  // Requirement: 100 cumulative high-fidelity sessions
+  // Recognizes top-tier data contributors for L11 ML Engine training.
+  try {
+    const result = await pool.query(`
+      SELECT COUNT(*) as total_hf
+      FROM driver_actions
+      WHERE driver_id = $1 AND action_type = 'session_completed'
+        AND (metadata->>'isHighFidelity')::boolean = true
+    `, [driver_id]);
+
+    const count = parseInt(result.rows[0]?.total_hf || '0');
+
+    if (count >= 100) {
+      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'AI Model Master'");
+      if (achievement.rows.length > 0) {
+        await awardAchievement(driver_id, achievement.rows[0].id);
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking AI Model Master achievement:', error);
   }
 }
 
