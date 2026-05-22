@@ -2,10 +2,14 @@ const { Client } = require('pg');
 const { Kafka } = require('kafkajs');
 const axios = require('axios');
 const express = require('express');
+const helmet = require('helmet');
 const Decimal = require('decimal.js');
 const redis = require('redis');
 
 const app = express();
+app.use(helmet());
+app.use(express.json());
+
 const port = process.env.PORT || 3010;
 
 const pgClient = new Client({ connectionString: process.env.DATABASE_URL });
@@ -140,7 +144,7 @@ async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '4.3.5',
+    version: '4.3.6',
     status: 'healthy',
     layer: 'L10'
   });
@@ -169,7 +173,7 @@ app.get('/data/training/rewards', async (req, res) => {
     res.json({
       count: result.rows.length,
       data: result.rows,
-      source: 'L10_TOKEN_ENGINE_V4.3.5',
+      source: 'L10_TOKEN_ENGINE_V4.3.6',
       fidelity_tier: 'SENTINEL'
     });
   } catch (error) {
@@ -179,6 +183,41 @@ app.get('/data/training/rewards', async (req, res) => {
 });
 
 // --- Main Application Logic ---
+
+/**
+ * [L10-P3] Batch Minting Worker
+ * Periodically processes queued rewards to simulate gas-optimized batch transactions.
+ */
+async function processBatchMint() {
+  try {
+    const queuedRewards = await pgClient.query(
+      "SELECT log.*, dw.open_wallet_address FROM token_reward_log log JOIN driver_wallets dw ON log.driver_id = dw.driver_id WHERE log.status = 'queued' LIMIT 50;"
+    );
+
+    if (queuedRewards.rows.length === 0) return;
+
+    console.log(`[L10 Batch Worker] Processing ${queuedRewards.rows.length} queued rewards...`);
+
+    for (const reward of queuedRewards.rows) {
+      try {
+        // 6. Execute Blockchain/Wallet Transaction (Asynchronous Batch)
+        const openWalletResponse = await axios.post(`${process.env.OPEN_WALLET_API_URL}/transactions`, {
+          walletAddress: reward.open_wallet_address,
+          amount: parseFloat(reward.points_awarded),
+          currency: 'MiGridPoints',
+          referenceId: reward.log_id
+        });
+        await updateRewardTransactionStatus(reward.log_id, 'complete', openWalletResponse.data.transactionId);
+        console.log(`✅ [L10 Batch] Processed reward ${reward.log_id} for driver ${reward.driver_id}`);
+      } catch (error) {
+        console.error(`❌ [L10 Batch] Failed to process reward ${reward.log_id}:`, error.message);
+        await updateRewardTransactionStatus(reward.log_id, 'failed');
+      }
+    }
+  } catch (error) {
+    console.error('[L10 Batch Worker] Critical Error:', error.message);
+  }
+}
 
 async function start() {
   try {
@@ -195,6 +234,10 @@ async function start() {
       app.listen(port, () => {
         console.log(`✅ [L10 Token Engine] Health check server running on port ${port}`);
       });
+
+      // Start the batch worker every 30 seconds
+      setInterval(processBatchMint, 30000);
+      console.log('🚀 [L10 Token Engine] Batch Minting Worker started (30s interval).');
     }
 
     await consumer.run({
@@ -334,14 +377,14 @@ async function start() {
           return;
         }
 
-        // 4. Log the Reward (pending)
+        // 4. Log the Reward (queued for batch processing)
         const rewardLog = await logRewardTransaction(
           driver_id,
           rule_id,
           event_id,
           source_value || 0,
           pointsAwarded.toNumber(),
-          'pending',
+          'queued',
           iso,
           physicsScorePersist,
           isHighFidelityPersist,
@@ -352,20 +395,8 @@ async function start() {
           siteIdVal
         );
 
-        // 6. Execute Blockchain/Wallet Transaction
-        try {
-          const openWalletResponse = await axios.post(`${process.env.OPEN_WALLET_API_URL}/transactions`, {
-            walletAddress: driverWallet.open_wallet_address,
-            amount: pointsAwarded.toNumber(),
-            currency: 'MiGridPoints',
-            referenceId: rewardLog.log_id
-          });
-          await updateRewardTransactionStatus(rewardLog.log_id, 'complete', openWalletResponse.data.transactionId);
-          console.log(`✅ [L10] Reward minted: ${pointsAwarded.toNumber()} points (${multiplierReason})`);
-        } catch (error) {
-          console.error(`❌ [L10] Reward failed for log ${rewardLog.log_id}:`, error.message);
-          await updateRewardTransactionStatus(rewardLog.log_id, 'failed');
-        }
+        // 5. Audit Trace
+        console.log(`[L10] Reward queued: ${pointsAwarded.toNumber()} points (Log ID: ${rewardLog.log_id})`);
       } catch (error) {
         console.error(`[L10] Error processing Kafka message on topic ${topic}:`, error.message);
       }

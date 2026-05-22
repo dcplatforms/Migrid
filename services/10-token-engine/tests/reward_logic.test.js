@@ -14,7 +14,7 @@ jest.mock('redis', () => ({
   }))
 }));
 
-describe('L10 Token Engine - Reward Logic v4.3.5', () => {
+describe('L10 Token Engine - Reward Logic v4.3.6', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
