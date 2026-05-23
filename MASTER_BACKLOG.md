@@ -37,7 +37,7 @@
 | **L9 Commerce** | Billing Reconciliation | **L1 Physics / L4 Market** | Inaccurate split-billing or tariff logic | ✅ Active |
 | **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.1 Active |
 | **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal (v2.5.0)** | Missing high-fidelity metadata for L11 | ✅ Active |
-| **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine (v5.14.0)** | Rewards fail for 'ISO Explorer' challenges | ✅ Sync |
+| **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine (v5.15.0)** | Rewards fail for 'ISO Explorer' challenges | ✅ Sync |
 | **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway (v3.8.4)** | VTN cannot see market-aware grid signals | ✅ Sync |
 | **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.3.5)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
 
@@ -87,8 +87,10 @@
 - [✓] **Standardized Metrics**: Enforced string formatting (`.toFixed(4)`) for all scores.
 - [~] **BESS RL Bidding**: Research phase for reinforcement learning models (10%).
 
-### Layer 6: Engagement Engine (v5.14.0)
+### Layer 6: Engagement Engine (v5.15.0)
 - [✓] **Solar Surge**: Achievement for CAISO solar ramp response tracking.
+- [✓] **Solar Flare**: Achievement for 25 cumulative solar ramp responses (Phase 6 Alignment).
+- [✓] **Robust Site ID**: Hardened handleGridSignal with multi-key site identification.
 - [✓] **Sustainability Refinement**: Optimized recursive CTE for consecutive charging streaks.
 - [✓] **ISO Explorer**: Multi-regional achievement logic using bulk CTE/UNION.
 - [✓] **Energy Architect**: Achievement for AI Readiness and historical data contribution.
