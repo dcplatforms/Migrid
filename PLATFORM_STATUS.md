@@ -286,7 +286,7 @@ Strategic alignment and high-fidelity data integrity updates:
 - [✓] **L6 Engagement Engine (v5.11.0)**: Implemented **Solar Surge** achievement and CAISO solar ramp response tracking (4PM-9PM).
 - [✓] **L10 Token Engine (v4.3.2)**: Resolved critical reference error in reward logging and hardened audit trail idempotency.
 - [✓] **L2 Grid Signal (v2.4.7)**: Hardened PII masking for OpenADR reports and optimized regional confidence fallback logic.
-- [✓] **L1 Physics Engine (v10.1.3)**: Finalized **Sentinel-Ready** hardening with standardized string-formatted scoring for L11 ML readiness.
+- [✓] **L1 Physics Engine (v10.1.4)**: Achieved full telemetry parity for Phase 6; enforced strict string-formatting (`.toFixed(4)`) for all physics and confidence scores to ensure deterministic audit trails for L11 ML training.
 - [✓] **L7 Device Gateway (v5.6.0)**: Advanced **ISO 15118** certificate management (95%) and hardened **OCPI 2.2** status mapping (70%).
 - [✓] **L3 VPP Aggregator (v3.3.1)**: Hardened **High-Fidelity Capacity Breakdown** for sub-50ms Redis accuracy and FERC 2222 compliance.
 
@@ -808,7 +808,7 @@ done
 
 | Layer | Service | Version | Status |
 | :--- | :--- | :--- | :--- |
-| **L1** | Physics Engine | `10.1.3` | ✅ Operational |
+| **L1** | Physics Engine | `10.1.4` | ✅ Operational |
 | **L2** | Grid Signal | `2.4.8` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.1` | ✅ Operational |
 | **L4** | Market Gateway | `3.8.5` | ✅ Operational |
