@@ -29,7 +29,7 @@ class BiddingOptimizer {
    * Fetches real-time aggregated capacity from Redis.
    * Supports regional aggregation and high-fidelity breakdowns (Phase 5/6 Forward Engineering).
    * @param {string} iso - Optional ISO for regional capacity lookup
-   * @returns {Promise<Object>} { capacity: Decimal, fidelity: string, breakdown: { ev: number, bess: number } }
+   * @returns {Promise<Object>} { capacity: Decimal, fidelity: string, breakdown: { ev: number, bess: number }, physics_score: string, confidence_score: string }
    */
   async getAggregatedCapacity(iso = null) {
     await this.connect();
@@ -55,13 +55,22 @@ class BiddingOptimizer {
           if (data && typeof data === 'object') {
             const fidelity = data.is_high_fidelity ? 'HIGH_FIDELITY' : 'STANDARD';
             console.log(`[BiddingOptimizer] Using HIGH-FIDELITY regional capacity for ${isoKey}: ${data.total} kWh (EV: ${data.ev}, BESS: ${data.bess})`);
+
+            let pScore = data.physics_score !== undefined ? parseFloat(data.physics_score) : 1.0;
+            if (isNaN(pScore)) pScore = 1.0;
+
+            let cScore = data.confidence_score !== undefined ? parseFloat(data.confidence_score) : 1.0;
+            if (isNaN(cScore)) cScore = 1.0;
+
             return {
               capacity: new Decimal(data.total || '0'),
               fidelity: fidelity,
               breakdown: {
                 ev: data.ev || 0,
                 bess: data.bess || 0
-              }
+              },
+              physics_score: pScore.toFixed(4),
+              confidence_score: cScore.toFixed(4)
             };
           }
         }
@@ -94,7 +103,9 @@ class BiddingOptimizer {
     return {
       capacity: new Decimal(capacity || '0'),
       fidelity: 'STANDARD',
-      breakdown: { ev: parseFloat(capacity || '0'), bess: 0 }
+      breakdown: { ev: parseFloat(capacity || '0'), bess: 0 },
+      physics_score: "1.0000",
+      confidence_score: "1.0000"
     };
   }
 
@@ -201,8 +212,20 @@ class BiddingOptimizer {
     }
 
     // 4. Fetch Capacity Data
-    const { capacity: pVppKw, fidelity: capacityFidelityFromRedis, breakdown } = await this.getAggregatedCapacity(iso);
+    const {
+      capacity: pVppKw,
+      fidelity: capacityFidelityFromRedis,
+      breakdown,
+      physics_score: pScoreFromL3,
+      confidence_score: cScoreFromL3
+    } = await this.getAggregatedCapacity(iso);
     const pVppMw = pVppKw.dividedBy(1000);
+
+    // [L4 v3.8.6] Synchronize scores with L3 High-Fidelity context if available
+    if (capacityFidelityFromRedis === 'HIGH_FIDELITY') {
+      physicsScore = parseFloat(pScoreFromL3);
+      confidenceScore = parseFloat(cScoreFromL3);
+    }
 
     // [L4-BESS-OPT] Resource-Aware Degradation Costs
     const evDegradationKwh = new Decimal(process.env.DEGRADATION_COST_KWH || '0.02');
