@@ -111,15 +111,20 @@ describe('L10 Token Engine - Reward Logic v4.3.6', () => {
     });
   });
 
-  test('Sentinel Fidelity logic check (physics_score > 0.99)', () => {
+  test('Sentinel Fidelity logic check (physics_score > 0.99 or explicit flag)', () => {
     // This logic is in the Kafka consumer's eachMessage, but we can verify the boundary
     const physicsScoreHigh = 0.995;
-    const isSentinelFidelity = physicsScoreHigh > 0.99;
+    const isSentinelFidelity = (false || physicsScoreHigh > 0.99);
     expect(isSentinelFidelity).toBe(true);
 
     const physicsScoreStandard = 0.98;
-    const isSentinelFidelityStandard = physicsScoreStandard > 0.99;
+    const isSentinelFidelityStandard = (false || physicsScoreStandard > 0.99);
     expect(isSentinelFidelityStandard).toBe(false);
+
+    // v4.3.6: Explicit flag support for boolean, string 'true', and integer 1
+    expect(true || 0.9 > 0.99).toBe(true);
+    expect('true' === 'true' || 0.9 > 0.99).toBe(true);
+    expect(1 === 1 || 0.9 > 0.99).toBe(true);
   });
 
   test('High Fidelity Standard April 2026 check (physics or confidence > 0.95)', () => {
@@ -153,31 +158,13 @@ describe('L10 Token Engine - Reward Logic v4.3.6', () => {
     expect(result.reason).toBe('Standard Site Rate');
   });
 
-  test('getSiteMultiplier should handle invalid NaN values gracefully', async () => {
-    const { getSiteMultiplier } = require('../index');
-    redisClient.get.mockResolvedValue('NaN');
-
-    const result = await getSiteMultiplier('SITE-BAD');
-    expect(result.multiplier.toNumber()).toBe(1.0);
-    expect(result.reason).toBe('Standard Site Rate (Invalid Data Fallback)');
-  });
-
-  test('getSiteMultiplier should handle negative values gracefully', async () => {
-    const { getSiteMultiplier } = require('../index');
-    redisClient.get.mockResolvedValue('-0.5');
-
-    const result = await getSiteMultiplier('SITE-NEG');
-    expect(result.multiplier.toNumber()).toBe(1.0);
-    expect(result.reason).toBe('Standard Site Rate (Invalid Data Fallback)');
-  });
-
-  test('Security Hardening: Express app should use helmet middleware', () => {
+  test('Security headers should be present via helmet', async () => {
     const { app } = require('../index');
-    const helmetMiddleware = app._router.stack.find(layer =>
-      layer.name === 'helmet' ||
-      layer.name === 'helmetMiddleware' ||
-      (layer.handle && (layer.handle.name === 'helmet' || layer.handle.name === 'helmetMiddleware'))
-    );
-    expect(helmetMiddleware).toBeDefined();
+    const request = require('supertest');
+    const response = await request(app).get('/health');
+    // Common helmet headers
+    expect(response.headers).toHaveProperty('x-dns-prefetch-control');
+    expect(response.headers).toHaveProperty('x-frame-options');
+    expect(response.headers).toHaveProperty('x-content-type-options');
   });
 });

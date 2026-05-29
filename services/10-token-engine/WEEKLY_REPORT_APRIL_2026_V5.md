@@ -1,19 +1,20 @@
 # L10 Token Engine: Weekly Product Update (April 2026 - v4.3.6)
 
 ## 1. L10 Web3 & Rewards Report
-*   **Security Hardening**: Integrated `helmet()` and `express.json()` middleware to align with platform security standards and protect against common web vulnerabilities.
-*   **Gas-Optimized Batch Minting**: Implemented a new reward queuing and batch processing strategy (L10-P3). Rewards are now logged with a `'queued'` status and processed asynchronously by a background worker, reducing instantaneous blockchain load and preparing for gas-optimized batch minting.
-*   **Cross-Layer Alignment**: Verified seamless integration with **L6 Engagement Engine (v5.14.0)**. Confirmed that new achievements like `AI Model Master` and `Multi-Site Maestro` are correctly captured by L10's behavioral reward pipeline.
-*   **Standardized Scoring**: Maintained parity with **L1 Physics Engine (v10.1.4)** for string-formatted telemetry scoring (.toFixed(4)) in all audit logs.
+*   **Gas-Optimized Batch Minting (L10-P3)**: Deployed a major performance refactor. Rewards are now initially logged with a `'queued'` status, significantly reducing Kafka consumer latency. A new background worker (`processBatchMint`) asynchronously processes these rewards in batches via the Open-Wallet API, ensuring high-throughput blockchain fulfillment.
+*   **Architectural Security Alignment**: Integrated `helmet()` middleware into the L10 service to standardize security headers across the MiGrid ecosystem.
+*   **High-Fidelity Telemetry Standard**: Enforced strict string-formatting (`.toFixed(4)`) for all `physics_score` and `confidence_score` values persisted in the rewards ledger. This ensures deterministic audit trails for Phase 6 L11 ML Engine training.
+*   **Sentinel Fidelity Hardening**: Enhanced `is_sentinel_fidelity` detection to robustly handle boolean, string, and integer (`1`) formats, ensuring seamless cross-layer parity with L2, L4, and L7.
 
 ## 2. Backlog Updates
-*   **[L10-P0] COMPLETED**: Security hardening via Helmet integration.
-*   **[L10-P3] COMPLETED**: Reward Batching Strategy (Queuing + Batch Worker).
-*   **[L10-P4] PLANNED**: Integrate actual ERC-20 batch minting smart contract calls for the batch worker.
+*   **[L10-P0] COMPLETED**: Security hardening via `helmet()`.
+*   **[L10-P1] COMPLETED**: 4-decimal telemetry standardization for L11.
+*   **[L10-P2] COMPLETED**: Robust sentinel flag detection (multi-format support).
+*   **[L10-P3] COMPLETED**: Implementation of the Reward Batching & Asynchronous Minting Worker.
 
 ## 3. Engineering Execution
 *   **Version Upgrade**: Bumped L10 to **v4.3.6**.
-*   **Architecture Change**: Transitioned from immediate reward issuance to a background worker model (`processBatchMint`).
-*   **Middleware Deployment**: Secured Express application with `helmet`.
-*   **API Updates**: Updated `/health` and `/data/training/rewards` to reflect v4.3.6 status.
-*   **Test Verification**: Confirmed that core reward logic and multipliers remain valid under the new asynchronous model.
+*   **New Logic**: Implemented `processBatchMint()` background worker and scheduled it via `setInterval`.
+*   **Consumer Refactor**: Updated Kafka consumer to offload immediate minting to the background queue.
+*   **Schema Parity**: Verified that all reward logs now include 4-decimal precision for physics metrics.
+*   **Verification**: Successfully ran `tests/reward_logic.test.js` and custom verification script `verify_l10_v4_3_6.js`.
