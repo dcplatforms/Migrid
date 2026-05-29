@@ -1,5 +1,5 @@
 /**
- * L2: Grid Signal Service (v2.5.1)
+ * L2: Grid Signal Service (v2.5.2)
  * OpenADR 3.0 VEN implementation for demand response and price signals
  * Enhanced with L1 Physics Safety Guards and Redis Caching
  */
@@ -66,6 +66,15 @@ app.use(helmet());
 app.use(express.json());
 
 /**
+ * Helper: Extract site ID from multi-key payload
+ * [L2 v2.5.2] Standardized extraction for L3/L4/L6/L10 parity
+ */
+const extractSiteId = (payload) => {
+  if (!payload) return null;
+  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
+};
+
+/**
  * Middleware: Verify JWT token (Zero-Trust Security)
  */
 const authenticateToken = (req, res, next) => {
@@ -94,7 +103,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.5.1',
+    version: '2.5.2',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -105,9 +114,13 @@ app.get('/health', (req, res) => {
  * Get OpenADR 3.0 Reports (VEN)
  * Returns recent grid events for compliance and auditing
  * [L2 v2.4.8] Optimized: Utilizes unified context for sub-50ms reporting
- * Security: Enforces authentication and masks PII in safety context.
+ * Security [L2 v2.5.2]: Restricted to system tokens (no fleet_id)
  */
 app.get('/openadr/v3/reports', authenticateToken, async (req, res) => {
+  if (req.user && req.user.fleet_id) {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Global reports restricted to system tokens' });
+  }
+
   try {
     const [result, unifiedContextRaw, safetyLock, safetyContextRaw, gridLock, marketContextRaw, regionalCapacityRaw] = await Promise.all([
       pool.query('SELECT event_id, event_type, status, received_at FROM grid_events ORDER BY received_at DESC LIMIT 50'),
@@ -139,9 +152,9 @@ app.get('/openadr/v3/reports', authenticateToken, async (req, res) => {
     if (safetyContext) {
       if (safetyContext.vin) safetyContext.vin = '[MASKED]';
       if (safetyContext.vehicle_id) safetyContext.vehicle_id = '[MASKED]';
-      // Ensure sentinel flag is explicitly boolean, handling both boolean and string formats (v2.5.0)
+      // Ensure sentinel flag is explicitly boolean, handling boolean, string, and integer formats (v2.5.2)
       const rawSentinel = safetyContext.is_sentinel_fidelity;
-      safetyContext.is_sentinel_fidelity = !!(rawSentinel === true || rawSentinel === 'true' || safetyContext.physics_score > 0.99);
+      safetyContext.is_sentinel_fidelity = !!(rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || safetyContext.physics_score > 0.99);
     }
 
     res.json({
@@ -234,8 +247,8 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
     }
 
     // 1.2 Check L8 Safe Mode (Site Specific)
-    // [L2 v2.5.1] Robust multi-key site identification (site_id, siteId, location_id, locationId)
-    const siteIdVal = event.site_id || event.siteId || event.location_id || event.locationId || null;
+    // [L2 v2.5.2] Robust multi-key site identification via helper
+    const siteIdVal = extractSiteId(event);
 
     if (siteIdVal) {
       const safeMode = await redisClient.get(`l8:site:${siteIdVal}:safe_mode`);
@@ -295,9 +308,9 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
       const confidenceScore = parseFloat((safetyContext.confidence_score !== undefined) ? safetyContext.confidence_score :
                                          (safetyContext.physics_score !== undefined ? safetyContext.physics_score : regionalAvgConfidence.toString()));
       const physicsScore = parseFloat(safetyContext.physics_score ?? '1.0000');
-      // [L2 v2.5.0] Hardened sentinel detection supporting boolean and string formats
+      // [L2 v2.5.2] Hardened sentinel detection supporting boolean, string, and integer formats
       const rawSentinel = safetyContext.is_sentinel_fidelity;
-      const isSentinelFidelity = !!(rawSentinel === true || rawSentinel === 'true' || physicsScore > 0.99);
+      const isSentinelFidelity = !!(rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || physicsScore > 0.99);
       // [L1-124] Aligned High-Fidelity Standard: physics > 0.95 OR confidence > 0.95
       const fidelityStatus = (physicsScore > 0.95 || confidenceScore > 0.95) ? 'HIGH_FIDELITY' : 'STANDARD';
 
@@ -352,8 +365,13 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
 
 /**
  * L11 AI Data Readiness: Export historical grid event data for training
+ * Security [L2 v2.5.2]: Restricted to system tokens (no fleet_id)
  */
 app.get('/data/training/events', authenticateToken, async (req, res) => {
+  if (req.user && req.user.fleet_id) {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Global data export restricted to system tokens' });
+  }
+
   const { days } = req.query;
   const daysInt = parseInt(days) || 7;
 
@@ -417,7 +435,7 @@ const updateRegionalStats = async () => {
               context.digital_twin[iso].high_fidelity_count++;
             }
             const rawSentinel = data.is_sentinel_fidelity;
-            if (rawSentinel === true || rawSentinel === 'true' || data.physics_score > 0.99) {
+            if (rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || data.physics_score > 0.99) {
               context.digital_twin[iso].sentinel_fidelity_count++;
             }
             if (data.resource_type === 'EV') context.digital_twin[iso].ev_count++;
@@ -578,21 +596,26 @@ async function startSafetyConsumer() {
         console.log(`[L2] Received Grid Health Update for ${iso}: ${(payload.renewable_percentage * 100).toFixed(1)}% renewable`);
         await redisClient.setEx(`l2:grid_health:${iso}`, 600, JSON.stringify(payload));
       } else if (topic === 'migrid.l8.status') {
-        console.log(`[L2] Received status update from L8 for site ${payload.site_id}: ${payload.status}`);
+        const siteIdVal = extractSiteId(payload);
+        console.log(`[L2] Received status update from L8 for site ${siteIdVal}: ${payload.status}`);
         // Cache site status (e.g., SAFE_MODE, METER_OFFLINE)
-        await redisClient.setEx(`l8:site:status:${payload.site_id}`, 3600, payload.status);
+        if (siteIdVal) await redisClient.setEx(`l8:site:status:${siteIdVal}`, 3600, payload.status);
       } else if (topic === 'L8_SAFE_MODE_CHANGED') {
-        const { site_id, safe_mode } = payload;
-        console.log(`🛡️ [L2] L8 Safe Mode Change: Site ${site_id} is now ${safe_mode ? 'LOCKED' : 'RELEASED'}`);
+        const siteIdVal = extractSiteId(payload);
+        const { safe_mode } = payload;
+        console.log(`🛡️ [L2] L8 Safe Mode Change: Site ${siteIdVal} is now ${safe_mode ? 'LOCKED' : 'RELEASED'}`);
 
-        if (safe_mode) {
-          await redisClient.sAdd('l3:vpp:safemode_sites', site_id.toString());
-          await redisClient.setEx(`l8:site:status:${site_id}`, 3600, 'SAFE_MODE');
-        } else {
-          await redisClient.sRem('l3:vpp:safemode_sites', site_id.toString());
-          await redisClient.setEx(`l8:site:status:${site_id}`, 3600, 'OPERATIONAL');
+        if (siteIdVal) {
+          if (safe_mode) {
+            await redisClient.sAdd('l3:vpp:safemode_sites', siteIdVal.toString());
+            await redisClient.setEx(`l8:site:status:${siteIdVal}`, 3600, 'SAFE_MODE');
+          } else {
+            await redisClient.sRem('l3:vpp:safemode_sites', siteIdVal.toString());
+            await redisClient.setEx(`l8:site:status:${siteIdVal}`, 3600, 'OPERATIONAL');
+          }
         }
       } else if (topic === 'migrid.physics.alerts') {
+        const siteIdVal = extractSiteId(payload);
         // PHYSICS RULE: Trigger lock if CRITICAL/FRAUD OR if variance exceeds thresholds
         // [L2 v2.4.4] BESS Invariant: 10% variance threshold; EV Invariant: 15% threshold.
         const isCritical = payload.severity === 'CRITICAL' || payload.severity === 'FRAUD';
@@ -604,9 +627,9 @@ async function startSafetyConsumer() {
 
           // CORE INVARIANT: Respect physics variance thresholds from L1 Physics Engine
           if (isHighVariance) {
-            console.error(`🚨 [L2] CRITICAL INVARIANT VIOLATION: Variance (${payload.variance_pct}%) exceeds ${varianceThreshold}% threshold for ${payload.resource_type || 'EV'} on Site ${payload.site_id}. Locking grid dispatch.`);
+            console.error(`🚨 [L2] CRITICAL INVARIANT VIOLATION: Variance (${payload.variance_pct}%) exceeds ${varianceThreshold}% threshold for ${payload.resource_type || 'EV'} on Site ${siteIdVal}. Locking grid dispatch.`);
           } else {
-            console.error(`🚨 [L2] L1 SAFETY ALERT: ${reason} on Site ${payload.site_id}. Region: ${payload.iso_region}. Locking grid dispatch.`);
+            console.error(`🚨 [L2] L1 SAFETY ALERT: ${reason} on Site ${siteIdVal}. Region: ${payload.iso_region}. Locking grid dispatch.`);
           }
 
           // Detailed logging for engineering audit
@@ -616,9 +639,9 @@ async function startSafetyConsumer() {
           await redisClient.setEx(SAFETY_LOCK_KEY, 900, '1');
 
           // Store detailed alert context for UI/Diagnostics and downstream layer alignment
-          // [L2 v2.5.0] Hardened sentinel detection supporting boolean and string formats
+          // [L2 v2.5.2] Hardened sentinel detection supporting boolean, string, and integer formats
           const rawSentinel = payload.is_sentinel_fidelity;
-          const isSentinelFidelity = !!(rawSentinel === true || rawSentinel === 'true' || payload.physics_score > 0.99);
+          const isSentinelFidelity = !!(rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || payload.physics_score > 0.99);
 
           await redisClient.setEx(`${SAFETY_LOCK_KEY}:context`, 900, JSON.stringify({
             ...payload,
