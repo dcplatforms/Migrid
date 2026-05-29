@@ -25,11 +25,11 @@ MiGrid is being developed across eight major phases spanning Q1 2025 through Q4 
 
 ## Current Status (April 2026)
 
-**Features Complete:** 69
+**Features Complete:** 72
 **In Progress:** 1
-**Planned:** 28
+**Planned:** 25
 
-**Overall Progress:** 70%
+**Overall Progress:** 74%
 
 ---
 
@@ -179,14 +179,14 @@ MiGrid is being developed across eight major phases spanning Q1 2025 through Q4 
 
 *Multi-site, multi-fleet orchestration*
 
-### v5.0.0 — Enterprise Platform (January 2026) 🔄 In Progress
+### v5.0.0 — Enterprise Platform (January 2026) ✅ Complete
 
 | Layer | Feature | Description | Status |
 |-------|---------|-------------|--------|
 | L9 | Commerce Engine | Flexible billing, tariffs, split-billing | ✅ Complete |
 | L7 | ISO 15118 Plug & Charge | Certificate-based vehicle authentication | ✅ Complete |
 | L7 | OCPP 2.1 Migration | Fleet-wide transition to V2X-ready protocol | ✅ Complete |
-| L7 | OCPI 2.2 Roaming | Cross-network charging orchestration | 📋 Planned |
+| L7 | OCPI 2.2 Roaming | Cross-network charging orchestration | ✅ Complete |
 
 **Technical Approach:**
 - `packages/iso15118-crypto/` — PKI certificate handling
@@ -346,8 +346,8 @@ MiGrid is being developed across eight major phases spanning Q1 2025 through Q4 
 |-------|---------|----------------|----------|-------------|---------|----------|
 | L1 | Physics Engine | 9 | 9 | 0 | 0 | ██████████ 100% |
 | L2 | Grid Signal | 8 | 8 | 0 | 0 | ██████████ 100% |
-| L3 | VPP Aggregator | 10 | 7 | 1 | 2 | ███████░░░ 70% |
-| L4 | Market Gateway | 11 | 10 | 0 | 1 | █████████░ 91% |
+| L3 | VPP Aggregator | 10 | 8 | 1 | 1 | ████████░░ 80% |
+| L4 | Market Gateway | 11 | 11 | 0 | 0 | ██████████ 100% |
 | L5 | Driver DX | 9 | 4 | 2 | 3 | ████░░░░░░ 44% |
 | L6 | Engagement | 5 | 5 | 0 | 0 | ██████████ 100% |
 | L7 | Device Gateway | 11 | 11 | 0 | 0 | ██████████ 100% |
@@ -356,7 +356,7 @@ MiGrid is being developed across eight major phases spanning Q1 2025 through Q4 
 | L10 | Token Bridge | 7 | 7 | 0 | 0 | ██████████ 100% |
 | L11 | ML Engine | 6 | 2 | 1 | 3 | ███░░░░░░░ 35% |
 
-**Overall Platform Completion:** 69 of 98 features (70%)
+**Overall Platform Completion:** 72 of 98 features (74%)
 
 ---
 
