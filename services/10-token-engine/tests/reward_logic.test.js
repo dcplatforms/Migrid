@@ -14,7 +14,7 @@ jest.mock('redis', () => ({
   }))
 }));
 
-describe('L10 Token Engine - Reward Logic v4.3.5', () => {
+describe('L10 Token Engine - Reward Logic v4.3.6', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -151,5 +151,33 @@ describe('L10 Token Engine - Reward Logic v4.3.5', () => {
     const result = await getSiteMultiplier('SITE-456');
     expect(result.multiplier.toNumber()).toBe(1.0);
     expect(result.reason).toBe('Standard Site Rate');
+  });
+
+  test('getSiteMultiplier should handle invalid NaN values gracefully', async () => {
+    const { getSiteMultiplier } = require('../index');
+    redisClient.get.mockResolvedValue('NaN');
+
+    const result = await getSiteMultiplier('SITE-BAD');
+    expect(result.multiplier.toNumber()).toBe(1.0);
+    expect(result.reason).toBe('Standard Site Rate (Invalid Data Fallback)');
+  });
+
+  test('getSiteMultiplier should handle negative values gracefully', async () => {
+    const { getSiteMultiplier } = require('../index');
+    redisClient.get.mockResolvedValue('-0.5');
+
+    const result = await getSiteMultiplier('SITE-NEG');
+    expect(result.multiplier.toNumber()).toBe(1.0);
+    expect(result.reason).toBe('Standard Site Rate (Invalid Data Fallback)');
+  });
+
+  test('Security Hardening: Express app should use helmet middleware', () => {
+    const { app } = require('../index');
+    const helmetMiddleware = app._router.stack.find(layer =>
+      layer.name === 'helmet' ||
+      layer.name === 'helmetMiddleware' ||
+      (layer.handle && (layer.handle.name === 'helmet' || layer.handle.name === 'helmetMiddleware'))
+    );
+    expect(helmetMiddleware).toBeDefined();
   });
 });
