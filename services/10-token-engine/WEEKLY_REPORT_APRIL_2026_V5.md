@@ -1,20 +1,19 @@
 # L10 Token Engine: Weekly Product Update (April 2026 - v4.3.6)
 
 ## 1. L10 Web3 & Rewards Report
-*   **Gas-Optimized Batch Minting (L10-P3)**: Deployed a major performance refactor. Rewards are now initially logged with a `'queued'` status, significantly reducing Kafka consumer latency. A new background worker (`processBatchMint`) asynchronously processes these rewards in batches via the Open-Wallet API, ensuring high-throughput blockchain fulfillment.
-*   **Architectural Security Alignment**: Integrated `helmet()` middleware into the L10 service to standardize security headers across the MiGrid ecosystem.
-*   **High-Fidelity Telemetry Standard**: Enforced strict string-formatting (`.toFixed(4)`) for all `physics_score` and `confidence_score` values persisted in the rewards ledger. This ensures deterministic audit trails for Phase 6 L11 ML Engine training.
-*   **Sentinel Fidelity Hardening**: Enhanced `is_sentinel_fidelity` detection to robustly handle boolean, string, and integer (`1`) formats, ensuring seamless cross-layer parity with L2, L4, and L7.
+*   **Asynchronous Reward Batching (L10-P3)**: Transitioned from immediate blockchain transactions to a high-performance background worker model. Rewards are now logged with a `queued` status and processed in batches by the `processBatchMint` worker. Implements an **atomic claim** pattern using `UPDATE ... SET status = 'processing' ... RETURNING` to ensure no two worker instances can process the same reward, preventing double-minting during high-frequency site events.
+*   **Security Hardening**: Integrated `helmet()` and `express.json()` middleware into the core service, aligning with the platform's Zero-Trust architecture and securing L10 against standard Web2 vulnerabilities.
+*   **Audit Parity (4-Decimal Telemetry)**: Standardized `physics_score` and `confidence_score` logging to strictly use 4-decimal string formatting (.toFixed(4)). This ensures deterministic audit trails for the L11 ML Engine, matching standards in L1, L4, and L7.
+*   **Engineering Stability**: Bumped service to **v4.3.6**, successfully passing all unit tests for batch worker logic and telemetry standardization.
 
 ## 2. Backlog Updates
-*   **[L10-P0] COMPLETED**: Security hardening via `helmet()`.
-*   **[L10-P1] COMPLETED**: 4-decimal telemetry standardization for L11.
-*   **[L10-P2] COMPLETED**: Robust sentinel flag detection (multi-format support).
-*   **[L10-P3] COMPLETED**: Implementation of the Reward Batching & Asynchronous Minting Worker.
+*   **[L10-P3] COMPLETED**: Implement gas-optimized batch minting for high-frequency site rewards.
+*   **[L10-P4] PLANNED**: Integrate KMS/HSM for production private key management (Security Phase 2).
+*   **[L10-P5] PLANNED**: Implement ERC-20 staking mechanics for long-term grid support (Web3 Maturity Phase).
 
 ## 3. Engineering Execution
 *   **Version Upgrade**: Bumped L10 to **v4.3.6**.
-*   **New Logic**: Implemented `processBatchMint()` background worker and scheduled it via `setInterval`.
-*   **Consumer Refactor**: Updated Kafka consumer to offload immediate minting to the background queue.
-*   **Schema Parity**: Verified that all reward logs now include 4-decimal precision for physics metrics.
-*   **Verification**: Successfully ran `tests/reward_logic.test.js` and custom verification script `verify_l10_v4_3_6.js`.
+*   **Security**: Added `helmet` dependency and middleware.
+*   **Core Logic**: Refactored Kafka consumer for asynchronous queuing and implemented `processBatchMint`.
+*   **Audit**: Standardized telemetry scores to 4-decimal strings in `logRewardTransaction`.
+*   **Verification**: Validated asynchronous worker and audit parity via internal testing.
