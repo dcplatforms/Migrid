@@ -123,7 +123,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.14.0', // Weekly Mission: Phase 6 AI Readiness & Multi-Site Achievements
+    version: '5.15.0', // Weekly Mission: Robust Site ID Extraction & Solar Flare Achievement
     status: 'healthy',
     layer: 'L6'
   });
@@ -729,6 +729,7 @@ async function handleAdvanceChargeSignal(payload) {
 
       // Check for Solar Surge achievement
       await checkSolarSurgeAchievement(driverId);
+      await checkSolarFlareAchievement(driverId);
     }
   } catch (error) {
     console.error('[Engagement] Error handling Advance Charge signal:', error);
@@ -748,8 +749,9 @@ async function handleVPPParticipationUpdate(payload) {
 }
 
 async function handleGridSignal(payload) {
-  const { event_id, priority, site_id } = payload;
-  console.log(`[L6] Handling Grid Signal for Team Challenge: ${event_id} (${priority}) - Site: ${site_id}`);
+  const { event_id, priority } = payload;
+  const siteIdVal = payload.site_id || payload.siteId || payload.location_id || payload.locationId || 'ALL';
+  console.log(`[L6] Handling Grid Signal for Team Challenge: ${event_id} (${priority}) - Site: ${siteIdVal}`);
 
   try {
     // 1. Fully Bulked Database Operation:
@@ -868,7 +870,7 @@ async function handleGridSignal(payload) {
       LEFT JOIN completed_challenges cc ON td.driver_id = cc.driver_id
       LEFT JOIN new_achievements na ON td.driver_id = na.driver_id
       GROUP BY td.driver_id, td.iso
-    `, [site_id || 'ALL', JSON.stringify({ event_id })]);
+    `, [siteIdVal, JSON.stringify({ event_id })]);
 
     // 2. Optimized Notification & L10 Payout Handling
     for (const row of results.rows) {
@@ -1490,6 +1492,24 @@ async function checkSolarSurgeAchievement(driver_id) {
   }
 }
 
+async function checkSolarFlareAchievement(driver_id) {
+  try {
+    const count = await pool.query(`
+      SELECT COUNT(*) FROM driver_actions
+      WHERE driver_id = $1 AND action_type = 'solar_ramp_response'
+    `, [driver_id]);
+
+    if (parseInt(count.rows[0].count) >= 25) {
+      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Solar Flare'");
+      if (achievement.rows.length > 0) {
+        await awardAchievement(driver_id, achievement.rows[0].id);
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking Solar Flare achievement:', error);
+  }
+}
+
 async function checkSustainabilityChampion(driver_id) {
   // 100% Compliance Check: Verify at least one valid session for each of the last 30 consecutive days.
   // This enforces the "Green Audit" (<15% variance) via the L1-verified 'is_valid' flag.
@@ -1730,6 +1750,7 @@ module.exports = {
   pool,
   redisClient,
   processChargingEvent,
+  handleGridSignal,
   checkHighConfidenceAchievement,
   checkSiteHarmonyAchievement,
   updateChallengeProgress,
