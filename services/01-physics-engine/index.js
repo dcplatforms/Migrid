@@ -226,7 +226,7 @@ async function handlePhysicsAlert(msg) {
         physics_score: physicsScore,
         is_high_fidelity: isHighFidelity,
         is_sentinel_fidelity: isSentinelFidelity,
-        confidence_score: confidenceScore.toFixed(4),
+        confidence_score: confidenceScore,
         current_soc: payload.current_soc,
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
@@ -247,8 +247,8 @@ async function handlePhysicsAlert(msg) {
     // [L1-126] Hardened Offline Mode: Persist scores to prevent metadata loss
     const offlinePayload = {
       ...payload,
-      physics_score: physicsScore.toFixed(4),
-      confidence_score: confidenceScore.toFixed(4),
+      physics_score: physicsScore,
+      confidence_score: confidenceScore,
       is_high_fidelity: isHighFidelity,
       is_sentinel_fidelity: isSentinelFidelity
     };
@@ -274,7 +274,7 @@ async function handlePhysicsAlert(msg) {
       physics_score: physicsScore,
       is_high_fidelity: isHighFidelity,
       is_sentinel_fidelity: isSentinelFidelity,
-      confidence_score: confidenceScore.toFixed(4),
+      confidence_score: confidenceScore,
       billing_mode: payload.billing_mode,
       vpp_active: payload.vpp_active,
       v2g_active: payload.v2g_active,
@@ -350,9 +350,9 @@ async function reconcileLogs() {
       // [L1-124] Re-calculate scores for high-fidelity reconciliation
       // Note: We use the stored scores if available (Hardened Offline Mode)
       const physicsMetadata = calculatePhysicsMetadata(payload);
-      const physicsScore = payload.physics_score || physicsMetadata.physicsScore;
+      const physicsScore = payload.physics_score ? parseFloat(payload.physics_score).toFixed(4) : physicsMetadata.physicsScore;
       const isPhysicsHighFidelity = parseFloat(physicsScore) > 0.95;
-      const confidenceScore = payload.confidence_score || (0.5).toFixed(4);
+      const confidenceScore = payload.confidence_score ? parseFloat(payload.confidence_score).toFixed(4) : (0.5).toFixed(4);
       const isHighFidelity = isPhysicsHighFidelity || parseFloat(confidenceScore) > 0.95;
       const explicitSentinel = payload.is_sentinel_fidelity === true || payload.is_sentinel_fidelity === 'true';
       const isSentinelFidelity = explicitSentinel || parseFloat(physicsScore) > 0.99;
@@ -374,7 +374,7 @@ async function reconcileLogs() {
         physics_score: physicsScore,
         is_high_fidelity: isHighFidelity,
         is_sentinel_fidelity: isSentinelFidelity,
-        confidence_score: confidenceScore.toFixed(4),
+        confidence_score: confidenceScore,
         billing_mode: payload.billing_mode,
         vpp_active: payload.vpp_active,
         v2g_active: payload.v2g_active,
@@ -422,8 +422,8 @@ async function reconcileLogs() {
           current_soc: payload.current_soc,
           variance_pct: payload.variance_pct,
           efficiency_pct: payload.efficiency_pct,
-          physics_score: physicsScore.toFixed(4),
-          confidence_score: confidenceScore.toFixed(4),
+          physics_score: physicsScore,
+          confidence_score: confidenceScore,
           is_high_fidelity: isHighFidelity
         }),
         payload.billing_mode,
@@ -520,10 +520,10 @@ async function syncDigitalTwin() {
       await redisClient.setEx(key, 60, JSON.stringify({
         ...vehicle,
         resource_type: resourceType,
-        physics_score: physicsScore.toFixed(4),
+        physics_score: physicsScore,
         is_high_fidelity: isHighFidelity,
-        is_sentinel_fidelity: physicsScore > 0.99,
-        confidence_score: confidenceScore.toFixed(4),
+        is_sentinel_fidelity: parseFloat(physicsScore) > 0.99,
+        confidence_score: confidenceScore,
         last_sync: new Date().toISOString()
       }));
     }
