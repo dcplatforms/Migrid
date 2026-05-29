@@ -275,7 +275,16 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body.error).toBe('UNAUTHORIZED');
   });
 
-  test('GET /openadr/v3/reports should return recent events and market context', async () => {
+  test('GET /openadr/v3/reports should return 403 for fleet tokens (Security Hardening v2.5.2)', async () => {
+    const response = await request(app)
+      .get('/openadr/v3/reports')
+      .set('Authorization', `Bearer ${mockToken}`); // mockToken has fleet_id
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe('FORBIDDEN');
+  });
+
+  test('GET /openadr/v3/reports should return recent events and market context for system tokens', async () => {
+    const systemToken = jwt.sign({ sub: 'admin', role: 'system' }, JWT_SECRET);
     const mockMarketContext = {
       iso: 'CAISO',
       price_per_mwh: 45.5,
@@ -290,7 +299,7 @@ describe('L2 Grid Signal Service', () => {
 
     const response = await request(app)
       .get('/openadr/v3/reports')
-      .set('Authorization', `Bearer ${mockToken}`);
+      .set('Authorization', `Bearer ${systemToken}`);
     expect(response.status).toBe(200);
     expect(response.body).toHaveProperty('reports');
     expect(response.body.market_context.iso).toBe('CAISO');
@@ -299,13 +308,14 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body).toHaveProperty('timestamp');
   });
 
-  test('GET /health should return correct version (v2.5.1)', async () => {
+  test('GET /health should return correct version (v2.5.2)', async () => {
     const response = await request(app).get('/health');
     expect(response.status).toBe(200);
-    expect(response.body.version).toBe('2.5.1');
+    expect(response.body.version).toBe('2.5.2');
   });
 
   test('GET /openadr/v3/reports should return regional market contexts', async () => {
+    const systemToken = jwt.sign({ sub: 'admin', role: 'system' }, JWT_SECRET);
     const mockUnifiedContext = {
       digital_twin: {},
       regional_markets: {
@@ -324,13 +334,14 @@ describe('L2 Grid Signal Service', () => {
 
     const response = await request(app)
       .get('/openadr/v3/reports')
-      .set('Authorization', `Bearer ${mockToken}`);
+      .set('Authorization', `Bearer ${systemToken}`);
     expect(response.status).toBe(200);
     expect(response.body.regional_markets.CAISO.price_per_mwh).toBe(45.5);
     expect(response.body.regional_markets.ERCOT.price_per_mwh).toBe(120.0);
   });
 
   test('GET /openadr/v3/reports should return regional capacity data (Phase 5)', async () => {
+    const systemToken = jwt.sign({ sub: 'admin', role: 'system' }, JWT_SECRET);
     const mockRegionalCapacity = { CAISO: 500.5, ERCOT: 1200.0 };
 
     redisClient.get.mockImplementation((key) => {
@@ -340,13 +351,14 @@ describe('L2 Grid Signal Service', () => {
 
     const response = await request(app)
       .get('/openadr/v3/reports')
-      .set('Authorization', `Bearer ${mockToken}`);
+      .set('Authorization', `Bearer ${systemToken}`);
     expect(response.status).toBe(200);
     expect(response.body.regional_capacity.CAISO).toBe(500.5);
     expect(response.body.regional_capacity.ERCOT).toBe(1200.0);
   });
 
   test('GET /openadr/v3/reports should aggregate regional digital twin stats from L1 keys', async () => {
+    const systemToken = jwt.sign({ sub: 'admin', role: 'system' }, JWT_SECRET);
     const mockUnifiedContext = {
       digital_twin: {
         CAISO: { vehicle_count: 1, high_fidelity_count: 1 },
@@ -365,7 +377,7 @@ describe('L2 Grid Signal Service', () => {
 
     const response = await request(app)
       .get('/openadr/v3/reports')
-      .set('Authorization', `Bearer ${mockToken}`);
+      .set('Authorization', `Bearer ${systemToken}`);
     expect(response.status).toBe(200);
     expect(response.body.digital_twin.CAISO.vehicle_count).toBe(1);
     expect(response.body.digital_twin.CAISO.high_fidelity_count).toBe(1);
@@ -374,6 +386,7 @@ describe('L2 Grid Signal Service', () => {
   });
 
   test('GET /openadr/v3/reports should return safety context when locked', async () => {
+    const systemToken = jwt.sign({ sub: 'admin', role: 'system' }, JWT_SECRET);
     redisClient.get.mockImplementation((key) => {
       if (key === 'l1:safety:lock') return Promise.resolve('1');
       if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({
@@ -386,7 +399,7 @@ describe('L2 Grid Signal Service', () => {
 
     const response = await request(app)
       .get('/openadr/v3/reports')
-      .set('Authorization', `Bearer ${mockToken}`);
+      .set('Authorization', `Bearer ${systemToken}`);
     expect(response.status).toBe(200);
     expect(response.body.safety_lock.active).toBe(true);
     expect(response.body.safety_lock.context.iso_region).toBe('ERCOT');
@@ -398,6 +411,7 @@ describe('L2 Grid Signal Service', () => {
   });
 
   test('GET /openadr/v3/reports should mask PII in safety context', async () => {
+    const systemToken = jwt.sign({ sub: 'admin', role: 'system' }, JWT_SECRET);
     redisClient.get.mockImplementation((key) => {
       if (key === 'l1:safety:lock') return Promise.resolve('1');
       if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({
@@ -411,7 +425,7 @@ describe('L2 Grid Signal Service', () => {
 
     const response = await request(app)
       .get('/openadr/v3/reports')
-      .set('Authorization', `Bearer ${mockToken}`);
+      .set('Authorization', `Bearer ${systemToken}`);
 
     expect(response.status).toBe(200);
     expect(response.body.safety_lock.context.vehicle_id).toBe('[MASKED]');
@@ -648,6 +662,7 @@ describe('L2 Grid Signal Service', () => {
   });
 
   test('GET /openadr/v3/reports should return cached regional stats with EV/BESS breakdowns (v2.4.4)', async () => {
+    const systemToken = jwt.sign({ sub: 'admin', role: 'system' }, JWT_SECRET);
     const mockUnifiedContext = {
       digital_twin: {
         CAISO: { vehicle_count: 2, high_fidelity_count: 2, ev_count: 1, bess_count: 1 },
@@ -667,7 +682,7 @@ describe('L2 Grid Signal Service', () => {
 
     const response = await request(app)
       .get('/openadr/v3/reports')
-      .set('Authorization', `Bearer ${mockToken}`);
+      .set('Authorization', `Bearer ${systemToken}`);
     expect(response.status).toBe(200);
     expect(response.body.regional_stats.CAISO.vehicle_count).toBe(2);
     expect(response.body.regional_stats.CAISO.ev_count).toBe(1);
@@ -676,6 +691,7 @@ describe('L2 Grid Signal Service', () => {
   });
 
   test('GET /openadr/v3/reports should return L8 site statuses (Optimized with SMEMBERS)', async () => {
+    const systemToken = jwt.sign({ sub: 'admin', role: 'system' }, JWT_SECRET);
     const mockUnifiedContext = {
       digital_twin: {},
       regional_markets: {},
@@ -694,7 +710,7 @@ describe('L2 Grid Signal Service', () => {
 
     const response = await request(app)
       .get('/openadr/v3/reports')
-      .set('Authorization', `Bearer ${mockToken}`);
+      .set('Authorization', `Bearer ${systemToken}`);
     expect(response.status).toBe(200);
     expect(response.body.site_statuses['SITE-1']).toBe('OPERATIONAL');
     expect(response.body.site_statuses['SITE-2']).toBe('SAFE_MODE');
@@ -737,7 +753,8 @@ describe('L2 Grid Signal Service', () => {
     expect(redisClient.setEx).toHaveBeenCalledWith('l8:site:status:SITE-LOCK-99', 3600, 'OPERATIONAL');
   });
 
-  test('GET /data/training/events should return historical grid events', async () => {
+  test('GET /data/training/events should return historical grid events for system tokens', async () => {
+    const systemToken = jwt.sign({ sub: 'admin', role: 'system' }, JWT_SECRET);
     const { Pool } = require('pg');
     const mPool = new Pool();
     mPool.query.mockResolvedValue({
@@ -748,12 +765,19 @@ describe('L2 Grid Signal Service', () => {
 
     const response = await request(app)
       .get('/data/training/events')
-      .set('Authorization', `Bearer ${mockToken}`);
+      .set('Authorization', `Bearer ${systemToken}`);
 
     expect(response.status).toBe(200);
     expect(response.body.status).toBe('READY_FOR_L11');
     expect(response.body.record_count).toBe(1);
     expect(response.body.data[0].event_id).toBe('evt-1');
+  });
+
+  test('GET /data/training/events should reject fleet tokens (Security Hardening v2.5.2)', async () => {
+    const response = await request(app)
+      .get('/data/training/events')
+      .set('Authorization', `Bearer ${mockToken}`);
+    expect(response.status).toBe(403);
   });
 
   test('POST /openadr/v3/events should normalize ISO region (e.g., ENTSO-E to ENTSOE)', async () => {
@@ -939,6 +963,25 @@ describe('L2 Grid Signal Service', () => {
     expect(sentValue.is_sentinel_fidelity).toBe(true);
   });
 
+  test('POST /openadr/v3/events should support integer 1 for sentinel fidelity (v2.5.2)', async () => {
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({ is_sentinel_fidelity: 1 }));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-sentinel-int',
+        type: 'demand-response'
+      });
+
+    expect(response.status).toBe(202);
+    const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
+    expect(sentValue.is_sentinel_fidelity).toBe(true);
+  });
+
   test('POST /openadr/v3/events should support robust site ID extraction (v2.5.1)', async () => {
     redisClient.get.mockResolvedValue(null);
 
@@ -966,6 +1009,7 @@ describe('L2 Grid Signal Service', () => {
   });
 
   test('GET /openadr/v3/reports should return sentinel_fidelity_count (v2.4.9)', async () => {
+    const systemToken = jwt.sign({ sub: 'admin', role: 'system' }, JWT_SECRET);
     const mockUnifiedContext = {
       digital_twin: {
         CAISO: { vehicle_count: 10, high_fidelity_count: 8, sentinel_fidelity_count: 5, ev_count: 5, bess_count: 5 }
@@ -983,7 +1027,7 @@ describe('L2 Grid Signal Service', () => {
 
     const response = await request(app)
       .get('/openadr/v3/reports')
-      .set('Authorization', `Bearer ${mockToken}`);
+      .set('Authorization', `Bearer ${systemToken}`);
     expect(response.status).toBe(200);
     expect(response.body.regional_stats.CAISO.sentinel_fidelity_count).toBe(5);
   });

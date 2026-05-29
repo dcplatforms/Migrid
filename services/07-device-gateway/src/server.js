@@ -42,7 +42,7 @@ app.get('/health', (req, res) => {
     service: 'Device Gateway',
     layer: 'L7',
     status: 'OK',
-    version: '5.8.0',
+    version: '5.10.0',
     podId: process.env.POD_ID || 'gateway-instance-1'
   });
 });
