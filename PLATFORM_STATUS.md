@@ -814,7 +814,7 @@ done
 | **L4** | Market Gateway | `3.8.5` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
 | **L6** | Engagement Engine | `5.15.0` | ✅ Operational |
-| **L7** | Device Gateway | `5.9.0` | ✅ Operational |
+| **L7** | Device Gateway | `5.8.0` | ✅ Operational |
 | **L8** | Energy Manager | `2.1.0` | ✅ Operational |
 | **L9** | Commerce Engine | `5.1.0` | ✅ Operational |
 | **L10**| Token Engine | `4.3.6` | ✅ Operational |
@@ -824,12 +824,12 @@ done
 
 ## Latest Release Wins (April 2026)
 
-- **L10 Token Engine (v4.3.6)**: Implemented **Reward Batching** model for async minting. Hardened Kafka consumer with robust site identification (site_id, siteId, location_id, locationId) and explicit boolean extraction for fidelity flags.
-- **L6 Engagement Engine (v5.15.0)**: Deployed **Solar Flare** achievement for cumulative solar ramp responses. Integrated robust multi-key site identification for multi-site parity.
-- **L4 Market Gateway (v3.8.5)**: Enforced strict string-formatted scores (.toFixed(4)) across all Kafka payloads and API responses. Hardened Kafka consumer with multi-key site identification.
-- **L2 Grid Signal (v2.5.1)**: Refactored digital twin tracking to include **sentinel_fidelity_count**. Hardened flag detection for boolean/string formats.
-- **L7 Device Gateway (v5.9.0)**: Integrated **crypto.X509Certificate** for hardened PKI chain parsing and expiration validation. Standardized fidelity detection to support integer 1 flags.
-- **L1 Physics Engine (v10.1.4)**: Enforced strict string-formatted (.toFixed(4)) scores. Hardened sentinel detection logic and patched Digital Twin sync for string input handling.
+- **L10 Token Engine (v4.3.3)**: Implemented **Sentinel Fidelity** logic (physics_score > 0.99) and site-aware auditing. Hardened Kafka consumer with robust float parsing and boolean casting.
+- **L6 Engagement Engine (v5.15.0)**: Deployed **Solar Flare** achievement and hardened **handleGridSignal** with robust multi-key site identification (`site_id`, `siteId`, `location_id`, `locationId`) for multi-site parity.
+- **L4 Market Gateway (v3.8.2)**: Exposed `/data/training/fuel-mix` and `/data/training/load-forecast` endpoints for L11 ML readiness. Hardened high-fidelity synchronization with L1/L2 fallbacks.
+- **L2 Grid Signal (v2.4.8)**: Secured `/openadr/v3/reports` with PII masking and `authenticateToken` middleware. Implemented proactive signal caching for `ADVANCE_CHARGE_SIGNAL` (CAISO solar ramp).
+- **L7 Device Gateway (v5.8.0)**: Hardened **Sentinel Fidelity** logic and string-formatted scores (.toFixed(4)) for L11 parity. Integrated **helmet()** middleware and enhanced ISO 15118 certificate validation. Advanced OCPI 2.2 mapping to 75%.
+- **L1 Physics Engine (v10.1.2)**: Deployed **Hardened Offline Mode [L1-126]** for Redis metadata preservation during disconnects.
 
 ---
 

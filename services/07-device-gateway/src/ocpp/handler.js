@@ -226,7 +226,10 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
 function mapToOcpiStatus(ocppStatus) {
     switch (ocppStatus) {
         case 'Available': return 'AVAILABLE';
-        case 'Occupied': return 'BUSY';
+        case 'Occupied':
+        case 'Charging':
+        case 'Finishing':
+            return 'BUSY';
         case 'Reserved': return 'RESERVED';
         case 'Unavailable': return 'OUT_OF_ORDER';
         case 'Faulted': return 'INOPERATIVE';
