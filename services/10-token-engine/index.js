@@ -2,11 +2,17 @@ const { Client } = require('pg');
 const { Kafka } = require('kafkajs');
 const axios = require('axios');
 const express = require('express');
+const helmet = require('helmet');
+const jwt = require('jsonwebtoken');
 const Decimal = require('decimal.js');
 const redis = require('redis');
 
 const app = express();
+app.use(helmet());
+app.use(express.json());
+
 const port = process.env.PORT || 3010;
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const pgClient = new Client({ connectionString: process.env.DATABASE_URL });
 const kafka = new Kafka({
@@ -20,6 +26,25 @@ const redisClient = redis.createClient({
 });
 
 const consumer = kafka.consumer({ groupId: 'token-engine-group' });
+
+// Middleware: Verify JWT token
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) return res.status(401).json({ error: 'Access token required' });
+
+  if (!JWT_SECRET) {
+    console.error('[Security] JWT_SECRET is not configured. Rejecting authentication.');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Invalid or expired token' });
+    req.user = user;
+    next();
+  });
+};
 
 // Thresholds for Dynamic Multipliers (surplus/scarcity) - Configurable via ENV
 const LMP_THRESHOLD_SURPLUS = new Decimal(process.env.LMP_THRESHOLD_SURPLUS || '30.0');
@@ -150,9 +175,17 @@ app.get('/health', (req, res) => {
  * [Phase 6 AI Readiness]
  * GET /data/training/rewards
  * Exposes high-fidelity reward data for L11 ML Engine training.
+ * Security: Restricted to admin/system tokens (no fleet_id).
  */
-app.get('/data/training/rewards', async (req, res) => {
+app.get('/data/training/rewards', authenticateToken, async (req, res) => {
   const { site_id, limit = 100 } = req.query;
+
+  // Authorization: Only admin/system tokens (without fleet_id) can access global training data
+  if (req.user.fleet_id) {
+    console.warn(`[Security] Unauthorized global rewards data export attempt by fleet_id: ${req.user.fleet_id}`);
+    return res.status(403).json({ error: 'Forbidden: Unauthorized access to global training data.' });
+  }
+
   try {
     let query = 'SELECT * FROM token_reward_log WHERE is_sentinel_fidelity = TRUE';
     const params = [];
