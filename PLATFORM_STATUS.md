@@ -814,7 +814,7 @@ done
 | **L4** | Market Gateway | `3.8.5` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
 | **L6** | Engagement Engine | `5.15.0` | ✅ Operational |
-| **L7** | Device Gateway | `5.8.0` | ✅ Operational |
+| **L7** | Device Gateway | `5.9.0` | ✅ Operational |
 | **L8** | Energy Manager | `2.1.0` | ✅ Operational |
 | **L9** | Commerce Engine | `5.1.0` | ✅ Operational |
 | **L10**| Token Engine | `4.3.6` | ✅ Operational |
