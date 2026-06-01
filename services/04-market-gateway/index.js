@@ -1,5 +1,5 @@
 /**
- * L4: Market Gateway Service (v3.8.3)
+ * L4: Market Gateway Service (v3.8.6)
  * Wholesale energy market integration (CAISO, PJM, ERCOT)
  */
 
@@ -53,6 +53,13 @@ const consumer = kafka.consumer({ groupId: 'market-gateway-group' });
 app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
+
+/**
+ * Helper: Standardized site ID extraction for multi-key parity (L2/L3/L10)
+ */
+const extractSiteId = (payload) => {
+  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || 'SYSTEM_WIDE';
+};
 
 // Middleware: Verify JWT token
 const authenticateToken = (req, res, next) => {
@@ -201,10 +208,17 @@ async function startGridSignalConsumer() {
       try {
         const signal = JSON.parse(message.value.toString());
 
-        // [L4 v3.8.5] Robust Payload Extraction & Validation (Parity with L10)
-        const siteIdVal = signal.site_id || signal.siteId || signal.location_id || signal.locationId || 'SYSTEM_WIDE';
-        const physicsScore = signal.physics_score !== undefined ? parseFloat(signal.physics_score).toFixed(4) : "1.0000";
-        const confidenceScore = signal.confidence_score !== undefined ? parseFloat(signal.confidence_score).toFixed(4) : "1.0000";
+        // [L4 v3.8.6] Robust Payload Extraction & NaN Hardening (Parity with L10 v4.3.6)
+        const siteIdVal = extractSiteId(signal);
+
+        let physicsScoreRaw = signal.physics_score !== undefined ? parseFloat(signal.physics_score) : 1.0;
+        if (isNaN(physicsScoreRaw)) physicsScoreRaw = 1.0;
+        const physicsScore = physicsScoreRaw.toFixed(4);
+
+        let confidenceScoreRaw = signal.confidence_score !== undefined ? parseFloat(signal.confidence_score) : 1.0;
+        if (isNaN(confidenceScoreRaw)) confidenceScoreRaw = 1.0;
+        const confidenceScore = confidenceScoreRaw.toFixed(4);
+
         const isSentinelFidelity = signal.is_sentinel_fidelity === true ||
                                     signal.is_sentinel_fidelity === 'true' ||
                                     signal.is_sentinel_fidelity === 1;
@@ -336,7 +350,7 @@ app.get('/health', async (req, res) => {
 
   res.json({
     service: 'market-gateway',
-    version: '3.8.3',
+    version: '3.8.6',
     status: 'healthy',
     mode: process.env.USE_LIVE_DATA === 'true' ? 'LIVE' : 'SIMULATION',
     layer: 'L4',

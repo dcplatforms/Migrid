@@ -3,16 +3,16 @@ const { Kafka } = require('kafkajs');
 const axios = require('axios');
 const express = require('express');
 const helmet = require('helmet');
-const jwt = require('jsonwebtoken');
 const Decimal = require('decimal.js');
 const redis = require('redis');
 
 const app = express();
 app.use(helmet());
 app.use(express.json());
-
 const port = process.env.PORT || 3010;
 const JWT_SECRET = process.env.JWT_SECRET;
+
+app.use(helmet());
 
 const pgClient = new Client({ connectionString: process.env.DATABASE_URL });
 const kafka = new Kafka({
@@ -84,9 +84,13 @@ async function getOrCreateDriverWallet(driverId) {
 }
 
 async function logRewardTransaction(driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status = 'pending', iso = 'CAISO', physicsScore = null, isHighFidelity = false, multiplierReason = 'Standard Reward', confidenceScore = null, resourceType = 'EV', isSentinelFidelity = false, siteId = null) {
+  // L10 v4.3.6: Standardize physics and confidence scores as 4-decimal strings for L11 ML parity
+  const physicsScoreFormatted = (physicsScore !== null && physicsScore !== undefined) ? parseFloat(physicsScore).toFixed(4) : null;
+  const confidenceScoreFormatted = (confidenceScore !== null && confidenceScore !== undefined) ? parseFloat(confidenceScore).toFixed(4) : null;
+
   const res = await pgClient.query(
     'INSERT INTO token_reward_log(driver_id, rule_id, triggering_event_id, source_value, points_awarded, status, iso, physics_score, is_high_fidelity, multiplier_reason, confidence_score, resource_type, is_sentinel_fidelity, site_id) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *;',
-    [driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status, iso, physicsScore, isHighFidelity, multiplierReason, confidenceScore, resourceType, isSentinelFidelity, siteId]
+    [driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status, iso, physicsScoreFormatted, isHighFidelity, multiplierReason, confidenceScoreFormatted, resourceType, isSentinelFidelity, siteId]
   );
   return res.rows[0];
 }
@@ -96,6 +100,65 @@ async function updateRewardTransactionStatus(logId, newStatus, openWalletTransac
     'UPDATE token_reward_log SET status = $1, open_wallet_transaction_id = $2 WHERE log_id = $3;',
     [newStatus, openWalletTransactionId, logId]
   );
+}
+
+let isBatchProcessing = false;
+
+/**
+ * [L10-P3] Gas-Optimized Batch Minting Worker
+ * Processes queued rewards asynchronously to optimize blockchain throughput.
+ * v4.3.6: Implements atomic status transition and overlap protection to prevent double-minting.
+ */
+async function processBatchMint() {
+  if (isBatchProcessing) return;
+  isBatchProcessing = true;
+
+  try {
+    // Atomic state transition: Mark as 'processing' using FOR UPDATE SKIP LOCKED
+    // to ensure multi-instance safety.
+    const res = await pgClient.query(`
+      WITH target_rewards AS (
+        SELECT log_id FROM token_reward_log
+        WHERE status = 'queued'
+        ORDER BY created_at ASC
+        LIMIT 50
+        FOR UPDATE SKIP LOCKED
+      )
+      UPDATE token_reward_log
+      SET status = 'processing', updated_at = NOW()
+      FROM target_rewards
+      WHERE token_reward_log.log_id = target_rewards.log_id
+      RETURNING token_reward_log.*, (SELECT open_wallet_address FROM driver_wallets WHERE driver_id = token_reward_log.driver_id) as open_wallet_address;
+    `);
+
+    if (res.rows.length === 0) {
+      isBatchProcessing = false;
+      return;
+    }
+
+    console.log(`[L10 Batch Worker] Processing ${res.rows.length} rewards...`);
+
+    for (const reward of res.rows) {
+      try {
+        const openWalletResponse = await axios.post(`${process.env.OPEN_WALLET_API_URL}/transactions`, {
+          walletAddress: reward.open_wallet_address,
+          amount: parseFloat(reward.points_awarded),
+          currency: 'MiGridPoints',
+          referenceId: reward.log_id
+        });
+
+        await updateRewardTransactionStatus(reward.log_id, 'complete', openWalletResponse.data.transactionId);
+        console.log(`✅ [L10 Batch] Reward minted for log ${reward.log_id}: ${reward.points_awarded} points`);
+      } catch (err) {
+        console.error(`❌ [L10 Batch] Reward failed for log ${reward.log_id}:`, err.message);
+        await updateRewardTransactionStatus(reward.log_id, 'failed');
+      }
+    }
+  } catch (error) {
+    console.error('[L10 Batch Worker Error]', error.message);
+  } finally {
+    isBatchProcessing = false;
+  }
 }
 
 /**
@@ -165,7 +228,7 @@ async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '4.3.5',
+    version: '4.3.6',
     status: 'healthy',
     layer: 'L10'
   });
@@ -202,7 +265,7 @@ app.get('/data/training/rewards', authenticateToken, async (req, res) => {
     res.json({
       count: result.rows.length,
       data: result.rows,
-      source: 'L10_TOKEN_ENGINE_V4.3.5',
+      source: 'L10_TOKEN_ENGINE_V4.3.6',
       fidelity_tier: 'SENTINEL'
     });
   } catch (error) {
@@ -211,7 +274,98 @@ app.get('/data/training/rewards', authenticateToken, async (req, res) => {
   }
 });
 
+// --- Asynchronous Reward Batching (L10-P3) ---
+
+let isBatchProcessing = false;
+
+async function processBatchMint() {
+  if (isBatchProcessing) return;
+  isBatchProcessing = true;
+
+  try {
+    // Atomic claiming of queued rewards: transitions status to 'processing' to prevent double-minting
+    const res = await pgClient.query(`
+      UPDATE token_reward_log
+      SET status = 'processing'
+      WHERE log_id IN (
+        SELECT log_id
+        FROM token_reward_log
+        WHERE status = 'queued'
+        ORDER BY created_at ASC
+        LIMIT 10
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING log_id, driver_id, points_awarded;
+    `);
+
+    if (res.rows.length === 0) {
+      isBatchProcessing = false;
+      return;
+    }
+
+    console.log(`[L10 Batch] Claimed ${res.rows.length} rewards for processing...`);
+
+    for (const row of res.rows) {
+      const driverWallet = await getOrCreateDriverWallet(row.driver_id);
+      try {
+        const openWalletResponse = await axios.post(`${process.env.OPEN_WALLET_API_URL}/transactions`, {
+          walletAddress: driverWallet.open_wallet_address,
+          amount: parseFloat(row.points_awarded),
+          currency: 'MiGridPoints',
+          referenceId: row.log_id
+        });
+        await updateRewardTransactionStatus(row.log_id, 'complete', openWalletResponse.data.transactionId);
+        console.log(`✅ [L10 Batch] Reward minted for log ${row.log_id}: ${row.points_awarded} points.`);
+      } catch (error) {
+        console.error(`❌ [L10 Batch] Reward failed for log ${row.log_id}:`, error.message);
+        // On failure, revert status back to 'queued' or mark as 'failed' based on error type
+        // For now, we follow platform standard and mark as 'failed' to avoid infinite retry loops without backoff
+        await updateRewardTransactionStatus(row.log_id, 'failed');
+      }
+    }
+  } catch (error) {
+    console.error('[L10 Batch] Error processing batch:', error.message);
+  } finally {
+    isBatchProcessing = false;
+  }
+}
+
 // --- Main Application Logic ---
+
+/**
+ * [L10-P3] Batch Minting Worker
+ * Periodically processes queued rewards to simulate gas-optimized batch transactions.
+ */
+async function processBatchMint() {
+  try {
+    const queuedRewards = await pgClient.query(
+      "SELECT log.*, dw.open_wallet_address FROM token_reward_log log JOIN driver_wallets dw ON log.driver_id = dw.driver_id WHERE log.status = 'queued' LIMIT 50;"
+    );
+
+    if (queuedRewards.rows.length === 0) return;
+
+    console.log(`[L10 Batch Worker] Processing ${queuedRewards.rows.length} queued rewards...`);
+
+    for (const reward of queuedRewards.rows) {
+      try {
+        // 6. Execute Blockchain/Wallet Transaction (Asynchronous Batch)
+        const openWalletResponse = await axios.post(`${process.env.OPEN_WALLET_API_URL}/transactions`, {
+          walletAddress: reward.open_wallet_address,
+          amount: parseFloat(reward.points_awarded),
+          currency: 'MiGridPoints',
+          referenceId: reward.log_id
+        });
+        await updateRewardTransactionStatus(reward.log_id, 'complete', openWalletResponse.data.transactionId);
+        console.log(`✅ [L10 Batch] Processed reward ${reward.log_id} for driver ${reward.driver_id}`);
+      } catch (error) {
+        console.error(`❌ [L10 Batch] Failed to process reward ${reward.log_id}:`, error.message);
+        await updateRewardTransactionStatus(reward.log_id, 'failed');
+      }
+    }
+  } catch (error) {
+    console.error('[L10 Batch Worker] Critical Error:', error.message);
+  }
+}
 
 async function start() {
   try {
@@ -228,6 +382,8 @@ async function start() {
       app.listen(port, () => {
         console.log(`✅ [L10 Token Engine] Health check server running on port ${port}`);
       });
+      // L10-P3: Start Background Batch Minting Worker (30s interval)
+      setInterval(processBatchMint, 30000);
     }
 
     await consumer.run({
@@ -309,8 +465,8 @@ async function start() {
                                      (physicsScorePersist !== null && physicsScorePersist > 0.95) ||
                                      (confidenceScorePersist !== null && confidenceScorePersist > 0.95);
 
-        // L10 v4.3.4 Sentinel Fidelity Tier: physics_score > 0.99 or explicit sentinel flag
-        let isSentinelFidelityPersist = (isSentinelFidelityVal === true || isSentinelFidelityVal === 'true') ||
+        // L10 v4.3.6 Sentinel Fidelity Tier: physics_score > 0.99 or explicit sentinel flag (supports boolean, string 'true', and integer 1)
+        let isSentinelFidelityPersist = (isSentinelFidelityVal === true || isSentinelFidelityVal === 'true' || isSentinelFidelityVal === 1) ||
                                          (physicsScorePersist !== null && physicsScorePersist > 0.99);
 
         // Fetch rule early for idempotency check
@@ -367,14 +523,14 @@ async function start() {
           return;
         }
 
-        // 4. Log the Reward (pending)
-        const rewardLog = await logRewardTransaction(
+        // 4. Log the Reward (queued for batch minting)
+        await logRewardTransaction(
           driver_id,
           rule_id,
           event_id,
           source_value || 0,
           pointsAwarded.toNumber(),
-          'pending',
+          'queued',
           iso,
           physicsScorePersist,
           isHighFidelityPersist,
@@ -385,20 +541,7 @@ async function start() {
           siteIdVal
         );
 
-        // 6. Execute Blockchain/Wallet Transaction
-        try {
-          const openWalletResponse = await axios.post(`${process.env.OPEN_WALLET_API_URL}/transactions`, {
-            walletAddress: driverWallet.open_wallet_address,
-            amount: pointsAwarded.toNumber(),
-            currency: 'MiGridPoints',
-            referenceId: rewardLog.log_id
-          });
-          await updateRewardTransactionStatus(rewardLog.log_id, 'complete', openWalletResponse.data.transactionId);
-          console.log(`✅ [L10] Reward minted: ${pointsAwarded.toNumber()} points (${multiplierReason})`);
-        } catch (error) {
-          console.error(`❌ [L10] Reward failed for log ${rewardLog.log_id}:`, error.message);
-          await updateRewardTransactionStatus(rewardLog.log_id, 'failed');
-        }
+        console.log(`[L10 Reward Queue] Reward of ${pointsAwarded.toNumber()} points for ${action_type} (Event: ${event_id}) added to minting queue.`);
       } catch (error) {
         console.error(`[L10] Error processing Kafka message on topic ${topic}:`, error.message);
       }

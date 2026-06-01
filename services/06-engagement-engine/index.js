@@ -123,7 +123,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.14.0', // Weekly Mission: Phase 6 AI Readiness & Multi-Site Achievements
+    version: '5.16.0', // Weekly Mission: Phase 6 Data Pioneer & Hardened Telemetry
     status: 'healthy',
     layer: 'L6'
   });
@@ -331,9 +331,9 @@ async function processChargingEvent(event) {
     if (event.confidence_score !== undefined) confidence_score = parseFloat(event.confidence_score);
     else if (event.confidenceScore !== undefined) confidence_score = parseFloat(event.confidenceScore);
 
-    // Robust boolean detection for is_sentinel_fidelity (supporting boolean and string formats)
-    const isSentinelFidelity = (event.is_sentinel_fidelity === true || event.is_sentinel_fidelity === 'true' ||
-                               event.isSentinelFidelity === true || event.isSentinelFidelity === 'true' ||
+    // Robust boolean detection for is_sentinel_fidelity (supporting boolean, string, and integer formats)
+    const isSentinelFidelity = (event.is_sentinel_fidelity === true || event.is_sentinel_fidelity === 'true' || event.is_sentinel_fidelity === 1 ||
+                               event.isSentinelFidelity === true || event.isSentinelFidelity === 'true' || event.isSentinelFidelity === 1 ||
                                physics_score > 0.99);
 
     isHighFidelity = physics_score > 0.95 || confidence_score > 0.95;
@@ -376,6 +376,7 @@ async function processChargingEvent(event) {
       await checkSentinelOfTheGridAchievement(driverId, vehicleId);
       await checkHighConfidenceAchievement(driverId, vehicleId);
       await checkSiteHarmonyAchievement(driverId, vehicleId);
+      await checkPhase6DataPioneerAchievement(driverId);
 
       // [L6-v5.9.0] BESS Specific Achievements
       if (resourceType === 'BESS') {
@@ -485,8 +486,8 @@ async function processChargingEvent(event) {
             source_value: parseFloat(event.energyDispensedKwh),
             event_id: sessionId,
             iso: iso,
-            physics_score: physics_score,
-            confidence_score: confidence_score,
+            physics_score: physics_score.toFixed(4),
+            confidence_score: confidence_score.toFixed(4),
             is_high_fidelity: isHighFidelity,
             is_vpp_event: !!(event.isVPPEvent || event.is_vpp_event),
             multiplier_reason: multiplierReason,
@@ -503,8 +504,8 @@ async function processChargingEvent(event) {
             source_value: parseFloat(event.energyDispensedKwh),
             event_id: sessionId,
             iso: iso,
-            physics_score: physics_score,
-            confidence_score: confidence_score,
+            physics_score: physics_score.toFixed(4),
+            confidence_score: confidence_score.toFixed(4),
             is_high_fidelity: isHighFidelity,
             is_vpp_event: !!(event.isVPPEvent || event.is_vpp_event),
             multiplier_reason: multiplierReason,
@@ -565,7 +566,7 @@ async function processChargingEvent(event) {
           source_value: energyDischargedKwh,
           event_id: sessionId,
           iso: iso,
-          physics_score: 1.0, // V2G discharge is verified by protocol and VPP controller
+          physics_score: (1.0).toFixed(4), // V2G discharge is verified by protocol and VPP controller
           is_high_fidelity: true,
           multiplier_reason: multiplierReason,
           resource_type: event.resourceType || event.resource_type || 'EV' // Propagate resource type for L10 auditing
@@ -729,6 +730,7 @@ async function handleAdvanceChargeSignal(payload) {
 
       // Check for Solar Surge achievement
       await checkSolarSurgeAchievement(driverId);
+      await checkSolarFlareAchievement(driverId);
     }
   } catch (error) {
     console.error('[Engagement] Error handling Advance Charge signal:', error);
@@ -748,8 +750,9 @@ async function handleVPPParticipationUpdate(payload) {
 }
 
 async function handleGridSignal(payload) {
-  const { event_id, priority, site_id } = payload;
-  console.log(`[L6] Handling Grid Signal for Team Challenge: ${event_id} (${priority}) - Site: ${site_id}`);
+  const { event_id, priority } = payload;
+  const siteIdVal = payload.site_id || payload.siteId || payload.location_id || payload.locationId || 'ALL';
+  console.log(`[L6] Handling Grid Signal for Team Challenge: ${event_id} (${priority}) - Site: ${siteIdVal}`);
 
   try {
     // 1. Fully Bulked Database Operation:
@@ -868,7 +871,7 @@ async function handleGridSignal(payload) {
       LEFT JOIN completed_challenges cc ON td.driver_id = cc.driver_id
       LEFT JOIN new_achievements na ON td.driver_id = na.driver_id
       GROUP BY td.driver_id, td.iso
-    `, [site_id || 'ALL', JSON.stringify({ event_id })]);
+    `, [siteIdVal, JSON.stringify({ event_id })]);
 
     // 2. Optimized Notification & L10 Payout Handling
     for (const row of results.rows) {
@@ -904,7 +907,7 @@ async function handleGridSignal(payload) {
               source_value: reward,
               event_id: chalId,
               iso: row.iso,
-              physics_score: 1.0,
+              physics_score: (1.0).toFixed(4),
               is_high_fidelity: true
             })
           }]
@@ -941,7 +944,7 @@ async function handleGridSignal(payload) {
               source_value: points,
               event_id: achId,
               iso: row.iso,
-              physics_score: 1.0,
+              physics_score: (1.0).toFixed(4),
               is_high_fidelity: true
             })
           }]
@@ -1217,7 +1220,7 @@ async function updateChallengeProgress(driver_id, challenge_type) {
               source_value: chal.rows[0].token_reward || chal.rows[0].points_reward,
               event_id: challenge.id,
               iso: isoForChallenge,
-              physics_score: 1.0, // Behavioral achievements are logically verified
+              physics_score: (1.0).toFixed(4), // Behavioral achievements are logically verified
               is_high_fidelity: true
             })
           }]
@@ -1490,6 +1493,54 @@ async function checkSolarSurgeAchievement(driver_id) {
   }
 }
 
+async function checkSolarFlareAchievement(driver_id) {
+  try {
+    const count = await pool.query(`
+      SELECT COUNT(*) FROM driver_actions
+      WHERE driver_id = $1 AND action_type = 'solar_ramp_response'
+    `, [driver_id]);
+
+    if (parseInt(count.rows[0].count) >= 25) {
+      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Solar Flare'");
+      if (achievement.rows.length > 0) {
+        await awardAchievement(driver_id, achievement.rows[0].id);
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking Solar Flare achievement:', error);
+  }
+}
+
+async function checkPhase6DataPioneerAchievement(driver_id) {
+  // Requirement: 5 consecutive sessions with physics_score > 0.99
+  // This supports Phase 6 AI transition by rewarding consistently perfect data.
+  try {
+    const result = await pool.query(`
+      WITH recent_sessions AS (
+        SELECT (metadata->>'physics_score')::float as physics_score
+        FROM driver_actions
+        WHERE driver_id = $1 AND action_type = 'session_completed'
+        ORDER BY created_at DESC
+        LIMIT 5
+      )
+      SELECT COUNT(*) as total,
+             COUNT(*) FILTER (WHERE physics_score > 0.99) as perfect_count
+      FROM recent_sessions
+    `, [driver_id]);
+
+    const { total, perfect_count } = result.rows[0];
+
+    if (parseInt(total) >= 5 && parseInt(perfect_count) === 5) {
+      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Phase 6 Data Pioneer'");
+      if (achievement.rows.length > 0) {
+        await awardAchievement(driver_id, achievement.rows[0].id);
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking Phase 6 Data Pioneer achievement:', error);
+  }
+}
+
 async function checkSustainabilityChampion(driver_id) {
   // 100% Compliance Check: Verify at least one valid session for each of the last 30 consecutive days.
   // This enforces the "Green Audit" (<15% variance) via the L1-verified 'is_valid' flag.
@@ -1581,7 +1632,7 @@ async function awardAchievement(driver_id, achievement_id) {
           source_value: points,
           event_id: achievement_id,
           iso: iso,
-          physics_score: 1.0, // Achievements are logically verified behavioral states
+          physics_score: (1.0).toFixed(4), // Achievements are logically verified behavioral states
           is_high_fidelity: true
         })
       }]
@@ -1730,9 +1781,12 @@ module.exports = {
   pool,
   redisClient,
   processChargingEvent,
+  handleGridSignal,
   checkHighConfidenceAchievement,
   checkSiteHarmonyAchievement,
   updateChallengeProgress,
   handleAdvanceChargeSignal,
-  checkSolarSurgeAchievement
+  checkSolarSurgeAchievement,
+  checkPhase6DataPioneerAchievement,
+  producer
 };

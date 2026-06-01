@@ -9,6 +9,13 @@ const kafka = new Kafka({
 
 const producer = kafka.producer();
 
+/**
+ * Helper: Standardized site ID extraction for multi-key parity (L2, L3, L4, L10)
+ */
+const extractSiteId = (payload) => {
+    return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
+};
+
 async function connectProducer() {
     try {
         await producer.connect();
@@ -32,17 +39,26 @@ async function getHighFidelityMetadata() {
     if (safetyContextRaw) {
         try {
             const context = JSON.parse(safetyContextRaw);
-            const physicsVal = context.physics_score !== undefined ? parseFloat(context.physics_score) : 1.0;
-            const confidenceVal = context.confidence_score !== undefined ? parseFloat(context.confidence_score) : 1.0;
+
+            // [L7-v5.10.0] Robust parseFloat with isNaN protection for ML deterministic telemetry
+            const rawPhysics = parseFloat(context.physics_score);
+            const rawConfidence = parseFloat(context.confidence_score);
+
+            const physicsVal = isNaN(rawPhysics) ? 1.0 : rawPhysics;
+            const confidenceVal = isNaN(rawConfidence) ? 1.0 : rawConfidence;
 
             // [L1-124] April 2026 High-Fidelity Standard: Physics OR Confidence > 0.95 OR explicit flag
-            const explicitHighFidelity = context.is_high_fidelity === true || context.is_high_fidelity === 'true';
+            const explicitHighFidelity = context.is_high_fidelity === true ||
+                                         context.is_high_fidelity === 'true' ||
+                                         context.is_high_fidelity === 1;
             isHighFidelity = explicitHighFidelity || (physicsVal > 0.95 || confidenceVal > 0.95);
 
-            // [L7-128] Hardened Sentinel Fidelity: Prioritize explicit flag (boolean or string 'true')
-            // with fallback to physics_score > 0.99. Aligns with L1 v10.1.3 and L10 v4.3.4.
-            const explicitSentinel = context.is_sentinel_fidelity === true || context.is_sentinel_fidelity === 'true';
-            isSentinelFidelity = explicitSentinel || (physicsVal > 0.99);
+            // [L7-128] Hardened Sentinel Fidelity: Prioritize explicit flag (boolean, string 'true', or integer 1)
+            // with fallback to physics_score > 0.99. Aligns with L1 v10.1.4 and L10 v4.3.5.
+            const explicitSentinel = context.is_sentinel_fidelity === true ||
+                                     context.is_sentinel_fidelity === 'true' ||
+                                     context.is_sentinel_fidelity === 1;
+            isSentinelFidelity = !!(explicitSentinel || (physicsVal > 0.99));
 
             fidelityStatus = isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD';
 
@@ -108,7 +124,7 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
         is_sentinel_fidelity: hf.isSentinelFidelity,
         fidelity_status: hf.fidelityStatus,
         resource_type: resourceType,
-        source: 'L7_GATEWAY_V5.7.0'
+        source: 'L7_GATEWAY_V5.10.0'
     };
 
     await producer.send({
@@ -127,7 +143,7 @@ async function publishSessionEvent(type, payload) {
     const chargePointId = payload.chargePointId || payload.evseId;
     const rawRegion = payload.iso_region || (chargePointId ? await redis.get(`charger_region:${chargePointId}`) : 'CAISO') || 'CAISO';
     const isoRegion = rawRegion.toUpperCase().replace(/-/g, '');
-    const siteId = payload.site_id || (chargePointId ? await redis.get(`charger_site:${chargePointId}`) : null);
+    const siteId = extractSiteId(payload) || (chargePointId ? await redis.get(`charger_site:${chargePointId}`) : null);
 
     const enrichedPayload = {
         ...payload,
