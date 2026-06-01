@@ -1,5 +1,5 @@
 /**
- * L2: Grid Signal Service (v2.5.2)
+ * L2: Grid Signal Service (v2.5.3)
  * OpenADR 3.0 VEN implementation for demand response and price signals
  * Enhanced with L1 Physics Safety Guards and Redis Caching
  */
@@ -75,6 +75,15 @@ const extractSiteId = (payload) => {
 };
 
 /**
+ * Helper: Robust float parsing with isNaN protection
+ * [L2 v2.5.3] Aligned with L4 v3.8.6 standards
+ */
+const safeFloat = (val, fallback = 1.0) => {
+  const parsed = parseFloat(val);
+  return isNaN(parsed) ? fallback : parsed;
+};
+
+/**
  * Middleware: Verify JWT token (Zero-Trust Security)
  */
 const authenticateToken = (req, res, next) => {
@@ -103,7 +112,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.5.2',
+    version: '2.5.3',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -152,9 +161,15 @@ app.get('/openadr/v3/reports', authenticateToken, async (req, res) => {
     if (safetyContext) {
       if (safetyContext.vin) safetyContext.vin = '[MASKED]';
       if (safetyContext.vehicle_id) safetyContext.vehicle_id = '[MASKED]';
+
+      // Ensure scores are strictly string-formatted (v2.5.3)
+      if (safetyContext.physics_score !== undefined) safetyContext.physics_score = safeFloat(safetyContext.physics_score, 1.0).toFixed(4);
+      if (safetyContext.confidence_score !== undefined) safetyContext.confidence_score = safeFloat(safetyContext.confidence_score, 1.0).toFixed(4);
+
       // Ensure sentinel flag is explicitly boolean, handling boolean, string, and integer formats (v2.5.2)
       const rawSentinel = safetyContext.is_sentinel_fidelity;
-      safetyContext.is_sentinel_fidelity = !!(rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || safetyContext.physics_score > 0.99);
+      const pScore = safeFloat(safetyContext.physics_score, 1.0);
+      safetyContext.is_sentinel_fidelity = !!(rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || pScore > 0.99);
     }
 
     res.json({
@@ -305,9 +320,9 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
       // [L2-v2.4.5/6] Enhanced High-Fidelity Kafka Broadcast with Confidence & Regional Context
       // [L2-v2.4.6] Prioritize regional average confidence if no safety lock is active
       const regionalAvgConfidence = unifiedContext?.regional_confidence?.[isoRegion] ?? 1.0;
-      const confidenceScore = parseFloat((safetyContext.confidence_score !== undefined) ? safetyContext.confidence_score :
-                                         (safetyContext.physics_score !== undefined ? safetyContext.physics_score : regionalAvgConfidence.toString()));
-      const physicsScore = parseFloat(safetyContext.physics_score ?? '1.0000');
+      const confidenceScore = safeFloat((safetyContext.confidence_score !== undefined) ? safetyContext.confidence_score :
+                                         (safetyContext.physics_score !== undefined ? safetyContext.physics_score : regionalAvgConfidence.toString()), 1.0);
+      const physicsScore = safeFloat(safetyContext.physics_score ?? '1.0000', 1.0);
       // [L2 v2.5.2] Hardened sentinel detection supporting boolean, string, and integer formats
       const rawSentinel = safetyContext.is_sentinel_fidelity;
       const isSentinelFidelity = !!(rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || physicsScore > 0.99);
@@ -430,19 +445,22 @@ const updateRegionalStats = async () => {
           }
           context.digital_twin[iso].vehicle_count++;
           if (data) {
+            const pScore = safeFloat(data.physics_score, 1.0);
+            const cScore = safeFloat(data.confidence_score, 1.0);
+
             // [L1-124] Aligned High-Fidelity Standard
-            if (data.is_high_fidelity || data.physics_score > 0.95 || data.confidence_score > 0.95) {
+            if (data.is_high_fidelity || pScore > 0.95 || cScore > 0.95) {
               context.digital_twin[iso].high_fidelity_count++;
             }
             const rawSentinel = data.is_sentinel_fidelity;
-            if (rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || data.physics_score > 0.99) {
+            if (rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || pScore > 0.99) {
               context.digital_twin[iso].sentinel_fidelity_count++;
             }
             if (data.resource_type === 'EV') context.digital_twin[iso].ev_count++;
             if (data.resource_type === 'BESS') context.digital_twin[iso].bess_count++;
 
             // [L2-v2.4.6] Track confidence sum for regional average
-            confidenceSums[iso] += parseFloat(data.confidence_score || '1.0');
+            confidenceSums[iso] += cScore;
           } else {
             confidenceSums[iso] += 1.0;
           }
@@ -454,7 +472,7 @@ const updateRegionalStats = async () => {
     Object.keys(context.digital_twin).forEach(iso => {
       const count = context.digital_twin[iso].vehicle_count;
       if (count > 0) {
-        context.regional_confidence[iso] = parseFloat((confidenceSums[iso] / count).toFixed(4));
+        context.regional_confidence[iso] = safeFloat((confidenceSums[iso] / count).toFixed(4), 1.0);
       } else {
         context.regional_confidence[iso] = 1.0;
       }
@@ -525,8 +543,8 @@ const updateRegionalStats = async () => {
       try {
         const safetyContext = JSON.parse(safetyContextRaw);
         // [L2 v2.4.5] Prioritize explicit confidence_score from L1 context
-        context.confidence_score = parseFloat((safetyContext.confidence_score !== undefined) ? safetyContext.confidence_score :
-                                               (safetyContext.physics_score !== undefined ? safetyContext.physics_score : '1.0'));
+        context.confidence_score = safeFloat((safetyContext.confidence_score !== undefined) ? safetyContext.confidence_score :
+                                               (safetyContext.physics_score !== undefined ? safetyContext.physics_score : '1.0'), 1.0);
       } catch (e) {}
     } else {
       context.confidence_score = 1.0; // Default to full confidence if no locks/alerts
@@ -620,20 +638,21 @@ async function startSafetyConsumer() {
         // [L2 v2.4.4] BESS Invariant: 10% variance threshold; EV Invariant: 15% threshold.
         const isCritical = payload.severity === 'CRITICAL' || payload.severity === 'FRAUD';
         const varianceThreshold = payload.resource_type === 'BESS' ? 10 : 15;
-        const isHighVariance = payload.variance_pct > varianceThreshold;
+        const vPct = safeFloat(payload.variance_pct, 0.0);
+        const isHighVariance = vPct > varianceThreshold;
 
         if (isHighVariance || isCritical) {
           const reason = isHighVariance ? 'HIGH_VARIANCE_THRESHOLD' : payload.event_type;
 
           // CORE INVARIANT: Respect physics variance thresholds from L1 Physics Engine
           if (isHighVariance) {
-            console.error(`🚨 [L2] CRITICAL INVARIANT VIOLATION: Variance (${payload.variance_pct}%) exceeds ${varianceThreshold}% threshold for ${payload.resource_type || 'EV'} on Site ${siteIdVal}. Locking grid dispatch.`);
+            console.error(`🚨 [L2] CRITICAL INVARIANT VIOLATION: Variance (${vPct}%) exceeds ${varianceThreshold}% threshold for ${payload.resource_type || 'EV'} on Site ${siteIdVal}. Locking grid dispatch.`);
           } else {
             console.error(`🚨 [L2] L1 SAFETY ALERT: ${reason} on Site ${siteIdVal}. Region: ${payload.iso_region}. Locking grid dispatch.`);
           }
 
           // Detailed logging for engineering audit
-          console.log(`[L2 Audit] Metadata: Vehicle=${payload.vehicle_id}, VIN=${payload.vin}, SoC=${payload.current_soc}%, Variance=${payload.variance_pct}%, Billing=${payload.billing_mode}, VPP_Active=${payload.vpp_active}, V2G_Active=${payload.v2g_active}`);
+          console.log(`[L2 Audit] Metadata: Vehicle=${payload.vehicle_id}, VIN=${payload.vin}, SoC=${payload.current_soc}%, Variance=${vPct}%, Billing=${payload.billing_mode}, VPP_Active=${payload.vpp_active}, V2G_Active=${payload.v2g_active}`);
 
           // Unified Safety Lock: Set to '1' for L4 compatibility, with 15m TTL
           await redisClient.setEx(SAFETY_LOCK_KEY, 900, '1');
@@ -641,18 +660,21 @@ async function startSafetyConsumer() {
           // Store detailed alert context for UI/Diagnostics and downstream layer alignment
           // [L2 v2.5.2] Hardened sentinel detection supporting boolean, string, and integer formats
           const rawSentinel = payload.is_sentinel_fidelity;
-          const isSentinelFidelity = !!(rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || payload.physics_score > 0.99);
+          const pScore = safeFloat(payload.physics_score, 1.0);
+          const isSentinelFidelity = !!(rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || pScore > 0.99);
 
           await redisClient.setEx(`${SAFETY_LOCK_KEY}:context`, 900, JSON.stringify({
             ...payload,
             reason,
-            message: isHighVariance ? `Variance (${payload.variance_pct}%) exceeds ${varianceThreshold}% threshold for ${payload.resource_type || 'EV'}` : undefined,
+            message: isHighVariance ? `Variance (${vPct}%) exceeds ${varianceThreshold}% threshold for ${payload.resource_type || 'EV'}` : undefined,
             billing_mode: payload.billing_mode,
             vpp_active: payload.vpp_active,
             v2g_active: payload.v2g_active,
             iso_region: payload.iso_region,
             is_sentinel_fidelity: isSentinelFidelity,
-            market_price_at_session: payload.market_price_at_session,
+            physics_score: pScore.toFixed(4),
+            confidence_score: safeFloat(payload.confidence_score, pScore).toFixed(4),
+            market_price_at_session: safeFloat(payload.market_price_at_session, 0.0),
             locked_at: new Date().toISOString()
           }));
         }
