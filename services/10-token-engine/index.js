@@ -10,6 +10,7 @@ const app = express();
 app.use(helmet());
 app.use(express.json());
 const port = process.env.PORT || 3010;
+const JWT_SECRET = process.env.JWT_SECRET;
 
 app.use(helmet());
 
@@ -25,6 +26,25 @@ const redisClient = redis.createClient({
 });
 
 const consumer = kafka.consumer({ groupId: 'token-engine-group' });
+
+// Middleware: Verify JWT token
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) return res.status(401).json({ error: 'Access token required' });
+
+  if (!JWT_SECRET) {
+    console.error('[Security] JWT_SECRET is not configured. Rejecting authentication.');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Invalid or expired token' });
+    req.user = user;
+    next();
+  });
+};
 
 // Thresholds for Dynamic Multipliers (surplus/scarcity) - Configurable via ENV
 const LMP_THRESHOLD_SURPLUS = new Decimal(process.env.LMP_THRESHOLD_SURPLUS || '30.0');
@@ -63,17 +83,10 @@ async function getOrCreateDriverWallet(driverId) {
   return res.rows[0];
 }
 
-<<<<<<< l10-v4-3-6-batching-security-13573332159384560235
-async function logRewardTransaction(driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status = 'queued', iso = 'CAISO', physicsScore = null, isHighFidelity = false, multiplierReason = 'Standard Reward', confidenceScore = null, resourceType = 'EV', isSentinelFidelity = false, siteId = null) {
-  // April 2026 Audit Standard: Strict 4-decimal formatting for physics/confidence scores
-  const physicsScoreFormatted = (physicsScore !== null && !isNaN(physicsScore)) ? parseFloat(physicsScore).toFixed(4) : null;
-  const confidenceScoreFormatted = (confidenceScore !== null && !isNaN(confidenceScore)) ? parseFloat(confidenceScore).toFixed(4) : null;
-=======
 async function logRewardTransaction(driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status = 'pending', iso = 'CAISO', physicsScore = null, isHighFidelity = false, multiplierReason = 'Standard Reward', confidenceScore = null, resourceType = 'EV', isSentinelFidelity = false, siteId = null) {
   // L10 v4.3.6: Standardize physics and confidence scores as 4-decimal strings for L11 ML parity
   const physicsScoreFormatted = (physicsScore !== null && physicsScore !== undefined) ? parseFloat(physicsScore).toFixed(4) : null;
   const confidenceScoreFormatted = (confidenceScore !== null && confidenceScore !== undefined) ? parseFloat(confidenceScore).toFixed(4) : null;
->>>>>>> main
 
   const res = await pgClient.query(
     'INSERT INTO token_reward_log(driver_id, rule_id, triggering_event_id, source_value, points_awarded, status, iso, physics_score, is_high_fidelity, multiplier_reason, confidence_score, resource_type, is_sentinel_fidelity, site_id) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *;',
@@ -225,9 +238,17 @@ app.get('/health', (req, res) => {
  * [Phase 6 AI Readiness]
  * GET /data/training/rewards
  * Exposes high-fidelity reward data for L11 ML Engine training.
+ * Security: Restricted to admin/system tokens (no fleet_id).
  */
-app.get('/data/training/rewards', async (req, res) => {
+app.get('/data/training/rewards', authenticateToken, async (req, res) => {
   const { site_id, limit = 100 } = req.query;
+
+  // Authorization: Only admin/system tokens (without fleet_id) can access global training data
+  if (req.user.fleet_id) {
+    console.warn(`[Security] Unauthorized global rewards data export attempt by fleet_id: ${req.user.fleet_id}`);
+    return res.status(403).json({ error: 'Forbidden: Unauthorized access to global training data.' });
+  }
+
   try {
     let query = 'SELECT * FROM token_reward_log WHERE is_sentinel_fidelity = TRUE';
     const params = [];
@@ -361,14 +382,8 @@ async function start() {
       app.listen(port, () => {
         console.log(`✅ [L10 Token Engine] Health check server running on port ${port}`);
       });
-<<<<<<< l10-v4-3-6-batching-security-13573332159384560235
-
-      // Start the Reward Batching Worker (L10-P3)
-      setInterval(processBatchMint, 10000); // Process every 10 seconds
-=======
       // L10-P3: Start Background Batch Minting Worker (30s interval)
       setInterval(processBatchMint, 30000);
->>>>>>> main
     }
 
     await consumer.run({
@@ -508,13 +523,8 @@ async function start() {
           return;
         }
 
-<<<<<<< l10-v4-3-6-batching-security-13573332159384560235
-        // 4. Log the Reward (queued for batch processing)
-        const rewardLog = await logRewardTransaction(
-=======
         // 4. Log the Reward (queued for batch minting)
         await logRewardTransaction(
->>>>>>> main
           driver_id,
           rule_id,
           event_id,
@@ -530,12 +540,8 @@ async function start() {
           isSentinelFidelityPersist,
           siteIdVal
         );
-<<<<<<< l10-v4-3-6-batching-security-13573332159384560235
-        console.log(`[L10] Reward queued for event ${event_id}: ${pointsAwarded.toNumber()} points (${multiplierReason})`);
-=======
 
         console.log(`[L10 Reward Queue] Reward of ${pointsAwarded.toNumber()} points for ${action_type} (Event: ${event_id}) added to minting queue.`);
->>>>>>> main
       } catch (error) {
         console.error(`[L10] Error processing Kafka message on topic ${topic}:`, error.message);
       }
