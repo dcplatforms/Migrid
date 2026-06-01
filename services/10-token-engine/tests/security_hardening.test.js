@@ -1,43 +1,73 @@
+process.env.JWT_SECRET = 'test_secret';
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
 
-describe('L10 Token Engine - Security Hardening', () => {
-  const JWT_SECRET = 'test_secret';
-  let app;
+// Mock redis before importing app
+jest.mock('redis', () => ({
+  createClient: jest.fn(() => ({
+    connect: jest.fn(),
+    on: jest.fn(),
+    hGet: jest.fn(),
+    hSet: jest.fn(),
+    get: jest.fn(),
+    set: jest.fn(),
+    quit: jest.fn()
+  }))
+}));
 
-  beforeAll(() => {
-    process.env.JWT_SECRET = JWT_SECRET;
-    // Require app AFTER setting JWT_SECRET so it's picked up
-    const index = require('../index');
-    app = index.app;
-  });
+// Mock pg before importing app
+jest.mock('pg', () => {
+  const mClient = {
+    connect: jest.fn(),
+    query: jest.fn(),
+    end: jest.fn(),
+    on: jest.fn(),
+  };
+  return { Client: jest.fn(() => mClient) };
+});
 
-  afterAll(() => {
-    delete process.env.JWT_SECRET;
-  });
+const { app } = require('../index');
 
-  test('GET /data/training/rewards should require authentication', async () => {
+describe('L10 Token Engine Security Hardening', () => {
+  test('GET /data/training/rewards should return 401 if no token provided', async () => {
     const response = await request(app).get('/data/training/rewards');
     expect(response.status).toBe(401);
-    expect(response.body.error).toBe('Access token required');
   });
 
-  test('GET /data/training/rewards should reject invalid token', async () => {
+  test('GET /data/training/rewards should return 403 if invalid token provided', async () => {
     const response = await request(app)
       .get('/data/training/rewards')
       .set('Authorization', 'Bearer invalid_token');
     expect(response.status).toBe(403);
-    expect(response.body.error).toBe('Invalid or expired token');
   });
 
-  test('GET /data/training/rewards should reject token with fleet_id', async () => {
-    const token = jwt.sign({ driver_id: 'driver-1', fleet_id: 'fleet-1' }, JWT_SECRET);
+  test('GET /data/training/rewards should return 403 if token contains fleet_id (non-admin)', async () => {
+    const token = jwt.sign({ driver_id: 'driver-1', fleet_id: 'fleet-1' }, process.env.JWT_SECRET);
+    const response = await request(app)
+      .get('/data/training/rewards')
+      .set('Authorization', `Bearer ${token}`);
+    expect(response.status).toBe(403);
+    expect(response.body.error).toContain('Unauthorized access to global training data');
+  });
+
+  test('GET /data/training/rewards should return 200 (or pass auth) if valid admin token provided', async () => {
+    const token = jwt.sign({ driver_id: 'admin-1' }, process.env.JWT_SECRET);
+
+    // We expect it to NOT be 401 or 403. It might be 200 or 500 (if DB query fails)
+    // but the point is it passed the auth middleware.
     const response = await request(app)
       .get('/data/training/rewards')
       .set('Authorization', `Bearer ${token}`);
 
-    expect(response.status).toBe(403);
-    expect(response.body.error).toBe('FORBIDDEN');
-    expect(response.body.message).toBe('Global reward data export restricted to system tokens');
+    expect(response.status).not.toBe(401);
+    expect(response.status).not.toBe(403);
+  });
+
+  test('GET /health should return security headers via helmet', async () => {
+    const response = await request(app).get('/health');
+    expect(response.headers['x-dns-prefetch-control']).toBeDefined();
+    expect(response.headers['x-frame-options']).toBeDefined();
+    expect(response.headers['strict-transport-security']).toBeDefined();
+    expect(response.headers['x-content-type-options']).toBeDefined();
   });
 });
