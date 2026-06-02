@@ -1,5 +1,5 @@
 /**
- * L4: Market Gateway Service (v3.8.6)
+ * L4: Market Gateway Service (v3.8.7)
  * Wholesale energy market integration (CAISO, PJM, ERCOT)
  */
 
@@ -59,6 +59,22 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
  */
 const extractSiteId = (payload) => {
   return payload.site_id || payload.siteId || payload.location_id || payload.locationId || 'SYSTEM_WIDE';
+};
+
+/**
+ * [L4 v3.8.7] safeFloat: Robust isNaN protection for telemetry scoring
+ */
+const safeFloat = (val, fallback = 1.0) => {
+  const parsed = parseFloat(val);
+  return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
+};
+
+/**
+ * [L4 v3.8.7] isSentinel: Hardened sentinel fidelity detection
+ */
+const isSentinel = (flag, score) => {
+  const isExplicit = flag === true || flag === 'true' || flag === 1;
+  return isExplicit || parseFloat(score) > 0.99;
 };
 
 // Middleware: Verify JWT token
@@ -142,15 +158,13 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
         // If the lock is global or specifically for this ISO, use its score
         if (!lockIso || lockIso === currentIso || lockIso === 'SYSTEM_WIDE') {
           if (details.physics_score !== undefined) {
-            physicsScore = parseFloat(details.physics_score);
+            physicsScore = safeFloat(details.physics_score);
           }
           if (details.confidence_score !== undefined) {
-            confidenceScore = parseFloat(details.confidence_score);
+            confidenceScore = safeFloat(details.confidence_score);
           }
           // [L4 v3.8.5] Hardened Sentinel Fidelity Detection
-          isSentinelFidelity = details.is_sentinel_fidelity === true ||
-                               details.is_sentinel_fidelity === 'true' ||
-                               details.is_sentinel_fidelity === 1;
+          isSentinelFidelity = isSentinel(details.is_sentinel_fidelity, physicsScore);
         }
       } else {
         // [L4 v3.8.1] Fallback: Query L2 regional confidence averages
@@ -165,9 +179,9 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
       console.warn('[Market Gateway] Failed to parse physics score for broadcast:', err.message);
     }
 
-    const isHighFidelity = (physicsScore > 0.95 || confidenceScore > 0.95);
+    const isHighFidelity = (parseFloat(physicsScore) > 0.95 || parseFloat(confidenceScore) > 0.95);
     // [L4 v3.8.5] Standardized Sentinel logic with fallback
-    isSentinelFidelity = !!isSentinelFidelity || physicsScore > 0.99;
+    isSentinelFidelity = isSentinel(isSentinelFidelity, physicsScore);
 
     const payload = {
       iso: iso.toUpperCase().replace(/-/g, ''),
@@ -176,8 +190,8 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
       price_per_mwh: price.toNumber(),
       profitability_index: profitabilityIndex.toDecimalPlaces(2).toNumber(),
       degradation_cost_mwh: degradationCostMwh.toNumber(),
-      physics_score: physicsScore.toFixed(4), // [L4 v3.8.4] String format
-      confidence_score: confidenceScore.toFixed(4), // [L4 v3.8.4] String format
+      physics_score: physicsScore,
+      confidence_score: confidenceScore,
       is_high_fidelity: isHighFidelity,
       is_sentinel_fidelity: isSentinelFidelity,
       fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD',
@@ -211,17 +225,10 @@ async function startGridSignalConsumer() {
         // [L4 v3.8.6] Robust Payload Extraction & NaN Hardening (Parity with L10 v4.3.6)
         const siteIdVal = extractSiteId(signal);
 
-        let physicsScoreRaw = signal.physics_score !== undefined ? parseFloat(signal.physics_score) : 1.0;
-        if (isNaN(physicsScoreRaw)) physicsScoreRaw = 1.0;
-        const physicsScore = physicsScoreRaw.toFixed(4);
+        const physicsScore = safeFloat(signal.physics_score, 1.0);
+        const confidenceScore = safeFloat(signal.confidence_score, 1.0);
 
-        let confidenceScoreRaw = signal.confidence_score !== undefined ? parseFloat(signal.confidence_score) : 1.0;
-        if (isNaN(confidenceScoreRaw)) confidenceScoreRaw = 1.0;
-        const confidenceScore = confidenceScoreRaw.toFixed(4);
-
-        const isSentinelFidelity = signal.is_sentinel_fidelity === true ||
-                                    signal.is_sentinel_fidelity === 'true' ||
-                                    signal.is_sentinel_fidelity === 1;
+        const isSentinelFidelity = isSentinel(signal.is_sentinel_fidelity, physicsScore);
 
         console.log(`[Market Gateway] Received grid signal: ${signal.event_id} (Site: ${siteIdVal}, Physics: ${physicsScore}, Sentinel: ${isSentinelFidelity})`);
 
@@ -350,7 +357,7 @@ app.get('/health', async (req, res) => {
 
   res.json({
     service: 'market-gateway',
-    version: '3.8.6',
+    version: '3.8.7',
     status: 'healthy',
     mode: process.env.USE_LIVE_DATA === 'true' ? 'LIVE' : 'SIMULATION',
     layer: 'L4',
@@ -463,8 +470,8 @@ app.post('/bids/submit', authenticateToken, async (req, res) => {
       price_per_mwh,
       total_value.toFixed(2),
       delivery_hour,
-      (physics_score ? parseFloat(physics_score).toFixed(4) : "1.0000"),
-      (confidence_score ? parseFloat(confidence_score).toFixed(4) : "1.0000"),
+      safeFloat(physics_score, 1.0),
+      safeFloat(confidence_score, 1.0),
       capacity_fidelity || 'STANDARD',
       JSON.stringify(audit_context || {})
     ]);
@@ -485,6 +492,11 @@ app.post('/bids/submit', authenticateToken, async (req, res) => {
  * L11 AI Data Readiness: Export historical LMP data for training
  */
 app.get('/data/training/lmp', authenticateToken, async (req, res) => {
+  // [L4 v3.8.7] Security: Reject tokens containing a fleet_id to restrict global training data
+  if (req.user && req.user.fleet_id) {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Global training data restricted to system tokens' });
+  }
+
   const { iso, days } = req.query;
   const daysInt = parseInt(days) || 7;
 
@@ -512,6 +524,11 @@ app.get('/data/training/lmp', authenticateToken, async (req, res) => {
  * L11 AI Data Readiness: Export historical Fuel Mix data for training
  */
 app.get('/data/training/fuel-mix', authenticateToken, async (req, res) => {
+  // [L4 v3.8.7] Security: Reject tokens containing a fleet_id to restrict global training data
+  if (req.user && req.user.fleet_id) {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Global training data restricted to system tokens' });
+  }
+
   const { iso, days } = req.query;
   const daysInt = parseInt(days) || 7;
 
@@ -539,6 +556,11 @@ app.get('/data/training/fuel-mix', authenticateToken, async (req, res) => {
  * L11 AI Data Readiness: Export historical Load Forecast data for training
  */
 app.get('/data/training/load-forecast', authenticateToken, async (req, res) => {
+  // [L4 v3.8.7] Security: Reject tokens containing a fleet_id to restrict global training data
+  if (req.user && req.user.fleet_id) {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Global training data restricted to system tokens' });
+  }
+
   const { iso, days } = req.query;
   const daysInt = parseInt(days) || 7;
 
@@ -566,6 +588,11 @@ app.get('/data/training/load-forecast', authenticateToken, async (req, res) => {
  * L11 AI Data Readiness: Export historical Net Load data for training
  */
 app.get('/data/training/net-load', authenticateToken, async (req, res) => {
+  // [L4 v3.8.7] Security: Reject tokens containing a fleet_id to restrict global training data
+  if (req.user && req.user.fleet_id) {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Global training data restricted to system tokens' });
+  }
+
   const { iso, days } = req.query;
   const daysInt = parseInt(days) || 7;
 

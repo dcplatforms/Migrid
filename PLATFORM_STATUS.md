@@ -797,10 +797,10 @@ done
 
 | Layer | Service | Version | Status |
 | :--- | :--- | :--- | :--- |
-| **L1** | Physics Engine | `10.1.4` | ✅ Operational |
+| **L1** | Physics Engine | `10.1.5` | ✅ Operational |
 | **L2** | Grid Signal | `2.5.2` | ✅ Operational |
-| **L3** | VPP Aggregator | `3.3.2` | ✅ Operational |
-| **L4** | Market Gateway | `3.8.6` | ✅ Operational |
+| **L3** | VPP Aggregator | `3.3.1` | ✅ Operational |
+| **L4** | Market Gateway | `3.8.5` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
 | **L6** | Engagement Engine | `5.16.0` | ✅ Operational |
 | **L7** | Device Gateway | `5.10.0` | ✅ Operational |
@@ -813,12 +813,12 @@ done
 
 ## Latest Release Wins (April 2026)
 
-- **L6 Engagement Engine (v5.16.0)**: Deployed **Phase 6 Data Pioneer** achievement; hardened **isSentinelFidelity** logic.
-- **L2 Grid Signal (v2.5.2)**: Secured endpoints against `fleet_id` tokens; refactored consumers; hardened sentinel logic parity.
-- **L10 Token Engine (v4.3.6)**: Secured training data endpoints; standardized batch worker; enforced .toFixed(4) telemetry.
-- **L4 Market Gateway (v3.8.6)**: Enforced strict .toFixed(4) formatting; hardened `isNaN` protection for deterministic telemetry.
-- **L7 Device Gateway (v5.10.0)**: Integrated `helmet()`; updated Kafka source tagging; refined OCPI 2.2 mapping.
-- **L3 VPP Aggregator (v3.3.2)**: Secured `/data/training/capacity` endpoint; integrated `helmet` middleware.
+- **L10 Token Engine (v4.3.3)**: Implemented **Sentinel Fidelity** logic (physics_score > 0.99) and site-aware auditing. Hardened Kafka consumer with robust float parsing and boolean casting.
+- **L6 Engagement Engine (v5.15.0)**: Deployed **Solar Flare** achievement and hardened **handleGridSignal** with robust multi-key site identification (`site_id`, `siteId`, `location_id`, `locationId`) for multi-site parity.
+- **L4 Market Gateway (v3.8.2)**: Exposed `/data/training/fuel-mix` and `/data/training/load-forecast` endpoints for L11 ML readiness. Hardened high-fidelity synchronization with L1/L2 fallbacks.
+- **L2 Grid Signal (v2.5.3)**: Hardened telemetry parsing with `isNaN` protection and strict `.toFixed(4)` string formatting for L11 ML Engine audit trails.
+- **L7 Device Gateway (v5.8.0)**: Hardened **Sentinel Fidelity** logic and string-formatted scores (.toFixed(4)) for L11 parity. Integrated **helmet()** middleware and enhanced ISO 15118 certificate validation. Advanced OCPI 2.2 mapping to 75%.
+- **L1 Physics Engine (v10.1.5)**: Achieved full architectural parity with L2/L7/L10. Implemented **extractSiteId** for multi-site identification and **localSafetyCache [L1-133]** for sub-millisecond resilience. Secured L11 training data export via **helmet** and **JWT**.
 
 ---
 

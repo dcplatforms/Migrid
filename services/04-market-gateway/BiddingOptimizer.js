@@ -3,6 +3,22 @@ const { convertToFIX, getCurrentUTCTimeStamp } = require('fix-protocol/fixutils'
 const MarketPricingService = require('./MarketPricingService');
 const Decimal = require('decimal.js');
 
+/**
+ * [L4 v3.8.7] safeFloat: Robust isNaN protection for telemetry scoring
+ */
+const safeFloat = (val, fallback = 1.0) => {
+  const parsed = parseFloat(val);
+  return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
+};
+
+/**
+ * [L4 v3.8.7] isSentinel: Hardened sentinel fidelity detection
+ */
+const isSentinel = (flag, score) => {
+  const isExplicit = flag === true || flag === 'true' || flag === 1;
+  return isExplicit || parseFloat(score) > 0.99;
+};
+
 class BiddingOptimizer {
   constructor(pool, redisUrl) {
     this.pricingService = new MarketPricingService(pool);
@@ -56,11 +72,8 @@ class BiddingOptimizer {
             const fidelity = data.is_high_fidelity ? 'HIGH_FIDELITY' : 'STANDARD';
             console.log(`[BiddingOptimizer] Using HIGH-FIDELITY regional capacity for ${isoKey}: ${data.total} kWh (EV: ${data.ev}, BESS: ${data.bess})`);
 
-            let pScore = data.physics_score !== undefined ? parseFloat(data.physics_score) : 1.0;
-            if (isNaN(pScore)) pScore = 1.0;
-
-            let cScore = data.confidence_score !== undefined ? parseFloat(data.confidence_score) : 1.0;
-            if (isNaN(cScore)) cScore = 1.0;
+            const pScore = safeFloat(data.physics_score, 1.0);
+            const cScore = safeFloat(data.confidence_score, 1.0);
 
             return {
               capacity: new Decimal(data.total || '0'),
@@ -69,8 +82,8 @@ class BiddingOptimizer {
                 ev: data.ev || 0,
                 bess: data.bess || 0
               },
-              physics_score: pScore.toFixed(4),
-              confidence_score: cScore.toFixed(4)
+              physics_score: pScore,
+              confidence_score: cScore
             };
           }
         }
@@ -144,8 +157,8 @@ class BiddingOptimizer {
     const locks = await this.getSafetyLockStatus(iso);
 
     // 2. Fetch safety lock context for audit (L11 ML Engine readiness)
-    let physicsScore = 1.0;
-    let confidenceScore = 1.0;
+    let physicsScore = "1.0000";
+    let confidenceScore = "1.0000";
     let isSentinelFidelity = false;
     let auditContext = null;
     try {
@@ -153,15 +166,13 @@ class BiddingOptimizer {
       if (lockContextRaw) {
         auditContext = JSON.parse(lockContextRaw);
         if (auditContext.physics_score !== undefined) {
-          physicsScore = parseFloat(auditContext.physics_score);
+          physicsScore = safeFloat(auditContext.physics_score);
         }
         if (auditContext.confidence_score !== undefined) {
-          confidenceScore = parseFloat(auditContext.confidence_score);
+          confidenceScore = safeFloat(auditContext.confidence_score);
         }
         // [L4 v3.8.5] Hardened Sentinel Fidelity Detection
-        isSentinelFidelity = auditContext.is_sentinel_fidelity === true ||
-                             auditContext.is_sentinel_fidelity === 'true' ||
-                             auditContext.is_sentinel_fidelity === 1;
+        isSentinelFidelity = isSentinel(auditContext.is_sentinel_fidelity, physicsScore);
       } else {
         // [L4 v3.8.1] Fallback: Query L2 Unified Context for regional confidence averages
         const unifiedRaw = await this.redisClient.get('l2:unified:context');
@@ -176,9 +187,9 @@ class BiddingOptimizer {
     }
 
     // High-Fidelity logic: physics_score > 0.95 OR confidence_score > 0.95 (Align with L10 v4.3.5)
-    const isHighFidelity = (physicsScore > 0.95 || confidenceScore > 0.95);
+    const isHighFidelity = (parseFloat(physicsScore) > 0.95 || parseFloat(confidenceScore) > 0.95);
     // [L4 v3.8.5] Standardized Sentinel logic with fallback
-    isSentinelFidelity = !!isSentinelFidelity || physicsScore > 0.99;
+    isSentinelFidelity = isSentinel(isSentinelFidelity, physicsScore);
     const capacityFidelity = isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD';
 
     // 3. Handle Halted Bidding
@@ -200,8 +211,8 @@ class BiddingOptimizer {
         bids: [],
         audit: {
           locks,
-          physics_score: physicsScore.toFixed(4), // [L4 v3.8.5] String format
-          confidence_score: confidenceScore.toFixed(4), // [L4 v3.8.5] String format
+          physics_score: physicsScore,
+          confidence_score: confidenceScore,
           is_high_fidelity: isHighFidelity,
           is_sentinel_fidelity: isSentinelFidelity,
           capacity_fidelity: capacityFidelity,
@@ -223,8 +234,8 @@ class BiddingOptimizer {
 
     // [L4 v3.8.6] Synchronize scores with L3 High-Fidelity context if available
     if (capacityFidelityFromRedis === 'HIGH_FIDELITY') {
-      physicsScore = parseFloat(pScoreFromL3);
-      confidenceScore = parseFloat(cScoreFromL3);
+      physicsScore = pScoreFromL3;
+      confidenceScore = cScoreFromL3;
     }
 
     // [L4-BESS-OPT] Resource-Aware Degradation Costs
@@ -306,8 +317,8 @@ class BiddingOptimizer {
       bids,
       audit: {
         locks,
-        physics_score: physicsScore.toFixed(4), // [L4 v3.8.5] String format
-        confidence_score: confidenceScore.toFixed(4), // [L4 v3.8.5] String format
+        physics_score: physicsScore,
+        confidence_score: confidenceScore,
         is_high_fidelity: isHighFidelity,
         is_sentinel_fidelity: isSentinelFidelity,
         capacity_fidelity: capacityFidelityFromRedis, // Already normalized in getAggregatedCapacity

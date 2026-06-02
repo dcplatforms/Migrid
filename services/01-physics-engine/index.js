@@ -10,9 +10,16 @@
  */
 
 require('dotenv').config();
+const express = require('express');
+const helmet = require('helmet');
+const jwt = require('jsonwebtoken');
 const { Client } = require('pg');
 const { Kafka } = require('kafkajs');
 const { createClient } = require('redis');
+
+const app = express();
+const port = process.env.PORT || 3001;
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const REDIS_URL = process.env.REDIS_URL;
@@ -33,6 +40,12 @@ let lastMarketPrice = 0.0;
 let syncIntervalId = null;
 let isOffline = false;
 
+// [L1-133] Sub-millisecond local safety cache
+const localSafetyCache = {
+  global: false,
+  regional: {}
+};
+
 // 1. Database Connection
 const pgClient = new Client({ connectionString: DATABASE_URL });
 
@@ -45,6 +58,74 @@ const producer = kafka.producer();
 
 // 3. Redis Connection (Local Sidecar)
 const redisClient = createClient({ url: REDIS_URL });
+
+app.use(helmet());
+app.use(express.json());
+
+/**
+ * Middleware: Verify JWT token (Zero-Trust Security)
+ */
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'UNAUTHORIZED', message: 'Access token required' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+  });
+};
+
+/**
+ * Health check
+ */
+app.get('/health', (req, res) => {
+  res.json({
+    service: 'physics-engine',
+    version: '10.1.5',
+    status: 'healthy',
+    layer: 'L1'
+  });
+});
+
+/**
+ * L11 AI Data Readiness: Export historical physics audit data for training
+ * Restricted to system tokens (no fleet_id)
+ */
+app.get('/data/training/physics', authenticateToken, async (req, res) => {
+  if (req.user && req.user.fleet_id) {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Global data export restricted to system tokens' });
+  }
+
+  const { days } = req.query;
+  const daysInt = parseInt(days) || 7;
+
+  try {
+    const result = await pgClient.query(
+      `SELECT session_id, violation_type, expected_value, actual_value, severity, metadata, billing_mode, vpp_active, v2g_active, iso_region, market_price_at_session, physics_score, is_high_fidelity, created_at
+       FROM audit_log
+       WHERE created_at > NOW() - ($1 || ' days')::interval
+       ORDER BY created_at ASC`,
+      [daysInt]
+    );
+
+    res.json({
+      record_count: result.rows.length,
+      data: result.rows,
+      version: '1.0.1',
+      status: 'READY_FOR_L11'
+    });
+  } catch (error) {
+    console.error('[L1 Physics] Data Export Error:', error.message);
+    res.status(500).json({ error: 'Failed to export training data' });
+  }
+});
 
 async function connectServices() {
   try {
@@ -114,6 +195,15 @@ function normalizeIso(iso) {
 }
 
 /**
+ * Helper: Extract site ID from multi-key payload
+ * Standardized for multi-site parity (site_id, siteId, location_id, locationId)
+ */
+function extractSiteId(payload) {
+  if (!payload) return SITE_ID;
+  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || SITE_ID;
+}
+
+/**
  * Centralized Physics Metadata Calculation
  * Calculates physics_score, is_high_fidelity, and is_sentinel_fidelity.
  */
@@ -131,7 +221,10 @@ function calculatePhysicsMetadata(payload) {
   }
 
   const scoreStr = physicsScore.toFixed(4);
-  const explicitSentinel = payload.is_sentinel_fidelity === true || payload.is_sentinel_fidelity === 'true';
+  // [L1-130] Sentinel Hardening: Support boolean, string, and integer (1) formats
+  const explicitSentinel = payload.is_sentinel_fidelity === true ||
+                           payload.is_sentinel_fidelity === 'true' ||
+                           payload.is_sentinel_fidelity === 1;
 
   return {
     physicsScore: scoreStr,
@@ -196,7 +289,7 @@ async function handlePhysicsAlert(msg) {
   }
 
   // [L1-121] Fetch Site Load Data for Confidence Scoring
-  const alertSiteId = payload.site_id || payload.metadata?.site_id || SITE_ID;
+  const alertSiteId = extractSiteId(payload.metadata || payload);
   const buildingLoadKw = parseFloat(await redisClient.get(`site:${alertSiteId}:building_load_kw`)) || 0;
   const siteConfig = await redisClient.hGetAll(`site:${alertSiteId}:config`) || {};
   const limitKw = parseFloat(siteConfig.max_capacity_kw) || 0;
@@ -214,12 +307,19 @@ async function handlePhysicsAlert(msg) {
   if (payload.event_type === 'PHYSICS_FRAUD' || payload.event_type === 'CAPACITY_VIOLATION') {
     try {
       await redisClient.setEx(SAFETY_LOCK_KEY, SAFETY_LOCK_TTL, 'true');
+      localSafetyCache.global = true;
+
+      // Regional Lock: If ISO region is known, set regional lock as well
+      if (isoRegion) {
+        await redisClient.setEx(`${SAFETY_LOCK_KEY}:${isoRegion}`, SAFETY_LOCK_TTL, 'true');
+        localSafetyCache.regional[isoRegion] = true;
+      }
 
       // Phase 5 Enhancement: Detailed Safety Lock Context for L2/L4 transparency
       const context = {
         event_type: payload.event_type,
         severity: severity,
-        site_id: payload.site_id || payload.metadata?.site_id || SITE_ID,
+        site_id: alertSiteId,
         vehicle_id: payload.vehicle_id,
         vin: payload.vin,
         variance_pct: payload.variance_pct,
@@ -263,7 +363,7 @@ async function handlePhysicsAlert(msg) {
       session_id: payload.session_id,
       vehicle_id: payload.vehicle_id,
       vin: payload.vin,
-      site_id: payload.site_id || payload.metadata?.site_id || SITE_ID,
+      site_id: alertSiteId,
       efficiency_pct: payload.efficiency_pct,
       variance_pct: payload.variance_pct,
       resource_type: payload.resource_type || 'EV',
@@ -292,6 +392,35 @@ async function handlePhysicsAlert(msg) {
     console.log('📤 [L1 Physics] Kafka alert dispatched.');
   } catch (err) {
     console.error('❌ [L1 Physics] Failed to process alert:', err.message);
+  }
+}
+
+/**
+ * [L1-133] Local Safety Cache Poller
+ * Ensures sub-millisecond lookup by periodic polling of Redis locks.
+ */
+async function updateLocalSafetyCache() {
+  try {
+    const globalLock = await redisClient.get(SAFETY_LOCK_KEY);
+    localSafetyCache.global = (globalLock === 'true' || globalLock === '1');
+
+    let cursor = '0';
+    const newRegionalLocks = {};
+    do {
+      const reply = await redisClient.scan(cursor, { MATCH: `${SAFETY_LOCK_KEY}:*`, COUNT: 100 });
+      cursor = reply.cursor;
+      if (reply.keys.length > 0) {
+        const values = await redisClient.mGet(reply.keys);
+        reply.keys.forEach((key, index) => {
+          if (key === SAFETY_LOCK_CONTEXT_KEY) return;
+          const iso = key.split(':').pop().toUpperCase();
+          newRegionalLocks[iso] = (values[index] === 'true' || values[index] === '1');
+        });
+      }
+    } while (cursor !== '0' && cursor !== 0);
+    localSafetyCache.regional = newRegionalLocks;
+  } catch (err) {
+    console.error('❌ [L1 Physics] Failed to update local safety cache:', err.message);
   }
 }
 
@@ -354,7 +483,10 @@ async function reconcileLogs() {
       const isPhysicsHighFidelity = parseFloat(physicsScore) > 0.95;
       const confidenceScore = payload.confidence_score ? parseFloat(payload.confidence_score).toFixed(4) : (0.5).toFixed(4);
       const isHighFidelity = isPhysicsHighFidelity || parseFloat(confidenceScore) > 0.95;
-      const explicitSentinel = payload.is_sentinel_fidelity === true || payload.is_sentinel_fidelity === 'true';
+      // [L1-130] Sentinel Hardening: Support boolean, string, and integer (1) formats
+      const explicitSentinel = payload.is_sentinel_fidelity === true ||
+                               payload.is_sentinel_fidelity === 'true' ||
+                               payload.is_sentinel_fidelity === 1;
       const isSentinelFidelity = explicitSentinel || parseFloat(physicsScore) > 0.99;
 
       // Re-publish missed alerts to Kafka
@@ -363,7 +495,7 @@ async function reconcileLogs() {
         session_id: payload.session_id,
         vehicle_id: payload.vehicle_id,
         vin: payload.vin,
-        site_id: payload.site_id || payload.metadata?.site_id || SITE_ID,
+        site_id: extractSiteId(payload.metadata || payload),
         efficiency_pct: payload.efficiency_pct,
         variance_pct: payload.variance_pct,
         resource_type: payload.resource_type || 'EV',
@@ -515,14 +647,17 @@ async function syncDigitalTwin() {
 
       // [L1-124] April 2026 High-Fidelity Standard
       const isHighFidelity = parseFloat(physicsScore) > 0.95 || parseFloat(confidenceScore) > 0.95;
-      const explicitSentinel = vehicle.is_sentinel_fidelity === true || vehicle.is_sentinel_fidelity === 'true';
+      // [L1-130] Sentinel Hardening: Support boolean, string, and integer (1) formats
+      const explicitSentinel = vehicle.is_sentinel_fidelity === true ||
+                               vehicle.is_sentinel_fidelity === 'true' ||
+                               vehicle.is_sentinel_fidelity === 1;
 
       await redisClient.setEx(key, 60, JSON.stringify({
         ...vehicle,
         resource_type: resourceType,
         physics_score: physicsScore,
         is_high_fidelity: isHighFidelity,
-        is_sentinel_fidelity: parseFloat(physicsScore) > 0.99,
+        is_sentinel_fidelity: explicitSentinel || parseFloat(physicsScore) > 0.99,
         confidence_score: confidenceScore,
         last_sync: new Date().toISOString()
       }));
@@ -559,6 +694,10 @@ async function start() {
   await connectServices();
   startHeartbeat();
 
+  // Start Safety Lock Poller [L1-133]
+  setInterval(updateLocalSafetyCache, 5000);
+  await updateLocalSafetyCache();
+
   // Start Digital Twin Sync
   syncIntervalId = setInterval(syncDigitalTwin, DIGITAL_TWIN_SYNC_INTERVAL_DEFAULT);
   syncIntervalId._idleTimeout = DIGITAL_TWIN_SYNC_INTERVAL_DEFAULT; // Manual sync for test environments
@@ -566,10 +705,17 @@ async function start() {
 }
 
 if (require.main === module) {
-  start();
+  start().then(() => {
+    app.listen(port, () => {
+      console.log(`✅ [L1 Physics] API running on port ${port} (ML Readiness)`);
+    });
+  });
 }
 
 module.exports = {
+  app,
+  localSafetyCache,
+  updateLocalSafetyCache,
   handlePhysicsAlert,
   calculatePhysicsMetadata,
   producer,
