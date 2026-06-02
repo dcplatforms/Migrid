@@ -10,19 +10,19 @@
 
 | Priority | Feature / Task | Primary Layer | Blocking Dependencies | Target Phase |
 |:---:|:---|:---:|:---|:---:|
-| **P0** | **ML Demand Forecasting** | L11 (ML Engine) | ✅ Phase 5 High-Fidelity Data Pipelines (L1, L2, L3, L4) | Phase 6 |
-| **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | ✅ L7 v5.9.0 Hardened (100% Complete) | Phase 5 |
-| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 (Market) v3.8.5 AI Readiness | Phase 5 |
-| **P3** | **OCPI 2.2 Roaming** | L7 (Device) | ✅ L9 (Commerce) v5.1.0 tariff engine sync (85%) | Phase 5 |
+| **P0** | **ML Demand Forecasting** | L11 (ML Engine) | ✅ Phase 5 High-Fidelity Data Pipelines (100%) | Phase 6 |
+| **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | ✅ L7 v5.10.0 Hardened (100% Complete) | Phase 5 |
+| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 v3.8.6 AI Readiness (100% Complete) | Phase 5 |
+| **P3** | **OCPI 2.2 Roaming** | L7 (Device) | ✅ L9 v5.1.0 tariff engine sync (100% Complete) | Phase 5 |
 | **P4** | **BESS RL Bidding** | L4 (Market) | 🚧 L3 BESS Integration (75% Complete) | Phase 6 |
 
 | **P5** | **Resource-Aware Bidding** | L4 (Market) | ✅ L3 v3.3.2 High-Fidelity Breakdown | Phase 5 |
 
 | Priority | Task ID | Description | Primary Layers | Status | Strategic Alignment |
 |:---:|:---:|:---|:---:|:---:|:---|
-| 1 | **ISO-15118-PC** | Full ISO 15118-20 Bidirectional Certificate Exchange & Plug & Charge UI (OCPP 2.1) | L7, L5, L1 | 100% | Phase 5: Enterprise Scale |
-| 2 | **COMMERCE-BILLING** | Complete L9 Commerce Engine Tariff Engine and Flexible Billing Logic | L9, L5 | 70% | Phase 5: Commerce Sync |
-| 3 | **OCPI-2.2-ROAM** | OCPI 2.2 Roaming Integration for cross-network orchestration | L7, L9 | 85% | Phase 5: Global Expansion |
+| 1 | **ISO-15118-PC** | Full ISO 15118-20 Bidirectional Certificate Exchange & Plug & Charge UI (OCPP 2.1) | L7, L5, L1 | ✅ 100% | Phase 5: Enterprise Scale |
+| 2 | **COMMERCE-BILLING** | Complete L9 Commerce Engine Tariff Engine and Flexible Billing Logic | L9, L5 | ✅ 100% | Phase 5: Commerce Sync |
+| 3 | **OCPI-2.2-ROAM** | OCPI 2.2 Roaming Integration for cross-network orchestration | L7, L9 | ✅ 100% | Phase 5: Global Expansion |
 | 4 | **REGIONAL-CHALLENGE** | Implementation of L6 Regional Team Challenges & Live Grid Events | L6, L2 | ✅ 100%| Phase 5: Grid-Aware Gamification |
 | 5 | **ML-FORECASTING** | L11 ML Engine: Demand Forecasting and Predictive Analytics Foundation | L11, L3 | 40% | Phase 6: AI & Optimization |
 
@@ -57,7 +57,7 @@
 - [✓] **[L1-126] Hardened Offline Mode**: Redis metadata preservation during disconnects.
 - [✓] **Standardized Scores**: Enforced strict .toFixed(4) string formatting for all scores.
 
-### Layer 2: Grid Signal (v2.5.1)
+### Layer 2: Grid Signal (v2.5.2)
 - [✓] **BESS-Aware Safety**: 10% variance threshold enforced for stationary storage.
 - [✓] **Regional Confidence**: Averaging vehicle scores for OpenADR high-fidelity fallback.
 - [✓] **Regional Context**: High-fidelity capacity breakdown (Total/EV/BESS) in OpenADR reports.
@@ -68,6 +68,7 @@
 - [✓] **Signal Caching**: Redis-based ADVANCE_CHARGE_SIGNAL (CAISO solar ramp) cache.
 - [✓] **Sentinel Hardening**: Explicit boolean/string support for `is_sentinel_fidelity` flags.
 - [✓] **Digital Twin Tracking**: Integrated `sentinel_fidelity_count` into regional stats.
+- [✓] **Fleet Security**: Hardened global data endpoints to reject `fleet_id` tokens.
 
 ### Layer 3: VPP Aggregator (v3.3.2)
 - [✓] **Redis Capacity Cache**: Sub-50ms reporting for L4 bidding.
@@ -78,7 +79,7 @@
 - [✓] **Multi-Site Parity**: Implemented `extractSiteId` for standardized site identification.
 - [~] **BESS Integration**: Support for stationary storage assets (75%).
 
-### Layer 4: Market Gateway (v3.8.5)
+### Layer 4: Market Gateway (v3.8.6)
 - [✓] **Bidding Auditability**: High-fidelity audit context (physics_score, confidence_score, capacity_fidelity) for all bids.
 - [✓] **Regional Grid Lock**: Improved observability and specific ISO lock logging.
 - [✓] **ERCOT & Nord Pool**: Full activation of Texas and Nordic market adapters.
@@ -90,8 +91,9 @@
 - [✓] **Standardized Metrics**: Enforced strict string formatting (`.toFixed(4)`) for all scores.
 - [✓] **Multi-Site Parity**: Hardened grid signal consumer with multi-key site identification.
 - [~] **BESS RL Bidding**: Research phase for reinforcement learning models (10%).
+- [✓] **NaN Protection**: Hardened bidding logic with `isNaN` protection for deterministic telemetry.
 
-### Layer 6: Engagement Engine (v5.15.0)
+### Layer 6: Engagement Engine (v5.16.0)
 - [✓] **Solar Surge**: Achievement for CAISO solar ramp response tracking.
 - [✓] **Solar Flare**: Achievement for 25 cumulative solar ramp responses (Phase 6 Alignment).
 - [✓] **Robust Site ID**: Hardened handleGridSignal with multi-key site identification.
@@ -114,15 +116,18 @@
 - [✓] **AI Model Master**: Achievement for 100+ cumulative high-fidelity sessions.
 - [✓] **Solar Flare**: Achievement for 25 cumulative solar ramp responses.
 - [✓] **Multi-Site Parity**: Implemented robust multi-key site identification.
+- [✓] **Phase 6 Data Pioneer**: Achievement for 5 consecutive sessions with physics_score > 0.99.
+- [✓] **Sentinel Hardening**: Hardened `isSentinelFidelity` logic for multi-format support.
 
-### Layer 7: Device Gateway (v5.9.0)
+### Layer 7: Device Gateway (v5.10.0)
 - [✓] **ISO 15118-20**: Hardened Certificate Exchange and EMAID handling (100%).
 - [✓] **OCPP 2.1 V2X**: Native bidirectional profile support.
 - [✓] **Resource Caching**: Redis-based `resource_type` (EV/BESS) lifecycle management.
 - [✓] **Horizontal Scaling**: Cross-pod command routing via Redis Pub/Sub.
-- [✓] **OCPI 2.2 Mapping**: Implemented OCPP-to-OCPI status normalization (85%).
+- [✓] **OCPI 2.2 Mapping**: OCPP-to-OCPI status normalization (100% complete).
 - [✓] **Sentinel Fidelity**: Hardened detection logic for L11 parity.
 - [✓] **Security Hardening**: Integrated helmet() and crypto.X509Certificate validation.
+- [✓] **Kafka Tagging**: Updated source tagging to `L7_GATEWAY_V5.10.0`.
 
 ### Layer 10: Token Engine (v4.3.6)
 - [✓] **Dynamic Multipliers**: Surplus (1.5x) and Scarcity (2.0x) logic active.
@@ -133,6 +138,7 @@
 - [✓] **Kafka Hardening**: Standardized `siteIdVal` extraction and hardened fidelity flags.
 - [✓] **Reward Batching**: Implemented async background worker model for reward minting.
 - [✓] **L11 AI Export**: Implemented `/data/training/rewards` for ML Engine ingestion.
+- [✓] **Global Data Security**: Restricted `/data/training/rewards` to admin tokens.
 
 ---
 
