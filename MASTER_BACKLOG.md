@@ -25,6 +25,7 @@
 | 3 | **OCPI-2.2-ROAM** | OCPI 2.2 Roaming Integration for cross-network orchestration | L7, L9 | 85% | Phase 5: Global Expansion |
 | 4 | **REGIONAL-CHALLENGE** | Implementation of L6 Regional Team Challenges & Live Grid Events | L6, L2 | ✅ 100%| Phase 5: Grid-Aware Gamification |
 | 5 | **ML-FORECASTING** | L11 ML Engine: Demand Forecasting and Predictive Analytics Foundation | L11, L3 | 40% | Phase 6: AI & Optimization |
+| 6 | **L2-NAN-HARDEN** | Hardened telemetry parsing with `isNaN` protection and `.toFixed(4)` parity. | L2 | ✅ 100% | Phase 5: Enterprise Scale |
 
 ---
 
@@ -61,7 +62,9 @@
 - [✓] **API Security**: Integrated `helmet` and secured `/data/training/physics`.
 - [✓] **[L1-133] Local Safety Cache**: 5s background poller for sub-millisecond resilience.
 
-### Layer 2: Grid Signal (v2.5.1)
+### Layer 2: Grid Signal (v2.5.3)
+- [✓] **Telemetry Hardening**: implemented `isNaN` protection for physics/confidence scores.
+- [✓] **L11 Parity**: enforced strict `.toFixed(4)` string formatting for audit trails.
 - [✓] **BESS-Aware Safety**: 10% variance threshold enforced for stationary storage.
 - [✓] **Regional Confidence**: Averaging vehicle scores for OpenADR high-fidelity fallback.
 - [✓] **Regional Context**: High-fidelity capacity breakdown (Total/EV/BESS) in OpenADR reports.
