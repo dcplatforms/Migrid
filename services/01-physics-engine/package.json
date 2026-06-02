@@ -1,15 +1,19 @@
 {
   "name": "@migrid/physics-engine",
-  "version": "10.1.4",
+  "version": "10.1.5",
   "main": "index.js",
   "dependencies": {
     "dotenv": "^17.3.1",
+    "express": "^4.18.2",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
     "kafkajs": "^2.2.4",
     "pg": "^8.11.0",
     "redis": "^4.6.13"
   },
   "devDependencies": {
-    "jest": "^29.7.0"
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3"
   },
   "scripts": {
     "test": "jest"

@@ -7,7 +7,6 @@ global.mockRedisGet = jest.fn();
 global.mockRedisHGetAll = jest.fn().mockResolvedValue({});
 global.mockRedisRPop = jest.fn();
 global.mockRedisTtl = jest.fn();
-global.mockRedisHGetAll = jest.fn();
 global.mockPgQuery = jest.fn();
 
 // Mock dependencies (hoisted by Jest)
@@ -35,7 +34,6 @@ jest.mock('pg', () => ({
   }))
 }), { virtual: true });
 
-global.mockRedisRPop = jest.fn();
 jest.mock('redis', () => ({
   createClient: jest.fn().mockImplementation(() => ({
     connect: jest.fn().mockResolvedValue({}),
@@ -57,6 +55,8 @@ jest.mock('redis', () => ({
         global.mockRedisSetEx(key, ttl, value);
         return Promise.resolve('OK');
     }),
+    scan: jest.fn().mockResolvedValue({ cursor: '0', keys: [] }),
+    mGet: jest.fn().mockResolvedValue([]),
     quit: jest.fn().mockResolvedValue({}),
     on: jest.fn()
   }))
@@ -64,7 +64,10 @@ jest.mock('redis', () => ({
 
 jest.mock('dotenv', () => ({ config: jest.fn() }), { virtual: true });
 
+const request = require('supertest');
+const jwt = require('jsonwebtoken');
 const physicsEngine = require('./index');
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 
 describe('L1 Physics Engine Alert Handling', () => {
   beforeEach(() => {
@@ -101,12 +104,12 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.is_sentinel_fidelity).toBe(false);
   });
 
-  test('should prioritize explicit is_sentinel_fidelity flag in alert', async () => {
+  test('should prioritize explicit is_sentinel_fidelity flag in alert (supports integer 1)', async () => {
     const msg = {
       payload: JSON.stringify({
         event_type: 'SESSION_COMPLETED',
         physics_score: 0.90,
-        is_sentinel_fidelity: 'true'
+        is_sentinel_fidelity: 1
       })
     };
 
@@ -114,6 +117,21 @@ describe('L1 Physics Engine Alert Handling', () => {
 
     const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
     expect(alertValue.is_sentinel_fidelity).toBe(true);
+  });
+
+  test('[L1-131] should extract site_id from multi-key metadata (locationId)', async () => {
+    const msg = {
+      payload: JSON.stringify({
+        event_type: 'EFFICIENCY_ALERT',
+        session_id: 'session-multi-key-1',
+        metadata: { locationId: 'SITE-XYZ-123' }
+      })
+    };
+
+    await physicsEngine.handlePhysicsAlert(msg);
+
+    const alertValue = JSON.parse(global.mockProducerSend.mock.calls[0][0].messages[0].value);
+    expect(alertValue.site_id).toBe('SITE-XYZ-123');
   });
 
   test('should calculate physics_score and is_high_fidelity correctly for moderate variance', async () => {
@@ -609,6 +627,12 @@ describe('L1 Physics Metadata Calculation', () => {
     expect(metadata.isSentinelFidelity).toBe(true);
   });
 
+  test('should prioritize explicit is_sentinel_fidelity in metadata calculation (integer 1)', () => {
+    const payload = { event_type: 'EFFICIENCY_ALERT', efficiency_pct: 90.0, is_sentinel_fidelity: 1 };
+    const metadata = physicsEngine.calculatePhysicsMetadata(payload);
+    expect(metadata.isSentinelFidelity).toBe(true);
+  });
+
   test('should correctly calculate high fidelity for > 0.95', () => {
     const payload = { event_type: 'EFFICIENCY_ALERT', efficiency_pct: 96.0 };
     const metadata = physicsEngine.calculatePhysicsMetadata(payload);
@@ -823,9 +847,6 @@ describe('L1 Physics Engine Scarcity Mode', () => {
     // Initial start to set up the interval
     await physicsEngine.start();
     const initialIntervalId = physicsEngine.getSyncIntervalId();
-    // In some environments _idleTimeout might not be available or might be different
-    // Let's use a more robust check if possible, or skip the internal timeout check if it's finicky.
-    // However, since it failed with undefined, let's see.
 
     const msg = {
       payload: JSON.stringify({
@@ -970,5 +991,38 @@ describe('L1 Physics Engine Reconciliation', () => {
       expect.stringContaining('INSERT INTO audit_log'),
       expect.arrayContaining(['recon-session-entsoe', 'EFFICIENCY_ALERT', 'ENTSOE', 0.0])
     );
+  });
+});
+
+describe('L1 Physics Engine API Security & Readiness', () => {
+  const adminToken = jwt.sign({ sub: 'admin', role: 'admin' }, JWT_SECRET);
+  const fleetToken = jwt.sign({ sub: 'fleet_user', fleet_id: 'f1' }, JWT_SECRET);
+
+  test('GET /health should return service info', async () => {
+    const res = await request(physicsEngine.app).get('/health');
+    expect(res.statusCode).toBe(200);
+    expect(res.body.service).toBe('physics-engine');
+    expect(res.body.version).toBe('10.1.5');
+  });
+
+  test('GET /data/training/physics should be secured by JWT', async () => {
+    const res = await request(physicsEngine.app).get('/data/training/physics');
+    expect(res.statusCode).toBe(401);
+  });
+
+  test('GET /data/training/physics should reject fleet tokens', async () => {
+    const res = await request(physicsEngine.app)
+      .get('/data/training/physics')
+      .set('Authorization', `Bearer ${fleetToken}`);
+    expect(res.statusCode).toBe(403);
+  });
+
+  test('GET /data/training/physics should allow system tokens', async () => {
+    global.mockPgQuery.mockResolvedValueOnce({ rows: [] });
+    const res = await request(physicsEngine.app)
+      .get('/data/training/physics')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.status).toBe('READY_FOR_L11');
   });
 });

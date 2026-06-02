@@ -46,7 +46,7 @@
 
 ## 🛠️ Active Engineering Sprints (Phase 5)
 
-### Layer 1: Physics Engine (v10.1.4)
+### Layer 1: Physics Engine (v10.1.5)
 - [✓] **Digital Twin Sync**: Hardened fleet-filtered Redis sync with string handling.
 - [✓] **Contextual Safety Locks**: metadata-enriched `l1:safety:lock:context` in Redis.
 - [✓] **High-Fidelity Reconcile**: Preservation of regional metadata in audit logs.
@@ -57,6 +57,10 @@
 - [✓] **Site Energy Snapshot**: Real-time load/capacity fetching for confidence scoring.
 - [✓] **[L1-126] Hardened Offline Mode**: Redis metadata preservation during disconnects.
 - [✓] **Standardized Scores**: Enforced strict .toFixed(4) string formatting for all scores.
+- [✓] **Sentinel Hardening**: Support for integer `1` flags for cross-layer parity.
+- [✓] **Standardized Site ID**: Implemented `extractSiteId` for multi-site identification.
+- [✓] **API Security**: Integrated `helmet` and secured `/data/training/physics`.
+- [✓] **[L1-133] Local Safety Cache**: 5s background poller for sub-millisecond resilience.
 
 ### Layer 2: Grid Signal (v2.5.3)
 - [✓] **Telemetry Hardening**: implemented `isNaN` protection for physics/confidence scores.

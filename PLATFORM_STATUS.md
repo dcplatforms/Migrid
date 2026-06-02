@@ -808,8 +808,8 @@ done
 
 | Layer | Service | Version | Status |
 | :--- | :--- | :--- | :--- |
-| **L1** | Physics Engine | `10.1.4` | ✅ Operational |
-| **L2** | Grid Signal | `2.5.3` | ✅ Operational |
+| **L1** | Physics Engine | `10.1.5` | ✅ Operational |
+| **L2** | Grid Signal | `2.5.2` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.1` | ✅ Operational |
 | **L4** | Market Gateway | `3.8.5` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
@@ -829,7 +829,7 @@ done
 - **L4 Market Gateway (v3.8.2)**: Exposed `/data/training/fuel-mix` and `/data/training/load-forecast` endpoints for L11 ML readiness. Hardened high-fidelity synchronization with L1/L2 fallbacks.
 - **L2 Grid Signal (v2.5.3)**: Hardened telemetry parsing with `isNaN` protection and strict `.toFixed(4)` string formatting for L11 ML Engine audit trails.
 - **L7 Device Gateway (v5.8.0)**: Hardened **Sentinel Fidelity** logic and string-formatted scores (.toFixed(4)) for L11 parity. Integrated **helmet()** middleware and enhanced ISO 15118 certificate validation. Advanced OCPI 2.2 mapping to 75%.
-- **L1 Physics Engine (v10.1.2)**: Deployed **Hardened Offline Mode [L1-126]** for Redis metadata preservation during disconnects.
+- **L1 Physics Engine (v10.1.5)**: Achieved full architectural parity with L2/L7/L10. Implemented **extractSiteId** for multi-site identification and **localSafetyCache [L1-133]** for sub-millisecond resilience. Secured L11 training data export via **helmet** and **JWT**.
 
 ---
 
