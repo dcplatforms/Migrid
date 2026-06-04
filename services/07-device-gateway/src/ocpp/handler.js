@@ -142,6 +142,14 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
             case 'NotifyDERAlarm':
                 // OCPP 2.1 DER Control: Handle alarms from local solar/BESS
                 console.log(`[L7] DER Alarm received from ${chargePointId}:`, payload.alarms);
+
+                // [L7-135] Broadcast DER alarms to Kafka for L1/L8 awareness
+                await publishSessionEvent('DER_ALARM_REPORTED', {
+                    chargePointId,
+                    alarms: payload.alarms,
+                    timestamp: new Date().toISOString()
+                });
+
                 ws.send(JSON.stringify([3, messageId, {}]));
                 break;
 
