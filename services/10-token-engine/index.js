@@ -26,25 +26,6 @@ const redisClient = redis.createClient({
 
 const consumer = kafka.consumer({ groupId: 'token-engine-group' });
 
-// Middleware: Verify JWT token
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) return res.status(401).json({ error: 'Access token required' });
-
-  if (!JWT_SECRET) {
-    console.error('[Security] JWT_SECRET is not configured. Rejecting authentication.');
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: 'Invalid or expired token' });
-    req.user = user;
-    next();
-  });
-};
-
 // Thresholds for Dynamic Multipliers (surplus/scarcity) - Configurable via ENV
 const LMP_THRESHOLD_SURPLUS = new Decimal(process.env.LMP_THRESHOLD_SURPLUS || '30.0');
 const LMP_THRESHOLD_SCARCITY = new Decimal(process.env.LMP_THRESHOLD_SCARCITY || '100.0');
@@ -70,6 +51,15 @@ const authenticateToken = (req, res, next) => {
     next();
   });
 };
+
+/**
+ * Helper: Extract site ID from multi-key payload
+ * Standardized for multi-site parity (site_id, siteId, location_id, locationId)
+ */
+function extractSiteId(payload) {
+  if (!payload) return null;
+  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
+}
 
 // --- Helper Functions for Database Interaction ---
 
@@ -249,7 +239,7 @@ async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '4.3.6',
+    version: '4.3.7',
     status: 'healthy',
     layer: 'L10'
   });
@@ -286,7 +276,7 @@ app.get('/data/training/rewards', authenticateToken, async (req, res) => {
     res.json({
       count: result.rows.length,
       data: result.rows,
-      source: 'L10_TOKEN_ENGINE_V4.3.6',
+      source: 'L10_TOKEN_ENGINE_V4.3.7',
       fidelity_tier: 'SENTINEL'
     });
   } catch (error) {
@@ -348,11 +338,7 @@ async function start() {
             confidence_score,
             confidenceScore,
             resource_type,
-            resourceType,
-            site_id,
-            siteId,
-            location_id,
-            locationId
+            resourceType
           } = payload;
 
           const vppAligned = !!(is_vpp_event || isVppEvent);
@@ -366,7 +352,7 @@ async function start() {
 
           const isHighFidelityVal = is_high_fidelity !== undefined ? is_high_fidelity : (isHighFidelity !== undefined ? isHighFidelity : false);
           const isSentinelFidelityVal = is_sentinel_fidelity !== undefined ? is_sentinel_fidelity : (isSentinelFidelity !== undefined ? isSentinelFidelity : false);
-          const siteIdVal = site_id || siteId || location_id || locationId || null;
+          const siteIdVal = extractSiteId(payload);
           const resourceTypeVal = resource_type || resourceType || 'EV';
 
           // 1. Ensure Driver Wallet Exists (and get address)
