@@ -1,6 +1,6 @@
 {
   "name": "@migrid/market-gateway",
-  "version": "3.8.7",
+  "version": "3.8.8",
   "description": "Wholesale energy market integration for CAISO, PJM, and ERCOT",
   "main": "index.js",
   "scripts": {
