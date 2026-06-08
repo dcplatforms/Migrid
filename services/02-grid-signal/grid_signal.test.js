@@ -308,10 +308,10 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body).toHaveProperty('timestamp');
   });
 
-  test('GET /health should return correct version (v2.5.3)', async () => {
+  test('GET /health should return correct version (v2.5.4)', async () => {
     const response = await request(app).get('/health');
     expect(response.status).toBe(200);
-    expect(response.body.version).toBe('2.5.3');
+    expect(response.body.version).toBe('2.5.4');
   });
 
   test('GET /openadr/v3/reports should return regional market contexts', async () => {
@@ -387,8 +387,10 @@ describe('L2 Grid Signal Service', () => {
 
   test('GET /openadr/v3/reports should return safety context when locked', async () => {
     const systemToken = jwt.sign({ sub: 'admin', role: 'system' }, JWT_SECRET);
+    const { localSafetyCache } = require('./index');
+    localSafetyCache.global_safety = true;
+
     redisClient.get.mockImplementation((key) => {
-      if (key === 'l1:safety:lock') return Promise.resolve('1');
       if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({
         event_type: 'PHYSICS_FRAUD',
         severity: 'FRAUD',
@@ -403,6 +405,8 @@ describe('L2 Grid Signal Service', () => {
     expect(response.status).toBe(200);
     expect(response.body.safety_lock.active).toBe(true);
     expect(response.body.safety_lock.context.iso_region).toBe('ERCOT');
+
+    localSafetyCache.global_safety = false; // Reset
   });
 
   test('GET /openadr/v3/reports should return 401 when unauthenticated', async () => {
@@ -434,9 +438,10 @@ describe('L2 Grid Signal Service', () => {
   });
 
   test('POST /openadr/v3/events should reject when L1 safety lock is active (Phase 5 Alignment)', async () => {
-    // Phase 5 uses '1' or 'true' for the lock key
+    const { localSafetyCache } = require('./index');
+    localSafetyCache.global_safety = true;
+
     redisClient.get.mockImplementation((key) => {
-      if (key === 'l1:safety:lock') return Promise.resolve('1');
       if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({
         event_type: 'CAPACITY_VIOLATION',
         severity: 'CRITICAL',
@@ -457,7 +462,8 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body.status).toBe('REJECTED');
     expect(response.body.reason).toBe('SAFETY_VIOLATION_L1');
     expect(response.body.details.alert_type).toBe('CAPACITY_VIOLATION');
-    expect(redisClient.get).toHaveBeenCalledWith('l1:safety:lock');
+
+    localSafetyCache.global_safety = false; // Reset
   });
 
   test('POST /openadr/v3/events should return 400 for invalid payload (Ajv Validation)', async () => {
@@ -603,10 +609,8 @@ describe('L2 Grid Signal Service', () => {
   });
 
   test('POST /openadr/v3/events should reject when global L4 grid lock is active', async () => {
-    redisClient.get.mockImplementation((key) => {
-      if (key === 'l4:grid:lock') return Promise.resolve('true');
-      return Promise.resolve(null);
-    });
+    const { localSafetyCache } = require('./index');
+    localSafetyCache.global_grid = true;
 
     const response = await request(app)
       .post('/openadr/v3/events')
@@ -619,13 +623,13 @@ describe('L2 Grid Signal Service', () => {
     expect(response.status).toBe(503);
     expect(response.body.reason).toBe('GRID_LOCK_ACTIVE');
     expect(response.body.region).toBe('GLOBAL');
+
+    localSafetyCache.global_grid = false; // Reset
   });
 
   test('POST /openadr/v3/events should reject when regional L4 grid lock is active (ISO Normalization L2 v2.4.2)', async () => {
-    redisClient.get.mockImplementation((key) => {
-      if (key === 'l4:grid:lock:ENTSOE') return Promise.resolve('1');
-      return Promise.resolve(null);
-    });
+    const { localSafetyCache } = require('./index');
+    localSafetyCache.regional_grid['ENTSOE'] = true;
 
     const response = await request(app)
       .post('/openadr/v3/events')
@@ -639,6 +643,8 @@ describe('L2 Grid Signal Service', () => {
     expect(response.status).toBe(503);
     expect(response.body.reason).toBe('GRID_LOCK_ACTIVE');
     expect(response.body.region).toBe('ENTSOE'); // Normalized: Uppercase, no hyphens
+
+    localSafetyCache.regional_grid['ENTSOE'] = false; // Reset
   });
 
   test('POST /openadr/v3/events should reject when site is in L8 Safe Mode', async () => {
@@ -795,7 +801,6 @@ describe('L2 Grid Signal Service', () => {
     expect(response.status).toBe(202);
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
     expect(sentValue.iso_region).toBe('ENTSOE');
-    expect(redisClient.get).toHaveBeenCalledWith('l4:grid:lock:ENTSOE');
   });
 
   test('POST /openadr/v3/events should map IEEE 2030.5 der_control (v2.4.5)', async () => {
