@@ -88,7 +88,7 @@ async function initKafka() {
   await producer.connect();
 
   // Listen for both direct events and session completions
-  await consumer.subscribe({ topics: ['charging_events', 'SESSION_COMPLETED', 'vpp_participation_updates', 'grid_signals', 'MARKET_PRICE_UPDATED', 'ADVANCE_CHARGE_SIGNAL'], fromBeginning: false });
+  await consumer.subscribe({ topics: ['charging_events', 'SESSION_COMPLETED', 'vpp_participation_updates', 'grid_signals', 'MARKET_PRICE_UPDATED', 'ADVANCE_CHARGE_SIGNAL', 'DER_ALARM_REPORTED'], fromBeginning: false });
 
   await consumer.run({
     eachMessage: async ({ topic, message }) => {
@@ -109,6 +109,8 @@ async function initKafka() {
           console.log(`[Engagement] Updated Redis Market Profitability for ${normalizedIso}: $${profitability_index}/MWh`);
         } else if (topic === 'ADVANCE_CHARGE_SIGNAL') {
           await handleAdvanceChargeSignal(payload);
+        } else if (topic === 'DER_ALARM_REPORTED') {
+          await handleDerAlarm(payload);
         }
       } catch (error) {
         console.error('[Engagement] Error processing Kafka message:', error);
@@ -123,7 +125,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.16.0', // Weekly Mission: Phase 6 Data Pioneer & Hardened Telemetry
+    version: '5.17.0', // Weekly Mission: DER Sentinel & Standardized Site ID
     status: 'healthy',
     layer: 'L6'
   });
@@ -264,6 +266,47 @@ app.get('/achievements/driver/:driver_id', authenticateToken, async (req, res) =
 // CHALLENGES ENDPOINTS
 // ============================================================================
 
+/**
+ * [Phase 6 AI Readiness]
+ * GET /data/training/engagement
+ * Exposes driver engagement metrics for L11 ML Engine training.
+ * Security: Restricted to admin/system tokens (no fleet_id).
+ */
+app.get('/data/training/engagement', authenticateToken, async (req, res) => {
+  // Authorization: Only admin/system tokens (without fleet_id) can access global training data
+  if (req.user.fleet_id) {
+    console.warn(`[Security] Unauthorized global engagement data export attempt by fleet_id: ${req.user.fleet_id}`);
+    return res.status(403).json({ error: 'Forbidden: Unauthorized access to global training data.' });
+  }
+
+  const { limit = 100 } = req.query;
+
+  try {
+    const result = await pool.query(`
+      SELECT
+        driver_id,
+        action_type,
+        metadata,
+        created_at
+      FROM driver_actions
+      WHERE (metadata->>'is_high_fidelity')::boolean = true
+         OR (metadata->>'is_sentinel_fidelity')::boolean = true
+      ORDER BY created_at DESC
+      LIMIT $1
+    `, [parseInt(limit)]);
+
+    res.json({
+      count: result.rows.length,
+      data: result.rows,
+      source: 'L6_ENGAGEMENT_ENGINE_V5.17.0',
+      fidelity_tier: 'HIGH_FIDELITY'
+    });
+  } catch (error) {
+    console.error('[L6 AI Export Error]', error);
+    res.status(500).json({ error: 'Failed to retrieve engagement training data' });
+  }
+});
+
 // Get active challenges from database with driver progress
 app.get('/challenges/active', authenticateToken, async (req, res) => {
   const driver_id = req.user.driver_id;
@@ -289,6 +332,15 @@ app.get('/challenges/active', authenticateToken, async (req, res) => {
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+/**
+ * Helper: Extract site ID from multi-key payload
+ * Standardized for multi-site parity (site_id, siteId, location_id, locationId)
+ */
+function extractSiteId(payload) {
+  if (!payload) return null;
+  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
+}
 
 async function processChargingEvent(event) {
   const driverId = event.driverId || event.driver_id;
@@ -322,7 +374,7 @@ async function processChargingEvent(event) {
     let confidence_score = 0.5; // Default confidence
 
     // Standardize site_id extraction (Multi-key convention)
-    const siteId = event.site_id || event.siteId || event.location_id || event.locationId || null;
+    const siteId = extractSiteId(event);
 
     // Use event-provided score if available (Backward compatibility for camelCase)
     if (event.physics_score !== undefined) physics_score = parseFloat(event.physics_score);
@@ -518,7 +570,7 @@ async function processChargingEvent(event) {
 
       await producer.send({
         topic: 'engagement_notifications',
-        messages: [{ key: driverId, value: JSON.stringify(notification) }]
+        messages: [{ key: driverId.toString(), value: JSON.stringify(notification) }]
       });
 
       // WebSocket Real-time Push
@@ -605,7 +657,7 @@ async function processChargingEvent(event) {
 
     await producer.send({
       topic: 'engagement_notifications',
-      messages: [{ key: driverId, value: JSON.stringify(v2gNotification) }]
+      messages: [{ key: driverId.toString(), value: JSON.stringify(v2gNotification) }]
     });
 
     io.to(`driver:${driverId}`).emit('notification', v2gNotification);
@@ -749,9 +801,27 @@ async function handleVPPParticipationUpdate(payload) {
   }
 }
 
+async function handleDerAlarm(payload) {
+  // New handler for OCPP 2.1 NotifyDERAlarm signals from L7
+  const { alarm_type, severity, vehicle_id } = payload;
+  const siteId = extractSiteId(payload);
+  console.log(`[L6] Handling DER Alarm: ${alarm_type} (${severity}) - Site: ${siteId}`);
+
+  if (vehicle_id) {
+    const driverRes = await pool.query('SELECT id FROM drivers WHERE id = (SELECT driver_id FROM charging_sessions WHERE vehicle_id = $1 AND end_time IS NULL LIMIT 1)', [vehicle_id]);
+    if (driverRes.rows.length > 0) {
+      const driverId = driverRes.rows[0].id;
+      await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
+        [driverId, 'der_alarm_response', JSON.stringify({ alarm_type, severity, site_id: siteId, physics_score: (1.0).toFixed(4), is_high_fidelity: true })]);
+
+      await checkDerSentinelAchievement(driverId);
+    }
+  }
+}
+
 async function handleGridSignal(payload) {
   const { event_id, priority } = payload;
-  const siteIdVal = payload.site_id || payload.siteId || payload.location_id || payload.locationId || 'ALL';
+  const siteIdVal = extractSiteId(payload) || 'ALL';
   console.log(`[L6] Handling Grid Signal for Team Challenge: ${event_id} (${priority}) - Site: ${siteIdVal}`);
 
   try {
@@ -892,7 +962,7 @@ async function handleGridSignal(payload) {
           body: `Congratulations! You've completed the '${chalName}' challenge.`,
           priority: 'high' // L5 anti-fatigue: Challenges are high priority
         };
-        await producer.send({ topic: 'engagement_notifications', messages: [{ key: row.driver_id, value: JSON.stringify(notification) }] });
+        await producer.send({ topic: 'engagement_notifications', messages: [{ key: row.driver_id.toString(), value: JSON.stringify(notification) }] });
         io.to(`driver:${row.driver_id}`).emit('notification', notification);
 
         // Notify L10 for payout
@@ -1007,6 +1077,28 @@ async function checkMultiSiteMaestroAchievement(driver_id) {
     }
   } catch (error) {
     console.error('[Engagement] Error checking Multi-Site Maestro achievement:', error);
+  }
+}
+
+async function checkDerSentinelAchievement(driver_id) {
+  // Requirement: 3 responses to NotifyDERAlarm grid safety events
+  try {
+    const result = await pool.query(`
+      SELECT COUNT(*) as alarm_count
+      FROM driver_actions
+      WHERE driver_id = $1 AND action_type = 'der_alarm_response'
+    `, [driver_id]);
+
+    const count = parseInt(result.rows[0]?.alarm_count || '0');
+
+    if (count >= 3) {
+      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'DER Sentinel'");
+      if (achievement.rows.length > 0) {
+        await awardAchievement(driver_id, achievement.rows[0].id);
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking DER Sentinel achievement:', error);
   }
 }
 
@@ -1239,7 +1331,7 @@ async function updateChallengeProgress(driver_id, challenge_type) {
 
         await producer.send({
           topic: 'engagement_notifications',
-          messages: [{ key: driver_id, value: JSON.stringify(notification) }]
+          messages: [{ key: driver_id.toString(), value: JSON.stringify(notification) }]
         });
 
         io.to(`driver:${driver_id}`).emit('notification', notification);
@@ -1657,7 +1749,7 @@ async function awardAchievement(driver_id, achievement_id) {
 
     await producer.send({
       topic: 'engagement_notifications',
-      messages: [{ key: driver_id, value: JSON.stringify(notification) }]
+      messages: [{ key: driver_id.toString(), value: JSON.stringify(notification) }]
     });
 
     // WebSocket Real-time Push
@@ -1726,7 +1818,7 @@ async function recalculateRanks() {
 
       await producer.send({
         topic: 'engagement_notifications',
-        messages: [{ key: row.driver_id, value: JSON.stringify(notification) }]
+        messages: [{ key: row.driver_id.toString(), value: JSON.stringify(notification) }]
       });
 
       io.to(`driver:${row.driver_id}`).emit('notification', notification);
@@ -1782,8 +1874,10 @@ module.exports = {
   redisClient,
   processChargingEvent,
   handleGridSignal,
+  handleDerAlarm,
   checkHighConfidenceAchievement,
   checkSiteHarmonyAchievement,
+  checkDerSentinelAchievement,
   updateChallengeProgress,
   handleAdvanceChargeSignal,
   checkSolarSurgeAchievement,
