@@ -1,5 +1,5 @@
 /**
- * L2: Grid Signal Service (v2.5.3)
+ * L2: Grid Signal Service (v2.5.4)
  * OpenADR 3.0 VEN implementation for demand response and price signals
  * Enhanced with L1 Physics Safety Guards and Redis Caching
  */
@@ -62,6 +62,14 @@ const redisClient = redis.createClient({
   url: process.env.REDIS_URL || 'redis://localhost:6379'
 });
 
+// [L2-133] Sub-millisecond local safety cache
+const localSafetyCache = {
+  global_safety: false,
+  global_grid: false,
+  regional_safety: {},
+  regional_grid: {}
+};
+
 app.use(helmet());
 app.use(express.json());
 
@@ -112,7 +120,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.5.3',
+    version: '2.5.4',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -131,12 +139,10 @@ app.get('/openadr/v3/reports', authenticateToken, async (req, res) => {
   }
 
   try {
-    const [result, unifiedContextRaw, safetyLock, safetyContextRaw, gridLock, marketContextRaw, regionalCapacityRaw] = await Promise.all([
+    const [result, unifiedContextRaw, safetyContextRaw, marketContextRaw, regionalCapacityRaw] = await Promise.all([
       pool.query('SELECT event_id, event_type, status, received_at FROM grid_events ORDER BY received_at DESC LIMIT 50'),
       redisClient.get('l2:unified:context'),
-      redisClient.get(SAFETY_LOCK_KEY),
       redisClient.get(`${SAFETY_LOCK_KEY}:context`),
-      redisClient.get('l4:grid:lock'),
       redisClient.get('market:latest:context'),
       redisClient.get('vpp:capacity:regional')
     ]);
@@ -182,12 +188,13 @@ app.get('/openadr/v3/reports', authenticateToken, async (req, res) => {
       grid_health: unifiedContext.grid_health,
       advance_charge: unifiedContext.advance_charge,
       safety_lock: {
-        active: safetyLock === '1' || safetyLock === 'true',
-        context: safetyContext
+        active: localSafetyCache.global_safety,
+        context: safetyContext,
+        regional: localSafetyCache.regional_safety
       },
       grid_lock: {
-        active: gridLock === '1' || gridLock === 'true',
-        regional: unifiedContext.regional_locks
+        active: localSafetyCache.global_grid,
+        regional: localSafetyCache.regional_grid
       },
       confidence_score: unifiedContext.confidence_score,
       digital_twin: unifiedContext.digital_twin,
@@ -217,12 +224,16 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
   }
 
   try {
-    // 1. Check Safety Lock from L1 Physics Engine
-    const safetyLock = await redisClient.get(SAFETY_LOCK_KEY);
-    if (safetyLock === '1' || safetyLock === 'true') {
-      console.warn('🚨 [L2] DISPATCH REJECTED: L1 Safety Lock active');
+    // Normalize ISO Region: uppercase and remove hyphens for cross-layer consistency
+    const isoRegion = (event.targets?.find(t => t.type === 'region')?.value || '').toUpperCase().replace(/-/g, '');
 
-      // Fetch context if available for richer error response
+    // 1. Check Safety Lock from L1 Physics Engine (Utilize sub-millisecond local cache)
+    const isSafetyLocked = localSafetyCache.global_safety || (isoRegion && localSafetyCache.regional_safety[isoRegion]);
+
+    if (isSafetyLocked) {
+      console.warn(`🚨 [L2] DISPATCH REJECTED: L1 Safety Lock active (Global: ${localSafetyCache.global_safety}, Regional: ${localSafetyCache.regional_safety[isoRegion]})`);
+
+      // Fetch context if available for richer error response (Redis fallback)
       const lockContext = await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
       const details = lockContext ? JSON.parse(lockContext) : null;
 
@@ -235,11 +246,19 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
       });
     }
 
-    // 1.1 Check L4 Grid Lock (Global and Regional) - Phase 5 Forward Engineering
-    const gridLock = await redisClient.get('l4:grid:lock');
-    // Normalize ISO Region: uppercase and remove hyphens for cross-layer consistency
-    const isoRegion = (event.targets?.find(t => t.type === 'region')?.value || '').toUpperCase().replace(/-/g, '');
-    const regionalLock = isoRegion ? await redisClient.get(`l4:grid:lock:${isoRegion}`) : null;
+    // 1.1 Check L4 Grid Lock (Global and Regional) - Utilizing local cache
+    const isGridLocked = localSafetyCache.global_grid || (isoRegion && localSafetyCache.regional_grid[isoRegion]);
+
+    if (isGridLocked) {
+      console.warn(`🚨 [L2] DISPATCH REJECTED: L4 Grid Lock active (Global: ${localSafetyCache.global_grid}, Regional: ${localSafetyCache.regional_grid[isoRegion]})`);
+      return res.status(503).json({
+        status: 'REJECTED',
+        reason: 'GRID_LOCK_ACTIVE',
+        message: 'Grid dispatch suspended due to high-priority grid stability event',
+        region: isoRegion || 'GLOBAL',
+        timestamp: new Date().toISOString()
+      });
+    }
 
     // Fetch regional market metadata for broadcast enrichment
     let marketMetadata = {};
@@ -248,17 +267,6 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
       if (marketRaw) {
         marketMetadata = JSON.parse(marketRaw);
       }
-    }
-
-    if (gridLock === 'true' || gridLock === '1' || regionalLock === 'true' || regionalLock === '1') {
-      console.warn(`🚨 [L2] DISPATCH REJECTED: L4 Grid Lock active (Global: ${gridLock}, Regional: ${regionalLock})`);
-      return res.status(503).json({
-        status: 'REJECTED',
-        reason: 'GRID_LOCK_ACTIVE',
-        message: 'Grid dispatch suspended due to high-priority grid stability event',
-        region: isoRegion || 'GLOBAL',
-        timestamp: new Date().toISOString()
-      });
     }
 
     // 1.2 Check L8 Safe Mode (Site Specific)
@@ -407,6 +415,58 @@ app.get('/data/training/events', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to export training data' });
   }
 });
+
+/**
+ * [L2-133] Local Safety Cache Poller
+ * Ensures sub-millisecond lookup by periodic polling of Redis locks.
+ */
+const updateLocalSafetyCache = async () => {
+  try {
+    const [safetyGlobal, gridGlobal] = await Promise.all([
+      redisClient.get(SAFETY_LOCK_KEY),
+      redisClient.get('l4:grid:lock')
+    ]);
+
+    localSafetyCache.global_safety = (safetyGlobal === 'true' || safetyGlobal === '1');
+    localSafetyCache.global_grid = (gridGlobal === 'true' || gridGlobal === '1');
+
+    // Sync regional locks
+    let cursor = '0';
+    const newRegionalSafety = {};
+    const newRegionalGrid = {};
+
+    do {
+      const safetyReply = await redisClient.scan(cursor, { MATCH: `${SAFETY_LOCK_KEY}:*`, COUNT: 100 });
+      cursor = safetyReply.cursor;
+      if (safetyReply.keys.length > 0) {
+        const values = await redisClient.mGet(safetyReply.keys);
+        safetyReply.keys.forEach((key, index) => {
+          if (key.endsWith(':context')) return;
+          const iso = key.split(':').pop().toUpperCase().replace(/-/g, '');
+          newRegionalSafety[iso] = (values[index] === 'true' || values[index] === '1');
+        });
+      }
+    } while (cursor !== '0' && cursor !== 0);
+
+    cursor = '0';
+    do {
+      const gridReply = await redisClient.scan(cursor, { MATCH: 'l4:grid:lock:*', COUNT: 100 });
+      cursor = gridReply.cursor;
+      if (gridReply.keys.length > 0) {
+        const values = await redisClient.mGet(gridReply.keys);
+        gridReply.keys.forEach((key, index) => {
+          const iso = key.split(':').pop().toUpperCase().replace(/-/g, '');
+          newRegionalGrid[iso] = (values[index] === 'true' || values[index] === '1');
+        });
+      }
+    } while (cursor !== '0' && cursor !== 0);
+
+    localSafetyCache.regional_safety = newRegionalSafety;
+    localSafetyCache.regional_grid = newRegionalGrid;
+  } catch (err) {
+    console.error('❌ [L2] Failed to update local safety cache:', err.message);
+  }
+};
 
 /**
  * Background task: Aggregate regional stats and contexts for sub-500ms reporting
@@ -597,7 +657,7 @@ const updateRegionalStats = async () => {
 async function startSafetyConsumer() {
   await consumer.connect();
   await consumer.subscribe({
-    topics: ['migrid.physics.alerts', 'MARKET_PRICE_UPDATED', 'migrid.l8.status', 'L8_SAFE_MODE_CHANGED', 'ADVANCE_CHARGE_SIGNAL', 'GRID_HEALTH_UPDATED'],
+    topics: ['migrid.physics.alerts', 'MARKET_PRICE_UPDATED', 'migrid.l8.status', 'L8_SAFE_MODE_CHANGED', 'ADVANCE_CHARGE_SIGNAL', 'GRID_HEALTH_UPDATED', 'DER_ALARM_REPORTED'],
     fromBeginning: false
   });
 
@@ -605,7 +665,17 @@ async function startSafetyConsumer() {
     eachMessage: async ({ topic, partition, message }) => {
       const payload = JSON.parse(message.value.toString());
 
-      if (topic === 'ADVANCE_CHARGE_SIGNAL') {
+      if (topic === 'DER_ALARM_REPORTED') {
+        const siteIdVal = extractSiteId(payload);
+        console.log(`⚠️ [L2] DER Alarm Reported: Site=${siteIdVal}, Type=${payload.alarm_type}, Severity=${payload.severity}`);
+        if (siteIdVal) {
+          await redisClient.setEx(`l7:site:alarm:${siteIdVal}`, 3600, JSON.stringify(payload));
+          // If critical alarm, log for engineering audit
+          if (payload.severity === 'CRITICAL') {
+            console.warn(`🚨 [L2] CRITICAL DER ALARM at Site ${siteIdVal}. Monitoring for grid instability.`);
+          }
+        }
+      } else if (topic === 'ADVANCE_CHARGE_SIGNAL') {
         const iso = payload.iso.toUpperCase().replace(/-/g, '');
         console.log(`[L2] Received Advance Charge Signal for ${iso}: ${payload.reason}`);
         await redisClient.setEx(`l2:advance_charge:${iso}`, 600, JSON.stringify(payload));
@@ -711,6 +781,10 @@ async function start() {
     await startSafetyConsumer();
     console.log('✅ [L2] Safety Consumer running (Listening to L1)');
 
+    // Start local safety cache poller [L2-133]
+    setInterval(updateLocalSafetyCache, 5000);
+    await updateLocalSafetyCache();
+
     // Start regional stats aggregation loop
     setInterval(updateRegionalStats, 15000);
     updateRegionalStats();
@@ -728,7 +802,15 @@ if (require.main === module) {
   start();
 }
 
-module.exports = { app, producer, consumer, redisClient, startSafetyConsumer };
+module.exports = {
+  app,
+  producer,
+  consumer,
+  redisClient,
+  startSafetyConsumer,
+  localSafetyCache,
+  updateLocalSafetyCache
+};
 
 process.on('SIGTERM', async () => {
   console.log('[L2 Grid Signal] Shutting down...');
