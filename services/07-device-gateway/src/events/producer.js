@@ -108,14 +108,15 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
     const siteId = await redis.get(`charger_site:${chargePointId}`);
 
     // 2. Standardized Output: Broadcast a unified schema to Kafka
+    // [L1-127] Standardize all energy/power values to 4 decimal places for L11 ML Engine parity
     event = {
         chargePointId,
         site_id: siteId,
         timestamp: payload.timestamp || new Date().toISOString(),
-        energyActiveImport: importEnergy,
-        energyActiveExport: exportEnergy,
-        powerActiveImport: importPower,
-        powerActiveExport: exportPower,
+        energyActiveImport: importEnergy.toFixed(4),
+        energyActiveExport: exportEnergy.toFixed(4),
+        powerActiveImport: importPower.toFixed(4),
+        powerActiveExport: exportPower.toFixed(4),
         protocol: protocol,
         iso_region: isoRegion,
         physics_score: hf.physicsScore,
@@ -124,7 +125,7 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
         is_sentinel_fidelity: hf.isSentinelFidelity,
         fidelity_status: hf.fidelityStatus,
         resource_type: resourceType,
-        source: 'L7_GATEWAY_V5.10.0'
+        source: 'L7_GATEWAY_V5.11.0'
     };
 
     await producer.send({

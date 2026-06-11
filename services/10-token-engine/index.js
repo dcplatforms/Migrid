@@ -52,6 +52,15 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+/**
+ * Helper: Extract site ID from multi-key payload
+ * Standardized for multi-site parity (site_id, siteId, location_id, locationId)
+ */
+function extractSiteId(payload) {
+  if (!payload) return null;
+  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
+}
+
 // --- Helper Functions for Database Interaction ---
 
 async function getRewardRule(actionType) {
@@ -348,11 +357,7 @@ async function start() {
             confidence_score,
             confidenceScore,
             resource_type,
-            resourceType,
-            site_id,
-            siteId,
-            location_id,
-            locationId
+            resourceType
           } = payload;
 
           const vppAligned = !!(is_vpp_event || isVppEvent);
