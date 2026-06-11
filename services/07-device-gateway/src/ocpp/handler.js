@@ -37,6 +37,14 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                 }]));
                 break;
 
+            case 'Heartbeat':
+                // Update Redis with the last heartbeat timestamp for availability tracking
+                await redis.set(`charger_heartbeat:${chargePointId}`, new Date().toISOString(), 'EX', 86400);
+                ws.send(JSON.stringify([3, messageId, {
+                    currentTime: new Date().toISOString()
+                }]));
+                break;
+
             case 'MeterValues':
                 // Standardize and broadcast to Kafka for L1 Physics Engine
                 await publishTelemetry(chargePointId, payload, protocol);
@@ -190,14 +198,18 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                             );
 
                             if (energySample) {
-                                energyDispensed = parseFloat(energySample.value) || 0;
+                                const parsed = parseFloat(energySample.value);
+                                energyDispensed = isNaN(parsed) ? 0.0 : parsed;
                             } else {
                                 // Fallback: Find any value with 'kWh' unit or just the first sample
                                 const unitSample = lastMeterValue.sampledValue?.find(sv => sv.unit === 'kWh' || sv.unit === 'Wh');
                                 if (unitSample) {
-                                    energyDispensed = (unitSample.unit === 'Wh') ? parseFloat(unitSample.value) / 1000 : parseFloat(unitSample.value);
+                                    const parsed = parseFloat(unitSample.value);
+                                    const val = isNaN(parsed) ? 0.0 : parsed;
+                                    energyDispensed = (unitSample.unit === 'Wh') ? val / 1000 : val;
                                 } else if (lastMeterValue.sampledValue?.[0]?.value) {
-                                    energyDispensed = parseFloat(lastMeterValue.sampledValue[0].value) || 0;
+                                    const parsed = parseFloat(lastMeterValue.sampledValue[0].value);
+                                    energyDispensed = isNaN(parsed) ? 0.0 : parsed;
                                 }
                             }
                         }

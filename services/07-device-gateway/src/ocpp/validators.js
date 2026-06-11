@@ -36,6 +36,7 @@ const legacySchema = { type: 'object' };
 const compileLegacy = () => ajv.compile(legacySchema);
 validators['ocpp2.0.1'] = {
     'BootNotification': compileLegacy(),
+    'Heartbeat': compileLegacy(),
     'MeterValues': compileLegacy(),
     'StatusNotification': compileLegacy(),
     'TransactionEvent': compileLegacy(),

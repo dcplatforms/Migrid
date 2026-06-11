@@ -16,6 +16,14 @@ const extractSiteId = (payload) => {
     return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
 };
 
+/**
+ * [L7 v5.12.0] safeFloat: Robust isNaN protection for telemetry scoring
+ */
+const safeFloat = (val, fallback = 0.0) => {
+    const parsed = parseFloat(val);
+    return isNaN(parsed) ? fallback : parsed;
+};
+
 async function connectProducer() {
     try {
         await producer.connect();
@@ -125,7 +133,7 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
         is_sentinel_fidelity: hf.isSentinelFidelity,
         fidelity_status: hf.fidelityStatus,
         resource_type: resourceType,
-        source: 'L7_GATEWAY_V5.11.0'
+        source: 'L7_GATEWAY_V5.12.0'
     };
 
     await producer.send({
@@ -183,7 +191,7 @@ function extractMeterValue(payload, measurand) {
     for (const mv of payload.meterValue) {
         for (const rv of mv.sampledValue) {
             if (rv.measurand === measurand || (measurand === 'Energy.Active.Import.Register' && rv.measurand === undefined)) {
-                return parseFloat(rv.value);
+                return safeFloat(rv.value);
             }
         }
     }
@@ -193,7 +201,7 @@ function extractMeterValue(payload, measurand) {
 function extractBidirValue(bidirEnergyFlowData, measurand) {
     if (!bidirEnergyFlowData) return 0.0;
     const entry = bidirEnergyFlowData.find(d => d.measurand === measurand);
-    return entry ? parseFloat(entry.value) : 0.0;
+    return entry ? safeFloat(entry.value) : 0.0;
 }
 
 module.exports = { connectProducer, publishTelemetry, publishSessionEvent };
