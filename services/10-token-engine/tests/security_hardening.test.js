@@ -19,7 +19,7 @@ jest.mock('redis', () => ({
 jest.mock('pg', () => {
   const mClient = {
     connect: jest.fn(),
-    query: jest.fn(),
+    query: jest.fn(() => Promise.resolve({ rows: [] })),
     end: jest.fn(),
     on: jest.fn(),
   };
