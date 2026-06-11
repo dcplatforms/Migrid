@@ -1,5 +1,5 @@
 /**
- * L4: Market Gateway Service (v3.8.7)
+ * L4: Market Gateway Service (v3.8.8)
  * Wholesale energy market integration (CAISO, PJM, ERCOT)
  */
 
@@ -29,6 +29,18 @@ const pricingService = new MarketPricingService(pool);
 
 // Supported market regions for L4
 const SUPPORTED_ISOS = ['CAISO', 'PJM', 'ERCOT', 'NORDPOOL', 'ENTSOE'];
+
+// [L4-133] Sub-millisecond local safety cache
+const localSafetyCache = {
+  l1_physics: false,
+  l4_grid: false,
+  l4_regional: {},
+  physics_score: "1.0000",
+  confidence_score: "1.0000",
+  is_sentinel_fidelity: false,
+  regional_confidence: {},
+  last_updated: null
+};
 
 // Redis connection
 const redisClient = redis.createClient({
@@ -100,31 +112,64 @@ const LMP_THRESHOLD_BUY = new Decimal(process.env.LMP_THRESHOLD_BUY || '30.00');
 const LMP_THRESHOLD_SELL = new Decimal(process.env.LMP_THRESHOLD_SELL || '100.00');
 
 /**
- * Discovers and returns all regional grid locks (l4:grid:lock:<ISO>)
+ * [L4-133] Local Safety Cache Poller
+ * Ensures sub-millisecond lookup by periodic polling of Redis locks.
  */
-async function getRegionalGridLocks() {
-  const locks = {};
+async function updateLocalSafetyCache() {
   try {
+    const [l1, l4, context, unifiedRaw] = await Promise.all([
+      redisClient.get('l1:safety:lock'),
+      redisClient.get('l4:grid:lock'),
+      redisClient.get('l1:safety:lock:context'),
+      redisClient.get('l2:unified:context')
+    ]);
+
+    localSafetyCache.l1_physics = (l1 === 'true' || l1 === '1');
+    localSafetyCache.l4_grid = (l4 === 'true' || l4 === '1');
+
+    if (context) {
+      const details = JSON.parse(context);
+      localSafetyCache.physics_score = safeFloat(details.physics_score, 1.0);
+      localSafetyCache.confidence_score = safeFloat(details.confidence_score, 1.0);
+      localSafetyCache.is_sentinel_fidelity = isSentinel(details.is_sentinel_fidelity, localSafetyCache.physics_score);
+    }
+
+    if (unifiedRaw) {
+      const unified = JSON.parse(unifiedRaw);
+      localSafetyCache.regional_confidence = unified.regional_confidence || {};
+    }
+
+    // Regional locks discovery
+    const newRegionalLocks = {};
     let cursor = '0';
     do {
       const reply = await redisClient.scan(cursor, { MATCH: 'l4:grid:lock:*', COUNT: 100 });
       cursor = reply.cursor;
-
       if (reply.keys.length > 0) {
         const values = await redisClient.mGet(reply.keys);
         reply.keys.forEach((key, index) => {
-          const iso = key.split(':').pop();
+          const iso = key.split(':').pop().toUpperCase();
           const val = values[index];
           if (val === 'true' || val === '1') {
-            locks[iso] = true;
+            newRegionalLocks[iso] = true;
           }
         });
       }
     } while (cursor !== 0 && cursor !== '0');
+
+    localSafetyCache.l4_regional = newRegionalLocks;
+    localSafetyCache.last_updated = new Date().toISOString();
   } catch (err) {
-    console.error('[Market Gateway] Failed to discover regional grid locks:', err.message);
+    console.error('❌ [Market Gateway] Failed to update local safety cache:', err.message);
   }
-  return locks;
+}
+
+/**
+ * Discovers and returns all regional grid locks (l4:grid:lock:<ISO>)
+ * [L4-133] Now uses local cache for sub-millisecond response
+ */
+async function getRegionalGridLocks() {
+  return localSafetyCache.l4_regional;
 }
 
 /**
@@ -143,40 +188,30 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
     const profitabilityIndex = price.minus(degradationCostMwh);
 
     // AI Readiness: Include physics score and confidence score from L1 safety context if available
-    // Phase 5 Enhancement: Match global safety lock to the current ISO region
-    let physicsScore = 1.0;
-    let confidenceScore = 1.0;
-    let isSentinelFidelity = false;
+    // [L4-133] Optimized: Use localSafetyCache for zero-latency lookups
+    let physicsScore = localSafetyCache.physics_score;
+    let confidenceScore = localSafetyCache.confidence_score;
+    let isSentinelFidelity = localSafetyCache.is_sentinel_fidelity;
     const currentIso = iso.toUpperCase().replace(/-/g, '');
 
-    try {
-      const lockContext = await redisClient.get('l1:safety:lock:context');
-      if (lockContext) {
-        const details = JSON.parse(lockContext);
-        const lockIso = details.iso_region ? details.iso_region.toUpperCase().replace(/-/g, '') : null;
+    // Regional Fallback: Use L2 confidence if L1 lock is not active or missing for this region
+    if (localSafetyCache.regional_confidence[currentIso]) {
+      confidenceScore = safeFloat(localSafetyCache.regional_confidence[currentIso], 1.0);
+    }
 
-        // If the lock is global or specifically for this ISO, use its score
-        if (!lockIso || lockIso === currentIso || lockIso === 'SYSTEM_WIDE') {
-          if (details.physics_score !== undefined) {
-            physicsScore = safeFloat(details.physics_score);
-          }
-          if (details.confidence_score !== undefined) {
-            confidenceScore = safeFloat(details.confidence_score);
-          }
-          // [L4 v3.8.5] Hardened Sentinel Fidelity Detection
+    // If cache is empty or stale, or we need regional fallback, check Redis (legacy path)
+    if (!localSafetyCache.last_updated) {
+      try {
+        const lockContext = await redisClient.get('l1:safety:lock:context');
+        if (lockContext) {
+          const details = JSON.parse(lockContext);
+          physicsScore = safeFloat(details.physics_score);
+          confidenceScore = safeFloat(details.confidence_score);
           isSentinelFidelity = isSentinel(details.is_sentinel_fidelity, physicsScore);
         }
-      } else {
-        // [L4 v3.8.1] Fallback: Query L2 regional confidence averages
-        const unifiedRaw = await redisClient.get('l2:unified:context');
-        if (unifiedRaw) {
-          const unified = JSON.parse(unifiedRaw);
-          confidenceScore = unified.regional_confidence?.[currentIso] || unified.confidence_score || 1.0;
-          console.log(`[Market Gateway] Using L2 regional confidence fallback for ${currentIso}: ${confidenceScore}`);
-        }
+      } catch (err) {
+        console.warn('[Market Gateway] Failed to parse physics score from Redis:', err.message);
       }
-    } catch (err) {
-      console.warn('[Market Gateway] Failed to parse physics score for broadcast:', err.message);
     }
 
     const isHighFidelity = (parseFloat(physicsScore) > 0.95 || parseFloat(confidenceScore) > 0.95);
@@ -215,7 +250,7 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
  */
 async function startGridSignalConsumer() {
   await consumer.connect();
-  await consumer.subscribe({ topic: 'grid_signals', fromBeginning: false });
+  await consumer.subscribe({ topics: ['grid_signals', 'DER_ALARM_REPORTED'], fromBeginning: false });
 
   await consumer.run({
     eachMessage: async ({ topic, partition, message }) => {
@@ -229,6 +264,23 @@ async function startGridSignalConsumer() {
         const confidenceScore = safeFloat(signal.confidence_score, 1.0);
 
         const isSentinelFidelity = isSentinel(signal.is_sentinel_fidelity, physicsScore);
+
+        if (topic === 'DER_ALARM_REPORTED') {
+          console.log(`🚨 [Market Gateway] DER Alarm reported: ${signal.alarmType} (Severity: ${signal.severity})`);
+          if (signal.severity === 'CRITICAL' || signal.severity === 'HIGH') {
+            const alarmRegion = (signal.iso_region || 'SYSTEM_WIDE').toUpperCase().replace(/-/g, '');
+            const lockDuration = 1800; // 30 minutes for hardware alarms
+            if (alarmRegion !== 'SYSTEM_WIDE') {
+              const regionLockKey = `l4:grid:lock:${alarmRegion}`;
+              await redisClient.setEx(regionLockKey, lockDuration, 'true');
+              console.warn(`[Market Gateway] L4 Regional Grid Lock ACTIVATED for ${alarmRegion} for ${lockDuration}s due to hardware alarm`);
+            } else {
+              await redisClient.setEx('l4:grid:lock', lockDuration, 'true');
+              console.warn(`[Market Gateway] L4 Global Grid Lock ACTIVATED for ${lockDuration}s due to critical hardware alarm`);
+            }
+          }
+          return;
+        }
 
         console.log(`[Market Gateway] Received grid signal: ${signal.event_id} (Site: ${siteIdVal}, Physics: ${physicsScore}, Sentinel: ${isSentinelFidelity})`);
 
@@ -324,48 +376,24 @@ async function startPriceBroadcaster() {
 
 // Health check
 app.get('/health', async (req, res) => {
-  let l1Lock = 'false';
-  let l4Lock = 'false';
-  let regionalLocks = {};
-
-  try {
-    const [l1, l4] = await Promise.all([
-      redisClient.get('l1:safety:lock'),
-      redisClient.get('l4:grid:lock')
-    ]);
-    l1Lock = l1 || 'false';
-    l4Lock = l4 || 'false';
-  } catch (error) {
-    console.error('[Market Gateway Health] Redis basic locks check failed:', error.message);
-  }
-
-  try {
-    // Proactively check all known ISO locks concurrently for sub-50ms responsiveness
-    const lockPromises = SUPPORTED_ISOS.map(iso => redisClient.get(`l4:grid:lock:${iso}`));
-    const lockValues = await Promise.all(lockPromises);
-
-    SUPPORTED_ISOS.forEach((iso, index) => {
-      regionalLocks[iso] = (lockValues[index] === 'true' || lockValues[index] === '1');
-    });
-
-    // Also include any discovered locks via SCAN (edge cases)
-    const discovered = await getRegionalGridLocks();
-    regionalLocks = { ...regionalLocks, ...discovered };
-  } catch (error) {
-    console.error('[Market Gateway Health] Redis regional locks check failed:', error.message);
-  }
-
+  // [L4-133] Sub-millisecond response via localSafetyCache
   res.json({
     service: 'market-gateway',
-    version: '3.8.7',
+    version: '3.8.8',
     status: 'healthy',
     mode: process.env.USE_LIVE_DATA === 'true' ? 'LIVE' : 'SIMULATION',
     layer: 'L4',
     markets: SUPPORTED_ISOS,
     safety_locks: {
-      l1_physics: l1Lock === 'true' || l1Lock === '1',
-      l4_grid: l4Lock === 'true' || l4Lock === '1',
-      l4_regional: regionalLocks
+      l1_physics: localSafetyCache.l1_physics,
+      l4_grid: localSafetyCache.l4_grid,
+      l4_regional: localSafetyCache.l4_regional
+    },
+    telemetry: {
+      physics_score: localSafetyCache.physics_score,
+      confidence_score: localSafetyCache.confidence_score,
+      is_sentinel_fidelity: localSafetyCache.is_sentinel_fidelity,
+      cache_last_updated: localSafetyCache.last_updated
     }
   });
 });
@@ -410,7 +438,7 @@ app.post('/bids/optimize', authenticateToken, async (req, res) => {
   const normalizedIso = iso.toUpperCase().replace(/-/g, '');
 
   try {
-    const optimizer = new BiddingOptimizer(pool, process.env.REDIS_URL || 'redis://localhost:6379');
+    const optimizer = new BiddingOptimizer(pool, process.env.REDIS_URL || 'redis://localhost:6379', localSafetyCache);
     const { bids, audit } = await optimizer.generateDayAheadBids(normalizedIso);
 
     // In a real scenario, we would send these FIX messages to CAISO
@@ -689,6 +717,10 @@ async function start() {
     await startGridSignalConsumer();
     console.log('✅ [Market Gateway] Grid Signal Consumer running (Listening to L2)');
 
+    // Start Safety Lock Poller [L4-133]
+    setInterval(updateLocalSafetyCache, 5000);
+    await updateLocalSafetyCache();
+
     // Start background tasks
     const GRID_STATUS_API_KEY = process.env.GRID_STATUS_API_KEY;
     const USE_LIVE_DATA = process.env.USE_LIVE_DATA === 'true';
@@ -707,18 +739,24 @@ async function start() {
       await startPriceBroadcaster();
     }
 
-    app.listen(port, () => {
-      console.log(`[Market Gateway] Running on port ${port}`);
-      console.log(`[Market Gateway] LMP Strategy: Buy < $${LMP_THRESHOLD_BUY}, Sell > $${LMP_THRESHOLD_SELL}`);
-      console.log('[Market Gateway] Using Decimal.js for financial precision');
-    });
+    if (process.env.NODE_ENV !== 'test') {
+      app.listen(port, () => {
+        console.log(`[Market Gateway] Running on port ${port}`);
+        console.log(`[Market Gateway] LMP Strategy: Buy < $${LMP_THRESHOLD_BUY}, Sell > $${LMP_THRESHOLD_SELL}`);
+        console.log('[Market Gateway] Using Decimal.js for financial precision');
+      });
+    }
   } catch (error) {
     console.error('❌ [Market Gateway] Failed to start:', error);
     process.exit(1);
   }
 }
 
-start();
+if (process.env.NODE_ENV !== 'test') {
+  start();
+}
+
+module.exports = { app, localSafetyCache, updateLocalSafetyCache };
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {

@@ -20,11 +20,12 @@ const isSentinel = (flag, score) => {
 };
 
 class BiddingOptimizer {
-  constructor(pool, redisUrl) {
+  constructor(pool, redisUrl, localCache = null) {
     this.pricingService = new MarketPricingService(pool);
     this.redisClient = createClient({ url: redisUrl });
     this.redisClient.on('error', (err) => console.error('Redis Client Error', err));
     this.isRedisConnected = false;
+    this.localCache = localCache;
   }
 
   async connect() {
@@ -123,10 +124,23 @@ class BiddingOptimizer {
   }
 
   /**
-   * Checks if any safety lock (L1 Physics or L4 Grid) is active in Redis.
+   * Checks if any safety lock (L1 Physics or L4 Grid) is active.
+   * [L4-133] Optimized: Uses localCache if available for zero-latency checks.
    * @returns {Promise<Object>} Status of safety locks
    */
   async getSafetyLockStatus(iso = null) {
+    if (this.localCache && this.localCache.last_updated) {
+      let l4Regional = false;
+      if (iso) {
+        const isoKey = iso.toUpperCase().replace(/-/g, '');
+        l4Regional = !!this.localCache.l4_regional[isoKey];
+      }
+      return {
+        l1: this.localCache.l1_physics,
+        l4: this.localCache.l4_grid || l4Regional
+      };
+    }
+
     await this.connect();
     const l1Lock = await this.redisClient.get('l1:safety:lock');
     const l4Lock = await this.redisClient.get('l4:grid:lock');
@@ -157,33 +171,39 @@ class BiddingOptimizer {
     const locks = await this.getSafetyLockStatus(iso);
 
     // 2. Fetch safety lock context for audit (L11 ML Engine readiness)
-    let physicsScore = "1.0000";
-    let confidenceScore = "1.0000";
-    let isSentinelFidelity = false;
+    // [L4-133] Optimized: Use localCache for zero-latency audit metadata
+    let physicsScore = this.localCache?.physics_score || "1.0000";
+    let confidenceScore = this.localCache?.confidence_score || "1.0000";
+    let isSentinelFidelity = !!this.localCache?.is_sentinel_fidelity;
     let auditContext = null;
-    try {
-      const lockContextRaw = await this.redisClient.get('l1:safety:lock:context');
-      if (lockContextRaw) {
-        auditContext = JSON.parse(lockContextRaw);
-        if (auditContext.physics_score !== undefined) {
+
+    if (this.localCache && this.localCache.regional_confidence?.[isoKey]) {
+      confidenceScore = safeFloat(this.localCache.regional_confidence[isoKey], 1.0);
+    }
+
+    if (!this.localCache || !this.localCache.last_updated) {
+      try {
+        const [lockContextRaw, unifiedRaw] = await Promise.all([
+          this.redisClient.get('l1:safety:lock:context'),
+          this.redisClient.get('l2:unified:context')
+        ]);
+
+        if (lockContextRaw) {
+          auditContext = JSON.parse(lockContextRaw);
           physicsScore = safeFloat(auditContext.physics_score);
-        }
-        if (auditContext.confidence_score !== undefined) {
           confidenceScore = safeFloat(auditContext.confidence_score);
-        }
-        // [L4 v3.8.5] Hardened Sentinel Fidelity Detection
-        isSentinelFidelity = isSentinel(auditContext.is_sentinel_fidelity, physicsScore);
-      } else {
-        // [L4 v3.8.1] Fallback: Query L2 Unified Context for regional confidence averages
-        const unifiedRaw = await this.redisClient.get('l2:unified:context');
-        if (unifiedRaw) {
+          isSentinelFidelity = isSentinel(auditContext.is_sentinel_fidelity, physicsScore);
+        } else if (unifiedRaw) {
           const unified = JSON.parse(unifiedRaw);
           confidenceScore = unified.regional_confidence?.[isoKey] || unified.confidence_score || 1.0;
           console.log(`[BiddingOptimizer] Using L2 regional confidence fallback for ${isoKey}: ${confidenceScore}`);
         }
+      } catch (err) {
+        console.warn('[BiddingOptimizer] Failed to fetch safety lock context from Redis:', err.message);
       }
-    } catch (err) {
-      console.warn('[BiddingOptimizer] Failed to fetch safety lock context for audit:', err.message);
+    } else {
+      // In a real scenario, we might still want to fetch the full context for the audit log
+      // if it's too big to keep in localCache. But for now, we use the cached values.
     }
 
     // High-Fidelity logic: physics_score > 0.95 OR confidence_score > 0.95 (Align with L10 v4.3.5)
