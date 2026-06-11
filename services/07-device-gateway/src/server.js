@@ -24,6 +24,42 @@ const podId = process.env.POD_ID || 'gateway-instance-1';
 // Local memory map for active WebSocket connections on this instance
 const localConnections = new Map();
 
+/**
+ * [L7-133] Sub-millisecond local safety and grid lock cache
+ * Polled from Redis every 5s to ensure edge resilience and zero-latency dispatch.
+ */
+const localSafetyCache = {
+  global: false,
+  regional: {} // Maps ISO region (e.g., CAISO) to boolean lock status
+};
+
+async function updateLocalSafetyCache() {
+  try {
+    const globalLock = await redis.get('l1:safety:lock');
+    localSafetyCache.global = (globalLock === 'true' || globalLock === '1');
+
+    // Scan for all regional grid locks (L4 sync)
+    let cursor = '0';
+    const newRegionalLocks = {};
+    do {
+      // Use ioredis scan stream or scan
+      const [newCursor, keys] = await redis.scan(cursor, 'MATCH', 'l4:grid:lock:*', 'COUNT', 100);
+      cursor = newCursor;
+      if (keys.length > 0) {
+        const values = await redis.mget(keys);
+        keys.forEach((key, index) => {
+          const iso = key.split(':').pop().toUpperCase();
+          newRegionalLocks[iso] = (values[index] === 'true' || values[index] === '1');
+        });
+      }
+    } while (cursor !== '0');
+
+    localSafetyCache.regional = newRegionalLocks;
+  } catch (err) {
+    console.error('❌ [L7] Failed to update local safety cache:', err.message);
+  }
+}
+
 // Middleware for auth
 const authenticateInternal = (req, res, next) => {
   const token = req.headers['authorization']?.split(' ')[1];
@@ -42,7 +78,7 @@ app.get('/health', (req, res) => {
     service: 'Device Gateway',
     layer: 'L7',
     status: 'OK',
-    version: '5.10.0',
+    version: '5.11.0',
     podId: process.env.POD_ID || 'gateway-instance-1'
   });
 });
@@ -185,9 +221,9 @@ const SUPPORTED_PROTOCOLS = ['ocpp2.1', 'ocpp2.0.1'];
 
 const handleControlSignal = async (topic, payload) => {
     // 1. Verify the Physics: Check for L1 Safety Lock before dispatching control
-    const safetyLock = await redis.get('l1:safety:lock');
-    if (safetyLock === '1' || safetyLock === 'true') {
-        console.warn(`🛑 [L7] Control Signal HALTED. L1 Safety Lock is ACTIVE.`);
+    // [L7-133] Use local cache for sub-millisecond resilience
+    if (localSafetyCache.global) {
+        console.warn(`🛑 [L7] Control Signal HALTED. L1 Safety Lock is ACTIVE (Cached).`);
         return;
     }
 
@@ -231,11 +267,12 @@ async function sendSetChargingProfile(chargePointId, limitKw, mode) {
         return;
     }
 
-    const rawRegion = await redis.get(`charger_region:${chargePointId}`) || 'CAISO';
-    const isoRegion = rawRegion.toUpperCase().replace(/-/g, '');
-    const gridLock = await redis.get(`l4:grid:lock:${isoRegion}`);
-    if (gridLock === '1' || gridLock === 'true') {
-        console.warn(`🛑 [L7] Control Signal HALTED for ${chargePointId}. L4 GRID LOCK in ${isoRegion} is ACTIVE.`);
+    // [L7-133] Use local connection context for zero-latency region lookup
+    const isoRegion = connection.isoRegion || 'CAISO';
+
+    // [L7-133] Use local cache for sub-millisecond grid lock verification
+    if (localSafetyCache.regional[isoRegion]) {
+        console.warn(`🛑 [L7] Control Signal HALTED for ${chargePointId}. L4 GRID LOCK in ${isoRegion} is ACTIVE (Cached).`);
         return;
     }
 
@@ -353,6 +390,10 @@ wss.on('connection', async (ws, request, chargePointId, protocol) => {
 async function startServer() {
     await connectProducer();
     await connectConsumer(handleControlSignal);
+
+    // [L7-133] Initialize local safety cache and start poller
+    await updateLocalSafetyCache();
+    setInterval(updateLocalSafetyCache, 5000);
 
     // Subscribe to commands routed from other L7 pods
     await redisSub.subscribe(`l7:commands:${podId}`);
