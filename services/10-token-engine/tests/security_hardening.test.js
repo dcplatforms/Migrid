@@ -53,6 +53,10 @@ describe('L10 Token Engine Security Hardening', () => {
   test('GET /data/training/rewards should return 200 (or pass auth) if valid admin token provided', async () => {
     const token = jwt.sign({ driver_id: 'admin-1' }, process.env.JWT_SECRET);
 
+    const { Client } = require('pg');
+    const mClient = new Client();
+    mClient.query.mockResolvedValueOnce({ rows: [] });
+
     // We expect it to NOT be 401 or 403. It might be 200 or 500 (if DB query fails)
     // but the point is it passed the auth middleware.
     const response = await request(app)
@@ -61,6 +65,7 @@ describe('L10 Token Engine Security Hardening', () => {
 
     expect(response.status).not.toBe(401);
     expect(response.status).not.toBe(403);
+    expect(response.status).toBe(200);
   });
 
   test('GET /health should return security headers via helmet', async () => {

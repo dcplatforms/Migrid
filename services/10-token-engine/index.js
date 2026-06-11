@@ -95,9 +95,9 @@ async function getOrCreateDriverWallet(driverId) {
 }
 
 async function logRewardTransaction(driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status = 'pending', iso = 'CAISO', physicsScore = null, isHighFidelity = false, multiplierReason = 'Standard Reward', confidenceScore = null, resourceType = 'EV', isSentinelFidelity = false, siteId = null) {
-  // L10 v4.3.6: Standardize physics and confidence scores as 4-decimal strings for L11 ML parity
-  const physicsScoreFormatted = (physicsScore !== null && physicsScore !== undefined) ? parseFloat(physicsScore).toFixed(4) : null;
-  const confidenceScoreFormatted = (confidenceScore !== null && confidenceScore !== undefined) ? parseFloat(confidenceScore).toFixed(4) : null;
+  // L10 v4.3.7: Standardize physics and confidence scores as 4-decimal strings for L11 ML parity using safeFloat
+  const physicsScoreFormatted = (physicsScore !== null && physicsScore !== undefined) ? safeFloat(physicsScore) : null;
+  const confidenceScoreFormatted = (confidenceScore !== null && confidenceScore !== undefined) ? safeFloat(confidenceScore) : null;
 
   const res = await pgClient.query(
     'INSERT INTO token_reward_log(driver_id, rule_id, triggering_event_id, source_value, points_awarded, status, iso, physics_score, is_high_fidelity, multiplier_reason, confidence_score, resource_type, is_sentinel_fidelity, site_id) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *;',
@@ -182,6 +182,25 @@ async function checkIdempotency(driverId, triggeringEventId, ruleId) {
     [driverId, triggeringEventId, ruleId]
   );
   return res.rows.length > 0 ? res.rows[0] : null;
+}
+
+/**
+ * Helper: Standardized site ID extraction for multi-key parity (L1/L4/L7)
+ * Handles site_id, siteId, location_id, and locationId.
+ */
+function extractSiteId(payload) {
+  if (!payload) return null;
+  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
+}
+
+/**
+ * [L10 v4.3.7] safeFloat: Robust isNaN protection for telemetry scoring
+ * Enforces strict 4-decimal string formatting.
+ * Default fallback is 0.0 to uphold "Proof of Physics equals Proof of Value".
+ */
+function safeFloat(val, fallback = 0.0) {
+  const parsed = parseFloat(val);
+  return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
 }
 
 // --- Reward Multiplier Logic ---
@@ -344,11 +363,16 @@ async function start() {
           const vppAligned = !!(is_vpp_event || isVppEvent);
 
           // Robust Payload Validation and Standardization (Snake_case & CamelCase support)
-          let physicsScoreVal = physics_score !== undefined ? parseFloat(physics_score) : (physicsScore !== undefined ? parseFloat(physicsScore) : null);
-          if (physicsScoreVal !== null && isNaN(physicsScoreVal)) physicsScoreVal = null;
+          // [L10 v4.3.7] Perform numeric parsing and validation before formatting
+          let physicsScoreRaw = (physics_score !== undefined) ? physics_score : physicsScore;
+          let confidenceScoreRaw = (confidence_score !== undefined) ? confidence_score : confidenceScore;
 
-          let confidenceScoreVal = confidence_score !== undefined ? parseFloat(confidence_score) : (confidenceScore !== undefined ? parseFloat(confidenceScore) : null);
-          if (confidenceScoreVal !== null && isNaN(confidenceScoreVal)) confidenceScoreVal = null;
+          let physicsScoreNum = physicsScoreRaw !== undefined ? parseFloat(physicsScoreRaw) : null;
+          let confidenceScoreNum = confidenceScoreRaw !== undefined ? parseFloat(confidenceScoreRaw) : null;
+
+          // Enforce 4-decimal string formatting for persistent storage/logs
+          const physicsScoreVal = (physicsScoreNum !== null) ? safeFloat(physicsScoreNum) : null;
+          const confidenceScoreVal = (confidenceScoreNum !== null) ? safeFloat(confidenceScoreNum) : null;
 
           const isHighFidelityVal = is_high_fidelity !== undefined ? is_high_fidelity : (isHighFidelity !== undefined ? isHighFidelity : false);
           const isSentinelFidelityVal = is_sentinel_fidelity !== undefined ? is_sentinel_fidelity : (isSentinelFidelity !== undefined ? isSentinelFidelity : false);
@@ -367,23 +391,23 @@ async function start() {
           let rule_id;
           let multiplierReason = 'Standard Reward';
 
-          // Robust payload validation and parsing
-          let physicsScorePersist = (physicsScoreVal !== undefined && physicsScoreVal !== null) ? parseFloat(physicsScoreVal) : null;
-          let confidenceScorePersist = (confidenceScoreVal !== undefined && confidenceScoreVal !== null) ? parseFloat(confidenceScoreVal) : null;
+          // Robust payload validation and parsing for persistence
+          const physicsScorePersist = physicsScoreVal;
+          const confidenceScorePersist = confidenceScoreVal;
 
-          if (physicsScoreVal !== undefined && isNaN(physicsScorePersist)) {
-            console.warn(`[L10 Audit] Received NaN physics_score for event ${event_id}. Skipping.`);
+          if (physicsScoreNum !== null && isNaN(physicsScoreNum)) {
+            console.warn(`[L10 Audit] Received invalid physics_score for event ${event_id}. Skipping.`);
             return;
           }
 
           // April 2026 Audit Standard: Explicit high-fidelity flag OR physics OR confidence > 0.95
-          let isHighFidelityPersist = (isHighFidelityVal === true || isHighFidelityVal === 'true') ||
-                                       (physicsScorePersist !== null && physicsScorePersist > 0.95) ||
-                                       (confidenceScorePersist !== null && confidenceScorePersist > 0.95);
+          const isHighFidelityPersist = (isHighFidelityVal === true || isHighFidelityVal === 'true') ||
+                                       (physicsScoreNum !== null && physicsScoreNum > 0.95) ||
+                                       (confidenceScoreNum !== null && confidenceScoreNum > 0.95);
 
-          // L10 v4.3.6 Sentinel Fidelity Tier: physics_score > 0.99 or explicit sentinel flag (supports boolean, string 'true', and integer 1)
-          let isSentinelFidelityPersist = (isSentinelFidelityVal === true || isSentinelFidelityVal === 'true' || isSentinelFidelityVal === 1) ||
-                                           (physicsScorePersist !== null && physicsScorePersist > 0.99);
+          // L10 v4.3.7 Sentinel Fidelity Tier: physics_score > 0.99 or explicit sentinel flag (supports boolean, string 'true', and integer 1)
+          const isSentinelFidelityPersist = (isSentinelFidelityVal === true || isSentinelFidelityVal === 'true' || isSentinelFidelityVal === 1) ||
+                                           (physicsScoreNum !== null && physicsScoreNum > 0.99);
 
           // Fetch rule early for idempotency check
           const rule = await getRewardRule(action_type);
