@@ -185,15 +185,6 @@ async function checkIdempotency(driverId, triggeringEventId, ruleId) {
 }
 
 /**
- * Helper: Standardized site ID extraction for multi-key parity (L1/L4/L7)
- * Handles site_id, siteId, location_id, and locationId.
- */
-function extractSiteId(payload) {
-  if (!payload) return null;
-  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
-}
-
-/**
  * [L10 v4.3.7] safeFloat: Robust isNaN protection for telemetry scoring
  * Enforces strict 4-decimal string formatting.
  * Default fallback is 0.0 to uphold "Proof of Physics equals Proof of Value".
@@ -258,7 +249,7 @@ async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '4.3.7',
+    version: '4.3.8',
     status: 'healthy',
     layer: 'L10'
   });
@@ -295,7 +286,7 @@ app.get('/data/training/rewards', authenticateToken, async (req, res) => {
     res.json({
       count: result.rows.length,
       data: result.rows,
-      source: 'L10_TOKEN_ENGINE_V4.3.7',
+      source: 'L10_TOKEN_ENGINE_V4.3.8',
       fidelity_tier: 'SENTINEL'
     });
   } catch (error) {
@@ -405,13 +396,13 @@ async function start() {
                                        (physicsScoreNum !== null && physicsScoreNum > 0.95) ||
                                        (confidenceScoreNum !== null && confidenceScoreNum > 0.95);
 
-          // L10 v4.3.7 Sentinel Fidelity Tier: physics_score > 0.99 or explicit sentinel flag (supports boolean, string 'true', and integer 1)
-          const isSentinelFidelityPersist = (isSentinelFidelityVal === true || isSentinelFidelityVal === 'true' || isSentinelFidelityVal === 1) ||
+          // L10 v4.3.8 Sentinel Fidelity Tier: physics_score > 0.99 or explicit sentinel flag (supports boolean, string 'true', integer 1, or string '1')
+          const isSentinelFidelityPersist = (isSentinelFidelityVal === true || isSentinelFidelityVal === 'true' || isSentinelFidelityVal === 1 || isSentinelFidelityVal === '1') ||
                                            (physicsScoreNum !== null && physicsScoreNum > 0.99);
 
           // Fetch rule early for idempotency check
           const rule = await getRewardRule(action_type);
-          const isBehavioral = action_type === 'challenge_completed' || action_type === 'achievement_unlocked' || action_type === 'grid_response';
+          const isBehavioral = action_type === 'challenge_completed' || action_type === 'achievement_unlocked' || action_type === 'grid_response' || action_type === 'der_alarm_response' || action_type === 'solar_ramp_response';
 
           if (!rule && !isBehavioral) {
             console.warn(`⚠️ No active reward rule found for action type: ${action_type}`);
