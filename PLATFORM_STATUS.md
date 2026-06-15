@@ -798,15 +798,15 @@ done
 | Layer | Service | Version | Status |
 | :--- | :--- | :--- | :--- |
 | **L1** | Physics Engine | `10.1.5` | ✅ Operational |
-| **L2** | Grid Signal | `2.5.3` | ✅ Operational |
+| **L2** | Grid Signal | `2.5.4` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.2` | ✅ Operational |
-| **L4** | Market Gateway | `3.8.7` | ✅ Operational |
+| **L4** | Market Gateway | `3.8.8` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
 | **L6** | Engagement Engine | `5.17.0` | ✅ Operational |
-| **L7** | Device Gateway | `5.11.0` | ✅ Operational |
+| **L7** | Device Gateway | `5.12.0` | ✅ Operational |
 | **L8** | Energy Manager | `2.1.0` | ✅ Operational |
 | **L9** | Commerce Engine | `5.1.0` | ✅ Operational |
-| **L10**| Token Engine | `4.3.7` | ✅ Operational |
+| **L10**| Token Engine | `4.3.8` | ✅ Operational |
 | **L11**| ML Engine | `0.5.0` | ✅ Operational |
 
 ---
@@ -814,11 +814,12 @@ done
 ## Latest Release Wins (April 2026)
 
 - **L1 Physics Engine (v10.1.5)**: Implemented **localSafetyCache [L1-133]** for sub-millisecond resilience and achieved Phase 6 telemetry parity via strict `.toFixed(4)` string formatting.
-- **L7 Device Gateway (v5.11.0)**: Deployed **localSafetyCache [L7-133]** for resilient dispatch; hardened DER alarm handling via OCPP 2.1 `NotifyDERAlarm` broadcasting.
-- **L10 Token Engine (v4.3.7)**: Standardized asynchronous **Reward Batching** worker and hardened site identification via `extractSiteId`.
-- **L4 Market Gateway (v3.8.7)**: Enforced high-fidelity telemetry standards with `safeFloat` utility and strict string-formatted auditing for ML parity.
-- **L2 Grid Signal (v2.5.3)**: Hardened telemetry parsing with `isNaN` protection and aligned scoring outputs with L11 AI standards.
-- **L6 Engagement Engine (v5.17.0)**: Standardized site identification and enforced strict string-formatting for all physics and confidence scores.
+- **L7 Device Gateway (v5.12.0)**: Deployed **localSafetyCache [L7-133]** for resilient dispatch; hardened DER alarm handling via OCPP 2.1 `NotifyDERAlarm` broadcasting and Heartbeat availability tracking.
+- **L10 Token Engine (v4.3.8)**: Expanded behavioral rewards to include `der_alarm_response` and `solar_ramp_response`; hardened telemetry via `safeFloat` and `.toFixed(4)` parity.
+- **L4 Market Gateway (v3.8.8)**: Implemented **localSafetyCache [L4-133]** for sub-millisecond bidding resilience; enforced high-fidelity telemetry standards with `safeFloat` utility.
+- **L2 Grid Signal (v2.5.4)**: Implemented **localSafetyCache [L2-133]** and 5s poller for resilient event handling; hardened telemetry parsing with `isNaN` protection.
+- **L5 Driver API (v4.1.0)**: Hardened `POST /auth/register` against IDOR via `fleet_id` UUID validation and database existence checks.
+- **L6 Engagement Engine (v5.17.0)**: Standardized site identification via `extractSiteId` and enforced strict string-formatting for all physics and confidence scores.
 
 ---
 
