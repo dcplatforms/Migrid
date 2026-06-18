@@ -11,7 +11,7 @@
 | Priority | Feature / Task | Primary Layer | Blocking Dependencies | Target Phase |
 |:---:|:---|:---:|:---|:---:|
 | **P0** | **ML Demand Forecasting** | L11 (ML Engine) | ✅ Phase 6 Telemetry Parity (100%) | Phase 6 |
-| **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | ✅ L7 v5.11.0 localSafetyCache (100%) | Phase 5 |
+| **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | ✅ L7 v5.13.0 Heartbeat Indexing (100%) | Phase 5 |
 | **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 v3.8.7 AI Readiness (100% Complete) | Phase 5 |
 | **P3** | **OCPI 2.2 Roaming** | L7 (Device) | ✅ L9 v5.1.0 tariff engine sync (100% Complete) | Phase 5 |
 | **P4** | **BESS RL Bidding** | L4 (Market) | 🚧 L3 BESS Integration (75% Complete) | Phase 6 |
@@ -20,7 +20,7 @@
 
 | Priority | Task ID | Description | Primary Layers | Status | Strategic Alignment |
 |:---:|:---:|:---|:---:|:---:|:---|
-| 1 | **ISO-15118-PC** | Full ISO 15118-20 Bidirectional Certificate Exchange & Plug & Charge UI (OCPP 2.1) | L7, L5, L1 | ✅ 100% | Phase 5: Enterprise Scale |
+| 1 | **ISO-15118-PC** | Full ISO 15118-20 Bidirectional Certificate Exchange & Plug & Charge UI (OCPP 2.1) | L7, L5, L1 | ✅ 100% (v5.13.0) | Phase 5: Enterprise Scale |
 | 2 | **COMMERCE-BILLING** | Complete L9 Commerce Engine Tariff Engine and Flexible Billing Logic | L9, L5 | ✅ 100% | Phase 5: Commerce Sync |
 | 3 | **OCPI-2.2-ROAM** | OCPI 2.2 Roaming Integration for cross-network orchestration | L7, L9 | ✅ 100% | Phase 5: Global Expansion |
 | 4 | **REGIONAL-CHALLENGE** | Implementation of L6 Regional Team Challenges & Live Grid Events | L6, L2 | ✅ 100%| Phase 5: Grid-Aware Gamification |
@@ -82,11 +82,12 @@
 - [✓] **Solar Flare**: Achievement for 25 cumulative solar ramp responses.
 - [✓] **Sentinel Elite**: Achievement for 50 total sentinel-fidelity sessions.
 
-### Layer 7: Device Gateway (v5.11.0)
+### Layer 7: Device Gateway (v5.13.0)
 - [✓] **[L7-133] Resilience**: Implemented `localSafetyCache` for sub-millisecond dispatch.
-- [✓] **DER Alarms**: Enhanced hardware-agnostic alarm handling via `NotifyDERAlarm`.
+- [✓] **DER Alarms**: Hardened hardware-agnostic alarm handling and L4-compatible normalization.
 - [✓] **ISO 15118-20**: Hardened Certificate Exchange and EMAID handling (100%).
-- [✓] **ML Parity**: Enforced strict string-formatted telemetry (.toFixed(4)).
+- [✓] **ML Parity**: Standardized 4-decimal string telemetry and hardened sentinel logic.
+- [✓] **Availability**: Optimized Heartbeat indexing via Redis Hashes for 10k+ scalability.
 - [✓] **Security Hardening**: Integrated helmet() and updated Kafka tagging.
 
 ### Layer 10: Token Engine (v4.3.7)

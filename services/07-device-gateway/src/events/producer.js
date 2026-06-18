@@ -17,11 +17,12 @@ const extractSiteId = (payload) => {
 };
 
 /**
- * [L7 v5.12.0] safeFloat: Robust isNaN protection for telemetry scoring
+ * [L7 v5.13.0] safeFloat: Robust isNaN protection for telemetry scoring
+ * Returns string formatted to 4 decimal places for ML parity.
  */
 const safeFloat = (val, fallback = 0.0) => {
     const parsed = parseFloat(val);
-    return isNaN(parsed) ? fallback : parsed;
+    return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
 };
 
 async function connectProducer() {
@@ -121,10 +122,10 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
         chargePointId,
         site_id: siteId,
         timestamp: payload.timestamp || new Date().toISOString(),
-        energyActiveImport: importEnergy.toFixed(4),
-        energyActiveExport: exportEnergy.toFixed(4),
-        powerActiveImport: importPower.toFixed(4),
-        powerActiveExport: exportPower.toFixed(4),
+        energyActiveImport: importEnergy,
+        energyActiveExport: exportEnergy,
+        powerActiveImport: importPower,
+        powerActiveExport: exportPower,
         protocol: protocol,
         iso_region: isoRegion,
         physics_score: hf.physicsScore,
@@ -133,7 +134,7 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
         is_sentinel_fidelity: hf.isSentinelFidelity,
         fidelity_status: hf.fidelityStatus,
         resource_type: resourceType,
-        source: 'L7_GATEWAY_V5.12.0'
+        source: 'L7_GATEWAY_V5.13.0'
     };
 
     await producer.send({
