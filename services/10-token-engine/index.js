@@ -184,14 +184,6 @@ async function checkIdempotency(driverId, triggeringEventId, ruleId) {
   return res.rows.length > 0 ? res.rows[0] : null;
 }
 
-/**
- * Helper: Standardized site ID extraction for multi-key parity (L1/L4/L7)
- * Handles site_id, siteId, location_id, and locationId.
- */
-function extractSiteId(payload) {
-  if (!payload) return null;
-  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
-}
 
 /**
  * [L10 v4.3.7] safeFloat: Robust isNaN protection for telemetry scoring
@@ -204,6 +196,35 @@ function safeFloat(val, fallback = 0.0) {
 }
 
 // --- Reward Multiplier Logic ---
+
+/**
+ * [L10 v4.3.8] Hardware Health Penalty
+ * Reduces the total multiplier based on active regional hardware alarms.
+ * Penalty: -0.05 per alarm, capped at -0.30.
+ * Standardized with L4 v3.8.9.
+ */
+async function applyHardwarePenalty(isoRaw, totalMultiplier, multiplierReason) {
+  try {
+    const iso = isoRaw.toUpperCase().replace(/-/g, '');
+    const alarmCountKey = `l4:regional:alarms:${iso}`;
+    const regionalAlarmCountStr = await redisClient.get(alarmCountKey);
+    const regionalAlarmCount = parseInt(regionalAlarmCountStr || '0');
+
+    if (regionalAlarmCount > 0) {
+      const alarmPenaltyFactor = new Decimal('0.05');
+      const maxPenalty = new Decimal('0.3');
+      const penalty = Decimal.min(maxPenalty, new Decimal(regionalAlarmCount).times(alarmPenaltyFactor));
+
+      const newMultiplier = Decimal.max(0, totalMultiplier.minus(penalty));
+      const newReason = multiplierReason + ` - Hardware Health Penalty (${penalty.toFixed(2)})`;
+      console.log(`[L10 Strategy] Applied Hardware Health Penalty for ${iso}: -${penalty.toFixed(2)} (Alarms: ${regionalAlarmCount})`);
+      return { multiplier: newMultiplier, reason: newReason, applied: true };
+    }
+  } catch (err) {
+    console.error(`[L10] Error applying hardware health penalty for ${iso}:`, err.message);
+  }
+  return { multiplier: totalMultiplier, reason: multiplierReason, applied: false };
+}
 
 async function getSiteMultiplier(siteId) {
   if (!siteId) return { multiplier: new Decimal(1.0), reason: 'No Site ID' };
@@ -258,7 +279,7 @@ async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '4.3.7',
+    version: '4.3.8',
     status: 'healthy',
     layer: 'L10'
   });
@@ -295,7 +316,7 @@ app.get('/data/training/rewards', authenticateToken, async (req, res) => {
     res.json({
       count: result.rows.length,
       data: result.rows,
-      source: 'L10_TOKEN_ENGINE_V4.3.7',
+      source: 'L10_TOKEN_ENGINE_V4.3.8',
       fidelity_tier: 'SENTINEL'
     });
   } catch (error) {
@@ -315,7 +336,7 @@ async function start() {
     console.log('✅ [L10 Token Engine] Connected to Redis.');
 
     await consumer.connect();
-    await consumer.subscribe({ topics: ['driver_actions', 'MARKET_PRICE_UPDATED'], fromBeginning: true });
+    await consumer.subscribe({ topics: ['driver_actions', 'MARKET_PRICE_UPDATED', 'DER_ALARM_REPORTED'], fromBeginning: true });
 
     if (require.main === module) {
       app.listen(port, () => {
@@ -330,11 +351,35 @@ async function start() {
         try {
           const payload = JSON.parse(message.value.toString());
 
+          // [L10 v4.3.8] Precise interception of high-priority grid and market events
           if (topic === 'MARKET_PRICE_UPDATED') {
             const iso = payload.iso.toUpperCase().replace(/-/g, '');
             const price = payload.profitability_index || payload.price_per_mwh;
             console.log(`[L10 Market Watch] Received price update for ${iso}: $${price}/MWh`);
             await redisClient.hSet('market:profitability', iso, price.toString());
+            return; // Explicit return to prevent driver action processing
+          }
+
+          if (topic === 'DER_ALARM_REPORTED') {
+            const alarmRegion = (payload.iso_region || 'SYSTEM_WIDE').toUpperCase().replace(/-/g, '');
+            const alarms = payload.alarms || [];
+            console.log(`🚨 [L10 Alarm Tracker] DER Alarm reported from ${payload.chargePointId} in ${alarmRegion}. Count: ${alarms.length}`);
+
+            if (payload.severity === 'CRITICAL' || payload.severity === 'HIGH' || alarms.some(a => a.severity === 'CRITICAL' || a.severity === 'HIGH')) {
+              const lockDuration = 1800; // 30 minutes for hardware alarms
+              if (alarmRegion !== 'SYSTEM_WIDE') {
+                const alarmCountKey = `l4:regional:alarms:${alarmRegion}`;
+                const alarmCount = Math.max(1, alarms.length);
+                await redisClient.incrBy(alarmCountKey, alarmCount);
+                await redisClient.expire(alarmCountKey, lockDuration);
+                console.warn(`[L10 Alarm Tracker] Regional Alarm Count incremented for ${alarmRegion}`);
+              }
+            }
+            return; // Explicit return to prevent driver action processing
+          }
+
+          // Only process driver_actions topic for rewards
+          if (topic !== 'driver_actions') {
             return;
           }
 
@@ -449,13 +494,18 @@ async function start() {
             const siteMultiplier = await getSiteMultiplier(siteIdVal);
 
             // Compound Multipliers
-            const totalMultiplier = marketMultiplier.multiplier.times(siteMultiplier.multiplier);
+            let totalMultiplier = marketMultiplier.multiplier.times(siteMultiplier.multiplier);
             multiplierReason = marketMultiplier.multiplier.eq(1.0) ? siteMultiplier.reason : `${marketMultiplier.reason} + ${siteMultiplier.reason}`;
+
+            // [L10 v4.3.8] Hardware Health Penalty
+            const penaltyResult = await applyHardwarePenalty(iso, totalMultiplier, multiplierReason);
+            totalMultiplier = penaltyResult.multiplier;
+            multiplierReason = penaltyResult.reason;
 
             const baseReward = new Decimal(source_value || 0).times(rule.reward_multiplier);
             pointsAwarded = baseReward.times(totalMultiplier).toDecimalPlaces(8);
 
-            console.log(`[L10] Reward calculated: ${pointsAwarded.toNumber()} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Total Mult: ${totalMultiplier.toNumber()})`);
+            console.log(`[L10] Reward calculated: ${pointsAwarded.toNumber()} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Total Mult: ${totalMultiplier.toFixed(4)})`);
           }
 
           if (pointsAwarded.isZero()) {
@@ -506,4 +556,4 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
-module.exports = { app, getDynamicMultiplier, getSiteMultiplier, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY, redisClient };
+module.exports = { app, getDynamicMultiplier, getSiteMultiplier, applyHardwarePenalty, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY, redisClient };
