@@ -55,6 +55,7 @@ const kafka = new Kafka({
   brokers: KAFKA_BROKERS,
 });
 const producer = kafka.producer();
+const consumer = kafka.consumer({ groupId: 'physics-engine-group' });
 
 // 3. Redis Connection (Local Sidecar)
 const redisClient = createClient({ url: REDIS_URL });
@@ -88,7 +89,7 @@ const authenticateToken = (req, res, next) => {
 app.get('/health', (req, res) => {
   res.json({
     service: 'physics-engine',
-    version: '10.1.5',
+    version: '10.1.6',
     status: 'healthy',
     layer: 'L1'
   });
@@ -133,7 +134,16 @@ async function connectServices() {
     console.log('✅ [L1 Physics] Connected to PostgreSQL.');
 
     await producer.connect();
-    console.log('✅ [L1 Physics] Connected to Kafka.');
+    console.log('✅ [L1 Physics] Connected to Kafka Producer.');
+
+    await consumer.connect();
+    await consumer.subscribe({ topic: 'DER_ALARM_REPORTED', fromBeginning: false });
+    await consumer.run({
+      eachMessage: async ({ topic, partition, message }) => {
+        await handleDerAlarm(message);
+      },
+    });
+    console.log('✅ [L1 Physics] Connected to Kafka Consumer (DER Alarms).');
 
     await redisClient.connect();
     console.log('✅ [L1 Physics] Connected to Local Redis.');
@@ -184,7 +194,7 @@ function calculateConfidenceScore(streak, lastSync, siteLoadData) {
     }
   }
 
-  return Math.max(0, Math.min(1.0, score)).toFixed(4);
+  return safeFloat(Math.max(0, Math.min(1.0, score)));
 }
 
 /**
@@ -192,6 +202,15 @@ function calculateConfidenceScore(streak, lastSync, siteLoadData) {
  */
 function normalizeIso(iso) {
   return (iso || 'CAISO').toUpperCase().replace(/-/g, '');
+}
+
+/**
+ * [L1-136] safeFloat: Hardened isNaN protection for telemetry
+ * Ensures all physics metrics and confidence scores are 4-decimal strings.
+ */
+function safeFloat(val, fallback = '0.0000') {
+  const parsed = parseFloat(val);
+  return (isNaN(parsed)) ? fallback : parsed.toFixed(4);
 }
 
 /**
@@ -220,7 +239,7 @@ function calculatePhysicsMetadata(payload) {
     physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
   }
 
-  const scoreStr = physicsScore.toFixed(4);
+  const scoreStr = safeFloat(physicsScore);
   // [L1-130] Sentinel Hardening: Support boolean, string, and integer (1) formats
   const explicitSentinel = payload.is_sentinel_fidelity === true ||
                            payload.is_sentinel_fidelity === 'true' ||
@@ -231,6 +250,26 @@ function calculatePhysicsMetadata(payload) {
     isPhysicsHighFidelity: physicsScore > 0.95,
     isSentinelFidelity: explicitSentinel || physicsScore > 0.99
   };
+}
+
+/**
+ * [L1-135] Handle DER Alarms from L7
+ * Activates site-specific safety locks for CRITICAL/HIGH alarms.
+ */
+async function handleDerAlarm(message) {
+  try {
+    const payload = JSON.parse(message.value.toString());
+    const { alarmType, severity, siteId } = payload;
+    const normalizedSiteId = siteId || extractSiteId(payload);
+
+    if (severity === 'CRITICAL' || severity === 'HIGH') {
+      console.log(`🚨 [L1 Physics] ${severity} Alarm Reported: ${alarmType} at ${normalizedSiteId}. Activating Site Lock.`);
+      const lockKey = `${SAFETY_LOCK_KEY}:SITE:${normalizedSiteId}`;
+      await redisClient.setEx(lockKey, SAFETY_LOCK_TTL, 'true');
+    }
+  } catch (err) {
+    console.error('❌ [L1 Physics] DER Alarm processing error:', err.message);
+  }
 }
 
 /**
@@ -479,9 +518,9 @@ async function reconcileLogs() {
       // [L1-124] Re-calculate scores for high-fidelity reconciliation
       // Note: We use the stored scores if available (Hardened Offline Mode)
       const physicsMetadata = calculatePhysicsMetadata(payload);
-      const physicsScore = payload.physics_score ? parseFloat(payload.physics_score).toFixed(4) : physicsMetadata.physicsScore;
+      const physicsScore = safeFloat(payload.physics_score || physicsMetadata.physicsScore);
       const isPhysicsHighFidelity = parseFloat(physicsScore) > 0.95;
-      const confidenceScore = payload.confidence_score ? parseFloat(payload.confidence_score).toFixed(4) : (0.5).toFixed(4);
+      const confidenceScore = safeFloat(payload.confidence_score || 0.5);
       const isHighFidelity = isPhysicsHighFidelity || parseFloat(confidenceScore) > 0.95;
       // [L1-130] Sentinel Hardening: Support boolean, string, and integer (1) formats
       const explicitSentinel = payload.is_sentinel_fidelity === true ||
@@ -643,7 +682,7 @@ async function syncDigitalTwin() {
         }
       }
 
-      const physicsScore = parseFloat(vehicle.physics_score || 1.0).toFixed(4);
+      const physicsScore = safeFloat(vehicle.physics_score || 1.0);
 
       // [L1-124] April 2026 High-Fidelity Standard
       const isHighFidelity = parseFloat(physicsScore) > 0.95 || parseFloat(confidenceScore) > 0.95;
@@ -716,6 +755,7 @@ module.exports = {
   app,
   localSafetyCache,
   updateLocalSafetyCache,
+  handleDerAlarm,
   handlePhysicsAlert,
   calculatePhysicsMetadata,
   producer,
@@ -730,6 +770,7 @@ module.exports = {
 process.on('SIGTERM', async () => {
   await pgClient.end();
   await producer.disconnect();
+  await consumer.disconnect();
   await redisClient.quit();
   process.exit(0);
 });

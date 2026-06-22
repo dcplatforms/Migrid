@@ -19,6 +19,12 @@ jest.mock('kafkajs', () => ({
           return Promise.resolve({});
       }),
       disconnect: jest.fn().mockResolvedValue({})
+    }),
+    consumer: jest.fn().mockReturnValue({
+      connect: jest.fn().mockResolvedValue({}),
+      subscribe: jest.fn().mockResolvedValue({}),
+      run: jest.fn().mockResolvedValue({}),
+      disconnect: jest.fn().mockResolvedValue({})
     })
   }))
 }), { virtual: true });
@@ -1002,7 +1008,7 @@ describe('L1 Physics Engine API Security & Readiness', () => {
     const res = await request(physicsEngine.app).get('/health');
     expect(res.statusCode).toBe(200);
     expect(res.body.service).toBe('physics-engine');
-    expect(res.body.version).toBe('10.1.5');
+    expect(res.body.version).toBe('10.1.6');
   });
 
   test('GET /data/training/physics should be secured by JWT', async () => {
@@ -1024,5 +1030,49 @@ describe('L1 Physics Engine API Security & Readiness', () => {
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.statusCode).toBe(200);
     expect(res.body.status).toBe('READY_FOR_L11');
+  });
+});
+
+describe('L1 Physics Engine Hardware-Aware Safety', () => {
+  test('[L1-135] should activate site lock for CRITICAL DER alarm', async () => {
+    const message = {
+      value: Buffer.from(JSON.stringify({
+        alarmType: 'INVERTER_FAULT',
+        severity: 'CRITICAL',
+        siteId: 'SITE-ALARM-1'
+      }))
+    };
+
+    await physicsEngine.handleDerAlarm(message);
+
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:SITE:SITE-ALARM-1', 900, 'true');
+  });
+
+  test('[L1-135] should activate site lock for HIGH DER alarm', async () => {
+    const message = {
+      value: Buffer.from(JSON.stringify({
+        alarmType: 'OVER_VOLTAGE',
+        severity: 'HIGH',
+        siteId: 'SITE-ALARM-2'
+      }))
+    };
+
+    await physicsEngine.handleDerAlarm(message);
+
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:SITE:SITE-ALARM-2', 900, 'true');
+  });
+
+  test('[L1-135] should NOT activate site lock for LOW DER alarm', async () => {
+    const message = {
+      value: Buffer.from(JSON.stringify({
+        alarmType: 'COMM_RETRY',
+        severity: 'LOW',
+        siteId: 'SITE-ALARM-3'
+      }))
+    };
+
+    await physicsEngine.handleDerAlarm(message);
+
+    expect(global.mockRedisSetEx).not.toHaveBeenCalledWith('l1:safety:lock:SITE:SITE-ALARM-3', 900, 'true');
   });
 });
