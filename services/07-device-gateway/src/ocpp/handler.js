@@ -38,8 +38,8 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                 break;
 
             case 'Heartbeat':
-                // Update Redis with the last heartbeat timestamp for availability tracking
-                await redis.set(`charger_heartbeat:${chargePointId}`, new Date().toISOString(), 'EX', 86400);
+                // [L7-v5.13.0] Optimized Heartbeat tracking via Redis Hash indexing
+                await redis.hset('l7:heartbeats', chargePointId, new Date().toISOString());
                 ws.send(JSON.stringify([3, messageId, {
                     currentTime: new Date().toISOString()
                 }]));
@@ -148,15 +148,20 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                 break;
 
             case 'NotifyDERAlarm':
-                // OCPP 2.1 DER Control: Handle alarms from local solar/BESS
-                console.log(`[L7] DER Alarm received from ${chargePointId}:`, payload.alarms);
+                // [L7-v5.13.0] Hardened DER alarm handling: individual Kafka events for each alarm
+                console.log(`[L7] DER Alarms received from ${chargePointId}:`, payload.alarms);
 
-                // [L7-135] Broadcast DER alarms to Kafka for L1/L8 awareness
-                await publishSessionEvent('DER_ALARM_REPORTED', {
-                    chargePointId,
-                    alarms: payload.alarms,
-                    timestamp: new Date().toISOString()
-                });
+                if (Array.isArray(payload.alarms)) {
+                    for (const alarm of payload.alarms) {
+                        await publishSessionEvent('DER_ALARM_REPORTED', {
+                            chargePointId,
+                            alarmType: alarm.alarmType,
+                            severity: alarm.severity,
+                            status: alarm.status,
+                            timestamp: new Date().toISOString()
+                        });
+                    }
+                }
 
                 ws.send(JSON.stringify([3, messageId, {}]));
                 break;
