@@ -185,25 +185,50 @@ async function checkIdempotency(driverId, triggeringEventId, ruleId) {
 }
 
 /**
- * Helper: Standardized site ID extraction for multi-key parity (L1/L4/L7)
- * Handles site_id, siteId, location_id, and locationId.
- */
-function extractSiteId(payload) {
-  if (!payload) return null;
-  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
-}
-
-/**
- * [L10 v4.3.7] safeFloat: Robust isNaN protection for telemetry scoring
- * Enforces strict 4-decimal string formatting.
+ * [L10 v4.3.8] safeFloat: Robust isNaN protection for telemetry scoring
+ * Enforces strict 4-decimal string formatting (.toFixed(4)).
  * Default fallback is 0.0 to uphold "Proof of Physics equals Proof of Value".
  */
 function safeFloat(val, fallback = 0.0) {
   const parsed = parseFloat(val);
-  return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
+  const result = isNaN(parsed) ? fallback : parsed;
+  return result.toFixed(4);
 }
 
 // --- Reward Multiplier Logic ---
+
+/**
+ * [L10 v4.3.8] applyHardwarePenalty: Reduces reward multipliers based on regional hardware alarms.
+ * Penalty: -0.05 per active alarm in the ISO region.
+ * Capped at a maximum deduction of 0.3 to maintain behavioral incentives.
+ */
+async function applyHardwarePenalty(isoRaw, currentMultiplier, currentReason) {
+  const iso = isoRaw.toUpperCase().replace(/-/g, '');
+  let totalMultiplier = new Decimal(currentMultiplier);
+  let multiplierReason = currentReason;
+
+  try {
+    const alarmCountStr = await redisClient.get(`l4:regional:alarms:${iso}`);
+    const alarmCount = parseInt(alarmCountStr || '0');
+
+    if (alarmCount > 0) {
+      // Hardware Health Penalty: -0.05 per alarm, capped at 0.3
+      const penalty = Decimal.min(new Decimal(alarmCount).times('0.05'), '0.3');
+      totalMultiplier = totalMultiplier.minus(penalty);
+
+      // Ensure multiplier doesn't go below zero (extreme case)
+      if (totalMultiplier.lt(0)) totalMultiplier = new Decimal(0);
+
+      const penaltyFormatted = penalty.toFixed(2);
+      multiplierReason += ` - Hardware Health Penalty (-${penaltyFormatted})`;
+      console.log(`[L10 Health] Applied ${penaltyFormatted} penalty for ${alarmCount} regional alarms in ${iso}.`);
+    }
+  } catch (err) {
+    console.error(`[L10] Error fetching hardware alarms for ${iso}:`, err.message);
+  }
+
+  return { multiplier: totalMultiplier, reason: multiplierReason };
+}
 
 async function getSiteMultiplier(siteId) {
   if (!siteId) return { multiplier: new Decimal(1.0), reason: 'No Site ID' };
@@ -258,7 +283,7 @@ async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '4.3.7',
+    version: '4.3.8',
     status: 'healthy',
     layer: 'L10'
   });
@@ -295,7 +320,7 @@ app.get('/data/training/rewards', authenticateToken, async (req, res) => {
     res.json({
       count: result.rows.length,
       data: result.rows,
-      source: 'L10_TOKEN_ENGINE_V4.3.7',
+      source: 'L10_TOKEN_ENGINE_V4.3.8',
       fidelity_tier: 'SENTINEL'
     });
   } catch (error) {
@@ -315,7 +340,7 @@ async function start() {
     console.log('✅ [L10 Token Engine] Connected to Redis.');
 
     await consumer.connect();
-    await consumer.subscribe({ topics: ['driver_actions', 'MARKET_PRICE_UPDATED'], fromBeginning: true });
+    await consumer.subscribe({ topics: ['driver_actions', 'MARKET_PRICE_UPDATED', 'DER_ALARM_REPORTED'], fromBeginning: true });
 
     if (require.main === module) {
       app.listen(port, () => {
@@ -329,6 +354,15 @@ async function start() {
       eachMessage: async ({ topic, partition, message }) => {
         try {
           const payload = JSON.parse(message.value.toString());
+
+          if (topic === 'DER_ALARM_REPORTED') {
+            const { severity, alarmType } = payload;
+            const iso = (payload.iso_region || payload.iso || 'CAISO').toUpperCase().replace(/-/g, '');
+            console.log(`[L10 Health Watch] Hardware alarm reported in ${iso}: ${alarmType} (${severity})`);
+            // L10 v4.3.8: We intercept hardware alarms to ensure parity with L4 regional locking,
+            // though L4 is responsible for incrementing the Redis alarm count.
+            return;
+          }
 
           if (topic === 'MARKET_PRICE_UPDATED') {
             const iso = payload.iso.toUpperCase().replace(/-/g, '');
@@ -448,9 +482,14 @@ async function start() {
             const marketMultiplier = await getDynamicMultiplier(iso, action_type, vppAligned);
             const siteMultiplier = await getSiteMultiplier(siteIdVal);
 
-            // Compound Multipliers
-            const totalMultiplier = marketMultiplier.multiplier.times(siteMultiplier.multiplier);
+            // Compound Multipliers (Market + Site)
+            let totalMultiplier = marketMultiplier.multiplier.times(siteMultiplier.multiplier);
             multiplierReason = marketMultiplier.multiplier.eq(1.0) ? siteMultiplier.reason : `${marketMultiplier.reason} + ${siteMultiplier.reason}`;
+
+            // [L10 v4.3.8] Apply Hardware Health Penalty (Regional Alarm Awareness)
+            const healthResult = await applyHardwarePenalty(iso, totalMultiplier, multiplierReason);
+            totalMultiplier = healthResult.multiplier;
+            multiplierReason = healthResult.reason;
 
             const baseReward = new Decimal(source_value || 0).times(rule.reward_multiplier);
             pointsAwarded = baseReward.times(totalMultiplier).toDecimalPlaces(8);
@@ -506,4 +545,4 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
-module.exports = { app, getDynamicMultiplier, getSiteMultiplier, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY, redisClient };
+module.exports = { app, getDynamicMultiplier, getSiteMultiplier, applyHardwarePenalty, safeFloat, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY, redisClient };
