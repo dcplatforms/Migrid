@@ -228,6 +228,7 @@ describe('L1 Physics Engine Alert Handling', () => {
     await physicsEngine.handlePhysicsAlert(msg);
 
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock', 900, 'true');
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:site:SITE-001', 900, 'true');
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"event_type":"PHYSICS_FRAUD"'));
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"severity":"FRAUD"'));
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"site_id":"SITE-001"'));
@@ -1002,7 +1003,7 @@ describe('L1 Physics Engine API Security & Readiness', () => {
     const res = await request(physicsEngine.app).get('/health');
     expect(res.statusCode).toBe(200);
     expect(res.body.service).toBe('physics-engine');
-    expect(res.body.version).toBe('10.1.5');
+    expect(res.body.version).toBe('10.1.6');
   });
 
   test('GET /data/training/physics should be secured by JWT', async () => {

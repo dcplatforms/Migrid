@@ -6,7 +6,7 @@
 
 ### *The Operating System for Sustainable Fleet Electrification*
 
-[![Version](https://img.shields.io/badge/version-10.1.4-blue.svg)](https://github.com/dcplatforms/Migrid/releases)
+[![Version](https://img.shields.io/badge/version-10.1.6-blue.svg)](https://github.com/dcplatforms/Migrid/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-72%25%20complete-orange.svg)](docs/roadmap.md)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
@@ -26,7 +26,7 @@ Our unified 11-layer platform spans from the **physics of energy transfer** to t
 
 # MiGrid: The Operating System for Sustainable Fleets
 
-![Version](https://img.shields.io/badge/version-10.1.4-blue) ![License](https://img.shields.io/badge/license-Apache_2.0-green) ![Status](https://img.shields.io/badge/status-active_development-success)
+![Version](https://img.shields.io/badge/version-10.1.6-blue) ![License](https://img.shields.io/badge/license-Apache_2.0-green) ![Status](https://img.shields.io/badge/status-active_development-success)
 
 **MiGrid** is an open-source, vertically integrated operating system designed to bridge the gap between physical EV assets and digital energy markets. We enable fleets to turn parked vehicles into revenue-generating Virtual Power Plants (VPPs) through physics-verified, standards-compliant orchestration.
 
@@ -69,7 +69,7 @@ The system is decoupled into eleven distinct functional planes to separate conce
 
 | Layer | Service | Description | Standards |
 | :--- | :--- | :--- | :--- |
-| **L1** | `physics-engine` | The "Green Audit" — verifies kWh dispensed vs received. | PL/pgSQL | v10.1.4 |
+| **L1** | `physics-engine` | The "Green Audit" — verifies kWh dispensed vs received. | PL/pgSQL | v10.1.6 |
 | **L2** | `grid-signal` | Virtual End Node (VEN) for utility communication. | OpenADR 3.0 |
 | **L3** | `vpp-aggregator` | Aggregates EVs & BESS for wholesale markets. | IEEE 2030.5 |
 | **L4** | `market-gateway` | Arbitrage engine for CAISO, PJM, and Nord Pool. | FIX / OASIS |
@@ -209,7 +209,7 @@ graph TB
 
 | Layer | Service | Description | Port | Status |
 |:-----:|---------|-------------|:----:|:------:|
-| **L1** | **Physics Engine** | Energy variance validation (<15% threshold) | `3001` | v10.1.4 |
+| **L1** | **Physics Engine** | Energy variance validation (<15% threshold) | `3001` | v10.1.6 |
 | **L2** | **Grid Signal** | OpenADR 3.0 VEN for demand response | `3002` | v2.4.9 |
 | **L3** | **VPP Aggregator** | Fleet capacity aggregation for markets | `3003` | v3.3.1 |
 | **L4** | **Market Gateway** | CAISO/PJM/ERCOT wholesale integration | `3004` | v3.8.3 |
@@ -447,7 +447,7 @@ Password: demo123
 
 <div align="center">
 
-**Version 10.1.4** • **April 2026** • **72% Complete**
+**Version 10.1.6** • **June 2026** • **84% Complete**
 
 [![Phase](https://img.shields.io/badge/Phase_5-In_Progress-orange.svg)](docs/roadmap.md)
 [![Features](https://img.shields.io/badge/Features-68%2F98-blue.svg)](PLATFORM_STATUS.md)
