@@ -1,5 +1,5 @@
 /**
- * L4: Market Gateway Service (v3.8.8)
+ * L4: Market Gateway Service (v3.8.9)
  * Wholesale energy market integration (CAISO, PJM, ERCOT)
  */
 
@@ -35,6 +35,7 @@ const localSafetyCache = {
   l1_physics: false,
   l4_grid: false,
   l4_regional: {},
+  site_safety: {},
   physics_score: "1.0000",
   confidence_score: "1.0000",
   is_sentinel_fidelity: false,
@@ -139,25 +140,33 @@ async function updateLocalSafetyCache() {
       localSafetyCache.regional_confidence = unified.regional_confidence || {};
     }
 
-    // Regional locks discovery
+    // Regional & Site-specific locks discovery [L4-133 Upgrade]
+    // Pattern l*:*lock:* ensures we capture l4:grid:lock:* and l1:safety:lock:site:*
     const newRegionalLocks = {};
+    const newSiteLocks = {};
     let cursor = '0';
     do {
-      const reply = await redisClient.scan(cursor, { MATCH: 'l4:grid:lock:*', COUNT: 100 });
+      const reply = await redisClient.scan(cursor, { MATCH: 'l*:*lock:*', COUNT: 100 });
       cursor = reply.cursor;
       if (reply.keys.length > 0) {
         const values = await redisClient.mGet(reply.keys);
         reply.keys.forEach((key, index) => {
-          const iso = key.split(':').pop().toUpperCase();
           const val = values[index];
           if (val === 'true' || val === '1') {
-            newRegionalLocks[iso] = true;
+            if (key.startsWith('l4:grid:lock:')) {
+              const iso = key.split(':').pop().toUpperCase();
+              newRegionalLocks[iso] = true;
+            } else if (key.startsWith('l1:safety:lock:site:')) {
+              const siteId = key.split(':').pop();
+              newSiteLocks[siteId] = true;
+            }
           }
         });
       }
     } while (cursor !== 0 && cursor !== '0');
 
     localSafetyCache.l4_regional = newRegionalLocks;
+    localSafetyCache.site_safety = newSiteLocks;
     localSafetyCache.last_updated = new Date().toISOString();
   } catch (err) {
     console.error('❌ [Market Gateway] Failed to update local safety cache:', err.message);
@@ -199,6 +208,12 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
       confidenceScore = safeFloat(localSafetyCache.regional_confidence[currentIso], 1.0);
     }
 
+    // [L4 v3.8.9] Hardware Health Penalty: Adjust confidence based on regional alarms using Decimal.js
+    const alarmCountRaw = await redisClient.get(`l4:regional:alarms:${currentIso}`);
+    const alarmCount = new Decimal(alarmCountRaw || '0');
+    const hardwarePenalty = Decimal.min('0.30', alarmCount.times('0.05'));
+    confidenceScore = Decimal.max('0', new Decimal(confidenceScore).minus(hardwarePenalty)).toFixed(4);
+
     // If cache is empty or stale, or we need regional fallback, check Redis (legacy path)
     if (!localSafetyCache.last_updated) {
       try {
@@ -227,6 +242,8 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
       degradation_cost_mwh: degradationCostMwh.toNumber(),
       physics_score: physicsScore,
       confidence_score: confidenceScore,
+      hardware_penalty: hardwarePenalty.toFixed(4),
+      regional_alarm_count: alarmCount,
       is_high_fidelity: isHighFidelity,
       is_sentinel_fidelity: isSentinelFidelity,
       fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD',
@@ -267,6 +284,15 @@ async function startGridSignalConsumer() {
 
         if (topic === 'DER_ALARM_REPORTED') {
           console.log(`🚨 [Market Gateway] DER Alarm reported: ${signal.alarmType} (Severity: ${signal.severity})`);
+
+          // [L4 v3.8.9] Site-Specific Safety Isolation for CRITICAL alarms
+          if (signal.severity === 'CRITICAL') {
+            const siteLockKey = `l1:safety:lock:site:${siteIdVal}`;
+            const siteLockTTL = 900; // 15 minutes
+            await redisClient.setEx(siteLockKey, siteLockTTL, 'true');
+            console.warn(`🔒 [Market Gateway] Site-Specific Safety Lock ACTIVATED for ${siteIdVal} due to CRITICAL DER alarm`);
+          }
+
           if (signal.severity === 'CRITICAL' || signal.severity === 'HIGH') {
             const alarmRegion = (signal.iso_region || 'SYSTEM_WIDE').toUpperCase().replace(/-/g, '');
             const lockDuration = 1800; // 30 minutes for hardware alarms
@@ -379,7 +405,7 @@ app.get('/health', async (req, res) => {
   // [L4-133] Sub-millisecond response via localSafetyCache
   res.json({
     service: 'market-gateway',
-    version: '3.8.8',
+    version: '3.8.9',
     status: 'healthy',
     mode: process.env.USE_LIVE_DATA === 'true' ? 'LIVE' : 'SIMULATION',
     layer: 'L4',
