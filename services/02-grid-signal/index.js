@@ -1,5 +1,5 @@
 /**
- * L2: Grid Signal Service (v2.5.4)
+ * L2: Grid Signal Service (v2.5.5)
  * OpenADR 3.0 VEN implementation for demand response and price signals
  * Enhanced with L1 Physics Safety Guards and Redis Caching
  */
@@ -67,7 +67,8 @@ const localSafetyCache = {
   global_safety: false,
   global_grid: false,
   regional_safety: {},
-  regional_grid: {}
+  regional_grid: {},
+  site_safety: {}
 };
 
 app.use(helmet());
@@ -84,11 +85,11 @@ const extractSiteId = (payload) => {
 
 /**
  * Helper: Robust float parsing with isNaN protection
- * [L2 v2.5.3] Aligned with L4 v3.8.6 standards
+ * [L2 v2.5.5] Aligned with L11 ML Engine parity: returns 4-decimal string
  */
 const safeFloat = (val, fallback = 1.0) => {
   const parsed = parseFloat(val);
-  return isNaN(parsed) ? fallback : parsed;
+  return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
 };
 
 /**
@@ -120,7 +121,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.5.4',
+    version: '2.5.5',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -168,13 +169,13 @@ app.get('/openadr/v3/reports', authenticateToken, async (req, res) => {
       if (safetyContext.vin) safetyContext.vin = '[MASKED]';
       if (safetyContext.vehicle_id) safetyContext.vehicle_id = '[MASKED]';
 
-      // Ensure scores are strictly string-formatted (v2.5.3)
-      if (safetyContext.physics_score !== undefined) safetyContext.physics_score = safeFloat(safetyContext.physics_score, 1.0).toFixed(4);
-      if (safetyContext.confidence_score !== undefined) safetyContext.confidence_score = safeFloat(safetyContext.confidence_score, 1.0).toFixed(4);
+      // Ensure scores are strictly string-formatted (v2.5.5)
+      if (safetyContext.physics_score !== undefined) safetyContext.physics_score = safeFloat(safetyContext.physics_score, 1.0);
+      if (safetyContext.confidence_score !== undefined) safetyContext.confidence_score = safeFloat(safetyContext.confidence_score, 1.0);
 
       // Ensure sentinel flag is explicitly boolean, handling boolean, string, and integer formats (v2.5.2)
       const rawSentinel = safetyContext.is_sentinel_fidelity;
-      const pScore = safeFloat(safetyContext.physics_score, 1.0);
+      const pScore = parseFloat(safeFloat(safetyContext.physics_score, 1.0));
       safetyContext.is_sentinel_fidelity = !!(rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || pScore > 0.99);
     }
 
@@ -190,7 +191,8 @@ app.get('/openadr/v3/reports', authenticateToken, async (req, res) => {
       safety_lock: {
         active: localSafetyCache.global_safety,
         context: safetyContext,
-        regional: localSafetyCache.regional_safety
+        regional: localSafetyCache.regional_safety,
+        site: localSafetyCache.site_safety
       },
       grid_lock: {
         active: localSafetyCache.global_grid,
@@ -228,10 +230,14 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
     const isoRegion = (event.targets?.find(t => t.type === 'region')?.value || '').toUpperCase().replace(/-/g, '');
 
     // 1. Check Safety Lock from L1 Physics Engine (Utilize sub-millisecond local cache)
-    const isSafetyLocked = localSafetyCache.global_safety || (isoRegion && localSafetyCache.regional_safety[isoRegion]);
+    const siteIdVal = extractSiteId(event);
+    const isSafetyLocked = localSafetyCache.global_safety ||
+                           (isoRegion && localSafetyCache.regional_safety[isoRegion]) ||
+                           (siteIdVal && localSafetyCache.site_safety[siteIdVal]);
 
     if (isSafetyLocked) {
-      console.warn(`🚨 [L2] DISPATCH REJECTED: L1 Safety Lock active (Global: ${localSafetyCache.global_safety}, Regional: ${localSafetyCache.regional_safety[isoRegion]})`);
+      const isSiteLocked = siteIdVal && localSafetyCache.site_safety[siteIdVal];
+      console.warn(`🚨 [L2] DISPATCH REJECTED: L1 Safety Lock active (Global: ${localSafetyCache.global_safety}, Regional: ${localSafetyCache.regional_safety[isoRegion]}, Site: ${isSiteLocked})`);
 
       // Fetch context if available for richer error response (Redis fallback)
       const lockContext = await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
@@ -239,8 +245,8 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
 
       return res.status(503).json({
         status: 'REJECTED',
-        reason: 'SAFETY_VIOLATION_L1',
-        message: 'Grid dispatch suspended due to physics engine safety lock',
+        reason: isSiteLocked ? 'SITE_SAFETY_LOCK_ACTIVE' : 'SAFETY_VIOLATION_L1',
+        message: isSiteLocked ? `Grid dispatch suspended for site ${siteIdVal} due to site-specific safety lock` : 'Grid dispatch suspended due to physics engine safety lock',
         details: details ? { alert_type: details.event_type, severity: details.severity } : 'No details available',
         timestamp: new Date().toISOString()
       });
@@ -271,8 +277,6 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
 
     // 1.2 Check L8 Safe Mode (Site Specific)
     // [L2 v2.5.2] Robust multi-key site identification via helper
-    const siteIdVal = extractSiteId(event);
-
     if (siteIdVal) {
       const safeMode = await redisClient.get(`l8:site:${siteIdVal}:safe_mode`);
       if (safeMode === 'true' || safeMode === '1') {
@@ -329,13 +333,15 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
       // [L2-v2.4.6] Prioritize regional average confidence if no safety lock is active
       const regionalAvgConfidence = unifiedContext?.regional_confidence?.[isoRegion] ?? 1.0;
       const confidenceScore = safeFloat((safetyContext.confidence_score !== undefined) ? safetyContext.confidence_score :
-                                         (safetyContext.physics_score !== undefined ? safetyContext.physics_score : regionalAvgConfidence.toString()), 1.0);
-      const physicsScore = safeFloat(safetyContext.physics_score ?? '1.0000', 1.0);
+                                         (safetyContext.physics_score !== undefined ? safetyContext.physics_score : regionalAvgConfidence), 1.0);
+      const physicsScore = safeFloat(safetyContext.physics_score ?? 1.0, 1.0);
       // [L2 v2.5.2] Hardened sentinel detection supporting boolean, string, and integer formats
       const rawSentinel = safetyContext.is_sentinel_fidelity;
-      const isSentinelFidelity = !!(rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || physicsScore > 0.99);
+      const pScoreNum = parseFloat(physicsScore);
+      const cScoreNum = parseFloat(confidenceScore);
+      const isSentinelFidelity = !!(rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || pScoreNum > 0.99);
       // [L1-124] Aligned High-Fidelity Standard: physics > 0.95 OR confidence > 0.95
-      const fidelityStatus = (physicsScore > 0.95 || confidenceScore > 0.95) ? 'HIGH_FIDELITY' : 'STANDARD';
+      const fidelityStatus = (pScoreNum > 0.95 || cScoreNum > 0.95) ? 'HIGH_FIDELITY' : 'STANDARD';
 
       const regionalCapacity = unifiedContext?.regional_capacity?.[isoRegion] || null;
       await producer.send({
@@ -355,8 +361,8 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
             market_price_at_session: event.metadata?.market_price_at_session ?? (marketMetadata.price_per_mwh ?? 0), // L2 v2.4.1: Nullish coalescing for 0-price preservation
             profitability_index: marketMetadata.profitability_index,
             degradation_cost_mwh: marketMetadata.degradation_cost_mwh,
-            physics_score: physicsScore.toFixed(4),
-            confidence_score: confidenceScore.toFixed(4), // L2 v2.5.0: Hardened string formatting
+            physics_score: physicsScore,
+            confidence_score: confidenceScore, // L2 v2.5.5: safeFloat already returns 4-decimal string
             fidelity_status: fidelityStatus,
             is_sentinel_fidelity: isSentinelFidelity,
             metadata: event.metadata || {}, // L2 v2.4.1: Full metadata preservation (OpenADR 3.1.0)
@@ -434,6 +440,7 @@ const updateLocalSafetyCache = async () => {
     let cursor = '0';
     const newRegionalSafety = {};
     const newRegionalGrid = {};
+    const newSiteSafety = {};
 
     do {
       const safetyReply = await redisClient.scan(cursor, { MATCH: `${SAFETY_LOCK_KEY}:*`, COUNT: 100 });
@@ -442,8 +449,14 @@ const updateLocalSafetyCache = async () => {
         const values = await redisClient.mGet(safetyReply.keys);
         safetyReply.keys.forEach((key, index) => {
           if (key.endsWith(':context')) return;
-          const iso = key.split(':').pop().toUpperCase().replace(/-/g, '');
-          newRegionalSafety[iso] = (values[index] === 'true' || values[index] === '1');
+          const parts = key.split(':');
+          if (parts.length >= 5 && parts[3] === 'site') {
+            const siteId = parts.pop();
+            newSiteSafety[siteId] = (values[index] === 'true' || values[index] === '1');
+          } else {
+            const iso = key.split(':').pop().toUpperCase().replace(/-/g, '');
+            newRegionalSafety[iso] = (values[index] === 'true' || values[index] === '1');
+          }
         });
       }
     } while (cursor !== '0' && cursor !== 0);
@@ -463,6 +476,7 @@ const updateLocalSafetyCache = async () => {
 
     localSafetyCache.regional_safety = newRegionalSafety;
     localSafetyCache.regional_grid = newRegionalGrid;
+    localSafetyCache.site_safety = newSiteSafety;
   } catch (err) {
     console.error('❌ [L2] Failed to update local safety cache:', err.message);
   }
@@ -505,8 +519,8 @@ const updateRegionalStats = async () => {
           }
           context.digital_twin[iso].vehicle_count++;
           if (data) {
-            const pScore = safeFloat(data.physics_score, 1.0);
-            const cScore = safeFloat(data.confidence_score, 1.0);
+            const pScore = parseFloat(safeFloat(data.physics_score, 1.0));
+            const cScore = parseFloat(safeFloat(data.confidence_score, 1.0));
 
             // [L1-124] Aligned High-Fidelity Standard
             if (data.is_high_fidelity || pScore > 0.95 || cScore > 0.95) {
@@ -532,9 +546,9 @@ const updateRegionalStats = async () => {
     Object.keys(context.digital_twin).forEach(iso => {
       const count = context.digital_twin[iso].vehicle_count;
       if (count > 0) {
-        context.regional_confidence[iso] = safeFloat((confidenceSums[iso] / count).toFixed(4), 1.0);
+        context.regional_confidence[iso] = safeFloat(confidenceSums[iso] / count, 1.0);
       } else {
-        context.regional_confidence[iso] = 1.0;
+        context.regional_confidence[iso] = "1.0000";
       }
     });
 
@@ -604,10 +618,10 @@ const updateRegionalStats = async () => {
         const safetyContext = JSON.parse(safetyContextRaw);
         // [L2 v2.4.5] Prioritize explicit confidence_score from L1 context
         context.confidence_score = safeFloat((safetyContext.confidence_score !== undefined) ? safetyContext.confidence_score :
-                                               (safetyContext.physics_score !== undefined ? safetyContext.physics_score : '1.0'), 1.0);
+                                               (safetyContext.physics_score !== undefined ? safetyContext.physics_score : 1.0), 1.0);
       } catch (e) {}
     } else {
-      context.confidence_score = 1.0; // Default to full confidence if no locks/alerts
+      context.confidence_score = "1.0000"; // Default to full confidence if no locks/alerts
     }
 
     // 7. Aggregate Grid Health and Advance Charge signals (from L4 via L2 cache)
@@ -670,9 +684,10 @@ async function startSafetyConsumer() {
         console.log(`⚠️ [L2] DER Alarm Reported: Site=${siteIdVal}, Type=${payload.alarm_type}, Severity=${payload.severity}`);
         if (siteIdVal) {
           await redisClient.setEx(`l7:site:alarm:${siteIdVal}`, 3600, JSON.stringify(payload));
-          // If critical alarm, log for engineering audit
+          // If critical alarm, lock site dispatch (v2.5.5)
           if (payload.severity === 'CRITICAL') {
-            console.warn(`🚨 [L2] CRITICAL DER ALARM at Site ${siteIdVal}. Monitoring for grid instability.`);
+            await redisClient.setEx(`${SAFETY_LOCK_KEY}:site:${siteIdVal}`, 900, 'true');
+            console.warn(`🚨 [L2] CRITICAL DER ALARM at Site ${siteIdVal}. Locking grid dispatch for site.`);
           }
         }
       } else if (topic === 'ADVANCE_CHARGE_SIGNAL') {
@@ -708,7 +723,7 @@ async function startSafetyConsumer() {
         // [L2 v2.4.4] BESS Invariant: 10% variance threshold; EV Invariant: 15% threshold.
         const isCritical = payload.severity === 'CRITICAL' || payload.severity === 'FRAUD';
         const varianceThreshold = payload.resource_type === 'BESS' ? 10 : 15;
-        const vPct = safeFloat(payload.variance_pct, 0.0);
+        const vPct = parseFloat(safeFloat(payload.variance_pct, 0.0));
         const isHighVariance = vPct > varianceThreshold;
 
         if (isHighVariance || isCritical) {
@@ -731,7 +746,7 @@ async function startSafetyConsumer() {
           // [L2 v2.5.2] Hardened sentinel detection supporting boolean, string, and integer formats
           const rawSentinel = payload.is_sentinel_fidelity;
           const pScore = safeFloat(payload.physics_score, 1.0);
-          const isSentinelFidelity = !!(rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || pScore > 0.99);
+          const isSentinelFidelity = !!(rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || parseFloat(pScore) > 0.99);
 
           await redisClient.setEx(`${SAFETY_LOCK_KEY}:context`, 900, JSON.stringify({
             ...payload,
@@ -742,9 +757,9 @@ async function startSafetyConsumer() {
             v2g_active: payload.v2g_active,
             iso_region: payload.iso_region,
             is_sentinel_fidelity: isSentinelFidelity,
-            physics_score: pScore.toFixed(4),
-            confidence_score: safeFloat(payload.confidence_score, pScore).toFixed(4),
-            market_price_at_session: safeFloat(payload.market_price_at_session, 0.0),
+            physics_score: pScore,
+            confidence_score: safeFloat(payload.confidence_score, parseFloat(pScore)),
+            market_price_at_session: parseFloat(safeFloat(payload.market_price_at_session, 0.0)),
             locked_at: new Date().toISOString()
           }));
         }
