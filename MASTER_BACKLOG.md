@@ -33,14 +33,14 @@
 
 | Downstream Layer | Dependency | Upstream Source | Impact of Failure | Status |
 |:---|:---|:---|:---|:---|
-| **L11 ML Engine** | High-Fidelity Logs | **L1 Physics (v10.1.5)** | ML training data lacks regional context | ✅ Active |
+| **L11 ML Engine** | High-Fidelity Logs | **L1 Physics (v10.1.6)** | ML training data lacks regional context | ✅ Active |
 | **L5 Driver DX** | PnC Auth Status | **L7 Device Gateway** | Driver cannot use Plug & Charge sessions | ✅ Active |
 | **L9 Commerce** | Billing Reconciliation | **L1 Physics / L4 Market** | Inaccurate split-billing or tariff logic | ✅ Active |
-| **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.2 Active |
-| **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal (v2.5.3)** | Missing high-fidelity metadata for L11 | ✅ Active |
-| **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine (v5.17.0)** | Rewards fail for 'ISO Explorer' challenges | ✅ Sync |
-| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway (v3.8.7)** | VTN cannot see market-aware grid signals | ✅ Sync |
-| **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.3.7)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
+| **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.3 Active |
+| **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal (v2.5.5)** | Missing high-fidelity metadata for L11 | ✅ Active |
+| **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine (v5.18.0)** | Rewards fail for 'ISO Explorer' challenges | ✅ Sync |
+| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway (v3.8.9)** | VTN cannot see market-aware grid signals | ✅ Sync |
+| **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.3.8)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
 
 ---
 
@@ -60,10 +60,11 @@
 - [✓] **Secure Reporting**: authenticateToken and PII masking applied to `/openadr/v3/reports`.
 - [✓] **Fleet Security**: Hardened global data endpoints to reject `fleet_id` tokens.
 
-### Layer 3: VPP Aggregator (v3.3.2)
+### Layer 3: VPP Aggregator (v3.3.3)
 - [✓] **Redis Capacity Cache**: Sub-50ms reporting for L4 bidding.
 - [✓] **Fuse Rule 2.0**: 20% SoC hard floor integrated into capacity formula.
 - [✓] **Multi-Site Parity**: Implemented `extractSiteId` for standardized site identification.
+- [✓] **ML Parity**: Enforced strict .toFixed(4) string formatting via `safeFloat`.
 - [~] **BESS Integration**: Support for stationary storage assets (75%).
 
 ### Layer 4: Market Gateway (v3.8.7)
