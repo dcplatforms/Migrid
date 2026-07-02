@@ -30,7 +30,8 @@ const localConnections = new Map();
  */
 const localSafetyCache = {
   global: false,
-  regional: {} // Maps ISO region (e.g., CAISO) to boolean lock status
+  regional: {}, // Maps ISO region (e.g., CAISO) to boolean lock status
+  site: {}     // Maps Site ID to boolean lock status [L7-135]
 };
 
 async function updateLocalSafetyCache() {
@@ -42,7 +43,6 @@ async function updateLocalSafetyCache() {
     let cursor = '0';
     const newRegionalLocks = {};
     do {
-      // Use ioredis scan stream or scan
       const [newCursor, keys] = await redis.scan(cursor, 'MATCH', 'l4:grid:lock:*', 'COUNT', 100);
       cursor = newCursor;
       if (keys.length > 0) {
@@ -54,7 +54,23 @@ async function updateLocalSafetyCache() {
       }
     } while (cursor !== '0');
 
+    // Scan for all site-specific safety locks (L1 sync) [L7-135]
+    let siteCursor = '0';
+    const newSiteLocks = {};
+    do {
+      const [newCursor, keys] = await redis.scan(siteCursor, 'MATCH', 'l1:safety:lock:site:*', 'COUNT', 100);
+      siteCursor = newCursor;
+      if (keys.length > 0) {
+        const values = await redis.mget(keys);
+        keys.forEach((key, index) => {
+          const siteId = key.split(':').pop();
+          newSiteLocks[siteId] = (values[index] === 'true' || values[index] === '1');
+        });
+      }
+    } while (siteCursor !== '0');
+
     localSafetyCache.regional = newRegionalLocks;
+    localSafetyCache.site = newSiteLocks;
   } catch (err) {
     console.error('❌ [L7] Failed to update local safety cache:', err.message);
   }
@@ -269,10 +285,17 @@ async function sendSetChargingProfile(chargePointId, limitKw, mode) {
 
     // [L7-133] Use local connection context for zero-latency region lookup
     const isoRegion = connection.isoRegion || 'CAISO';
+    const siteId = connection.siteId;
 
     // [L7-133] Use local cache for sub-millisecond grid lock verification
     if (localSafetyCache.regional[isoRegion]) {
         console.warn(`🛑 [L7] Control Signal HALTED for ${chargePointId}. L4 GRID LOCK in ${isoRegion} is ACTIVE (Cached).`);
+        return;
+    }
+
+    // [L7-135] Site-specific safety isolation: Verify site-level locks from L1
+    if (siteId && localSafetyCache.site[siteId]) {
+        console.warn(`🛑 [L7] Control Signal HALTED for ${chargePointId}. Site-Specific Safety Lock (Site: ${siteId}) is ACTIVE.`);
         return;
     }
 
