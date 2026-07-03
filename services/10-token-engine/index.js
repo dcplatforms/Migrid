@@ -95,7 +95,7 @@ async function getOrCreateDriverWallet(driverId) {
 }
 
 async function logRewardTransaction(driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status = 'pending', iso = 'CAISO', physicsScore = null, isHighFidelity = false, multiplierReason = 'Standard Reward', confidenceScore = null, resourceType = 'EV', isSentinelFidelity = false, siteId = null) {
-  // L10 v4.3.7: Standardize physics and confidence scores as 4-decimal strings for L11 ML parity using safeFloat
+  // L10 v4.3.8: Standardize physics and confidence scores as 4-decimal strings for L11 ML parity using safeFloat
   const physicsScoreFormatted = (physicsScore !== null && physicsScore !== undefined) ? safeFloat(physicsScore) : null;
   const confidenceScoreFormatted = (confidenceScore !== null && confidenceScore !== undefined) ? safeFloat(confidenceScore) : null;
 
@@ -184,23 +184,44 @@ async function checkIdempotency(driverId, triggeringEventId, ruleId) {
   return res.rows.length > 0 ? res.rows[0] : null;
 }
 
-/**
- * Helper: Standardized site ID extraction for multi-key parity (L1/L4/L7)
- * Handles site_id, siteId, location_id, and locationId.
- */
-function extractSiteId(payload) {
-  if (!payload) return null;
-  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
-}
 
 /**
- * [L10 v4.3.7] safeFloat: Robust isNaN protection for telemetry scoring
+ * [L10 v4.3.8] safeFloat: Robust isNaN protection for telemetry scoring
  * Enforces strict 4-decimal string formatting.
  * Default fallback is 0.0 to uphold "Proof of Physics equals Proof of Value".
  */
 function safeFloat(val, fallback = 0.0) {
   const parsed = parseFloat(val);
   return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
+}
+
+/**
+ * [L10 v4.3.8] Hardware Health Penalty
+ * Reduces reward multiplier by 0.05 per regional alarm (capped at 0.3).
+ * Syncs with L4 Market Gateway v3.8.9 logic.
+ */
+async function applyHardwarePenalty(isoRaw, totalMultiplier, multiplierReason) {
+  const iso = isoRaw.toUpperCase().replace(/-/g, '');
+  let alarmCount = 0;
+
+  try {
+    const alarmCountStr = await redisClient.get(`l4:regional:alarms:${iso}`);
+    if (alarmCountStr) {
+      alarmCount = parseInt(alarmCountStr) || 0;
+    }
+  } catch (err) {
+    console.error(`[L10] Error fetching hardware alarms for ${iso}:`, err.message);
+  }
+
+  if (alarmCount > 0) {
+    const penalty = Decimal.min(new Decimal(alarmCount).times('0.05'), '0.30');
+    const newMultiplier = Decimal.max(totalMultiplier.minus(penalty), '0.01');
+    const updatedReason = `${multiplierReason} [Hardware Penalty: -${penalty.toNumber()} (${alarmCount} alarms)]`;
+    console.log(`[L10 Strategy] Applied hardware health penalty for ${iso}: -${penalty.toNumber()}x (Remaining: ${newMultiplier.toNumber()}x)`);
+    return { multiplier: newMultiplier, reason: updatedReason };
+  }
+
+  return { multiplier: totalMultiplier, reason: multiplierReason };
 }
 
 // --- Reward Multiplier Logic ---
@@ -258,7 +279,7 @@ async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '4.3.7',
+    version: '4.3.8',
     status: 'healthy',
     layer: 'L10'
   });
@@ -295,7 +316,7 @@ app.get('/data/training/rewards', authenticateToken, async (req, res) => {
     res.json({
       count: result.rows.length,
       data: result.rows,
-      source: 'L10_TOKEN_ENGINE_V4.3.7',
+      source: 'L10_TOKEN_ENGINE_V4.3.8',
       fidelity_tier: 'SENTINEL'
     });
   } catch (error) {
@@ -363,7 +384,7 @@ async function start() {
           const vppAligned = !!(is_vpp_event || isVppEvent);
 
           // Robust Payload Validation and Standardization (Snake_case & CamelCase support)
-          // [L10 v4.3.7] Perform numeric parsing and validation before formatting
+          // [L10 v4.3.8] Perform numeric parsing and validation before formatting
           let physicsScoreRaw = (physics_score !== undefined) ? physics_score : physicsScore;
           let confidenceScoreRaw = (confidence_score !== undefined) ? confidence_score : confidenceScore;
 
@@ -405,7 +426,7 @@ async function start() {
                                        (physicsScoreNum !== null && physicsScoreNum > 0.95) ||
                                        (confidenceScoreNum !== null && confidenceScoreNum > 0.95);
 
-          // L10 v4.3.7 Sentinel Fidelity Tier: physics_score > 0.99 or explicit sentinel flag (supports boolean, string 'true', and integer 1)
+          // L10 v4.3.8 Sentinel Fidelity Tier: physics_score > 0.99 or explicit sentinel flag (supports boolean, string 'true', and integer 1)
           const isSentinelFidelityPersist = (isSentinelFidelityVal === true || isSentinelFidelityVal === 'true' || isSentinelFidelityVal === 1) ||
                                            (physicsScoreNum !== null && physicsScoreNum > 0.99);
 
@@ -449,8 +470,13 @@ async function start() {
             const siteMultiplier = await getSiteMultiplier(siteIdVal);
 
             // Compound Multipliers
-            const totalMultiplier = marketMultiplier.multiplier.times(siteMultiplier.multiplier);
+            let totalMultiplier = marketMultiplier.multiplier.times(siteMultiplier.multiplier);
             multiplierReason = marketMultiplier.multiplier.eq(1.0) ? siteMultiplier.reason : `${marketMultiplier.reason} + ${siteMultiplier.reason}`;
+
+            // Apply Hardware Health Penalty (L10 v4.3.8)
+            const penalized = await applyHardwarePenalty(iso, totalMultiplier, multiplierReason);
+            totalMultiplier = penalized.multiplier;
+            multiplierReason = penalized.reason;
 
             const baseReward = new Decimal(source_value || 0).times(rule.reward_multiplier);
             pointsAwarded = baseReward.times(totalMultiplier).toDecimalPlaces(8);
@@ -506,4 +532,4 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
-module.exports = { app, getDynamicMultiplier, getSiteMultiplier, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY, redisClient };
+module.exports = { app, getDynamicMultiplier, getSiteMultiplier, applyHardwarePenalty, safeFloat, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY, redisClient };
