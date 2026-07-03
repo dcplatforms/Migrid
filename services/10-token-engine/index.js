@@ -184,14 +184,6 @@ async function checkIdempotency(driverId, triggeringEventId, ruleId) {
   return res.rows.length > 0 ? res.rows[0] : null;
 }
 
-/**
- * Helper: Standardized site ID extraction for multi-key parity (L1/L4/L7)
- * Handles site_id, siteId, location_id, and locationId.
- */
-function extractSiteId(payload) {
-  if (!payload) return null;
-  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
-}
 
 /**
  * [L10 v4.3.7] safeFloat: Robust isNaN protection for telemetry scoring
