@@ -51,9 +51,9 @@ describe('L6 Engagement Engine v5.16.0 - Phase 6 & Telemetry Hardening', () => {
     pool.query.mockResolvedValue({ rows: [] });
   });
 
-  test('Health check returns version v5.17.0 (Upgraded)', async () => {
+  test('Health check returns version v5.18.0', async () => {
     const res = await request(app).get('/health');
-    expect(res.body.version).toBe('5.17.0');
+    expect(res.body.version).toBe('5.18.0');
     expect(res.body.status).toBe('healthy');
   });
 

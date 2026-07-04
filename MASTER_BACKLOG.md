@@ -1,7 +1,7 @@
 # MiGrid Master Backlog & Strategic Dependency Matrix
 
 **Version:** 10.1.5
-**Last Updated:** April 2026
+**Last Updated:** June 2026
 **Status:** Phase 6 "AI & Optimization" (Active)
 
 ---
@@ -10,11 +10,11 @@
 
 | Priority | Feature / Task | Primary Layer | Blocking Dependencies | Target Phase |
 |:---:|:---|:---:|:---|:---:|
-| **P0** | **ML Demand Forecasting** | L11 (ML Engine) | ✅ Phase 6 Telemetry Parity (100%) | Phase 6 |
-| **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | ✅ L7 v5.11.0 localSafetyCache (100%) | Phase 5 |
-| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 v3.8.7 AI Readiness (100% Complete) | Phase 5 |
-| **P3** | **OCPI 2.2 Roaming** | L7 (Device) | ✅ L9 v5.1.0 tariff engine sync (100% Complete) | Phase 5 |
-| **P4** | **BESS RL Bidding** | L4 (Market) | 🚧 L3 BESS Integration (75% Complete) | Phase 6 |
+| **P0** | **Hardware Health Guardian** | L6 (Engagement) | ✅ L4 v3.8.8 Alarm Ingestion (100%) | Phase 6 |
+| **P1** | **ML Demand Forecasting** | L11 (ML Engine) | ✅ Phase 6 Telemetry Parity (100%) | Phase 6 |
+| **P2** | **BESS RL Bidding** | L4 (Market) | 🚧 L3 BESS Integration (75% Complete) | Phase 6 |
+| **P3** | **ISO 15118 Cert Exchange** | L7 (Device) | ✅ L7 v5.12.0 localSafetyCache (100%) | Phase 5 |
+| **P4** | **OCPI 2.2 Roaming** | L7 (Device) | ✅ L9 v5.1.0 tariff engine sync (100%) | Phase 5 |
 
 | **P5** | **Resource-Aware Bidding** | L4 (Market) | ✅ L3 v3.3.2 High-Fidelity Breakdown | Phase 5 |
 
@@ -38,8 +38,8 @@
 | **L9 Commerce** | Billing Reconciliation | **L1 Physics / L4 Market** | Inaccurate split-billing or tariff logic | ✅ Active |
 | **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.2 Active |
 | **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal (v2.5.3)** | Missing high-fidelity metadata for L11 | ✅ Active |
-| **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine (v5.17.0)** | Rewards fail for 'ISO Explorer' challenges | ✅ Sync |
-| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway (v3.8.7)** | VTN cannot see market-aware grid signals | ✅ Sync |
+| **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine (v5.18.0)** | Rewards fail for 'ISO Explorer' challenges | ✅ Sync |
+| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway (v3.8.8)** | VTN cannot see market-aware grid signals | ✅ Sync |
 | **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.3.7)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
 
 ---
@@ -54,7 +54,7 @@
 - [✓] **Contextual Safety Locks**: metadata-enriched `l1:safety:lock:context` in Redis.
 - [✓] **API Security**: Integrated `helmet` and secured `/data/training/physics`.
 
-### Layer 2: Grid Signal (v2.5.3)
+### Layer 2: Grid Signal (v2.5.4)
 - [✓] **Telemetry Hardening**: implemented `isNaN` protection for physics/confidence scores.
 - [✓] **L11 Parity**: enforced strict `.toFixed(4)` string formatting for audit trails.
 - [✓] **Secure Reporting**: authenticateToken and PII masking applied to `/openadr/v3/reports`.
@@ -66,7 +66,7 @@
 - [✓] **Multi-Site Parity**: Implemented `extractSiteId` for standardized site identification.
 - [~] **BESS Integration**: Support for stationary storage assets (75%).
 
-### Layer 4: Market Gateway (v3.8.7)
+### Layer 4: Market Gateway (v3.8.8)
 - [✓] **ML Parity**: Enforced strict string formatting (`.toFixed(4)`) for all scores.
 - [✓] **NaN Protection**: Hardened bidding logic via `safeFloat` utility.
 - [✓] **Multi-Site Parity**: Hardened grid signal consumer with multi-key site identification.
@@ -74,15 +74,14 @@
 - [✓] **AI Readiness**: Training endpoints for fuel-mix, load-forecast, and net-load active.
 - [~] **BESS RL Bidding**: Research phase for reinforcement learning models (10%).
 
-### Layer 6: Engagement Engine (v5.17.0)
-- [✓] **Phase 6 Alignment**: Standardized physics and confidence scores as 4-decimal strings.
-- [✓] **Multi-Site Parity**: Hardened site identification via `extractSiteId`.
+### Layer 6: Engagement Engine (v5.18.0)
+- [✓] **Hardware Health Guardian**: Achievement for 10 sessions at sites with zero regional alarms.
+- [✓] **Telemetry Parity**: Enforced `safeFloat` 4-decimal formatting for L11 ML ground truth.
 - [✓] **AI Model Master**: Achievement for 100+ cumulative high-fidelity sessions.
-- [✓] **Phase 6 Data Pioneer**: Achievement for 5 consecutive sessions with physics_score > 0.99.
-- [✓] **Solar Flare**: Achievement for 25 cumulative solar ramp responses.
 - [✓] **Sentinel Elite**: Achievement for 50 total sentinel-fidelity sessions.
+- [✓] **DER Sentinel**: Achievement for 3 responses to NotifyDERAlarm safety events.
 
-### Layer 7: Device Gateway (v5.11.0)
+### Layer 7: Device Gateway (v5.12.0)
 - [✓] **[L7-133] Resilience**: Implemented `localSafetyCache` for sub-millisecond dispatch.
 - [✓] **DER Alarms**: Enhanced hardware-agnostic alarm handling via `NotifyDERAlarm`.
 - [✓] **ISO 15118-20**: Hardened Certificate Exchange and EMAID handling (100%).
