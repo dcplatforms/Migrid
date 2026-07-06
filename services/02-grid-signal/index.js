@@ -1,5 +1,5 @@
 /**
- * L2: Grid Signal Service (v2.5.4)
+ * L2: Grid Signal Service (v2.5.5)
  * OpenADR 3.0 VEN implementation for demand response and price signals
  * Enhanced with L1 Physics Safety Guards and Redis Caching
  */
@@ -67,7 +67,8 @@ const localSafetyCache = {
   global_safety: false,
   global_grid: false,
   regional_safety: {},
-  regional_grid: {}
+  regional_grid: {},
+  site_safety: {}
 };
 
 app.use(helmet());
@@ -120,7 +121,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.5.4',
+    version: '2.5.5',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -190,7 +191,8 @@ app.get('/openadr/v3/reports', authenticateToken, async (req, res) => {
       safety_lock: {
         active: localSafetyCache.global_safety,
         context: safetyContext,
-        regional: localSafetyCache.regional_safety
+        regional: localSafetyCache.regional_safety,
+        site: localSafetyCache.site_safety
       },
       grid_lock: {
         active: localSafetyCache.global_grid,
@@ -227,11 +229,17 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
     // Normalize ISO Region: uppercase and remove hyphens for cross-layer consistency
     const isoRegion = (event.targets?.find(t => t.type === 'region')?.value || '').toUpperCase().replace(/-/g, '');
 
+    // [L2 v2.5.2] Robust multi-key site identification via helper
+    const siteIdVal = extractSiteId(event);
+
     // 1. Check Safety Lock from L1 Physics Engine (Utilize sub-millisecond local cache)
-    const isSafetyLocked = localSafetyCache.global_safety || (isoRegion && localSafetyCache.regional_safety[isoRegion]);
+    // [L2 v2.5.5] Includes site-specific safety locks from DER Alarms
+    const isSafetyLocked = localSafetyCache.global_safety ||
+                           (isoRegion && localSafetyCache.regional_safety[isoRegion]) ||
+                           (siteIdVal && localSafetyCache.site_safety[siteIdVal]);
 
     if (isSafetyLocked) {
-      console.warn(`🚨 [L2] DISPATCH REJECTED: L1 Safety Lock active (Global: ${localSafetyCache.global_safety}, Regional: ${localSafetyCache.regional_safety[isoRegion]})`);
+      console.warn(`🚨 [L2] DISPATCH REJECTED: L1 Safety Lock active (Global: ${localSafetyCache.global_safety}, Regional: ${localSafetyCache.regional_safety[isoRegion]}, Site: ${siteIdVal && localSafetyCache.site_safety[siteIdVal]})`);
 
       // Fetch context if available for richer error response (Redis fallback)
       const lockContext = await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
@@ -242,6 +250,7 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
         reason: 'SAFETY_VIOLATION_L1',
         message: 'Grid dispatch suspended due to physics engine safety lock',
         details: details ? { alert_type: details.event_type, severity: details.severity } : 'No details available',
+        site_id: siteIdVal && localSafetyCache.site_safety[siteIdVal] ? siteIdVal : undefined,
         timestamp: new Date().toISOString()
       });
     }
@@ -270,9 +279,6 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
     }
 
     // 1.2 Check L8 Safe Mode (Site Specific)
-    // [L2 v2.5.2] Robust multi-key site identification via helper
-    const siteIdVal = extractSiteId(event);
-
     if (siteIdVal) {
       const safeMode = await redisClient.get(`l8:site:${siteIdVal}:safe_mode`);
       if (safeMode === 'true' || safeMode === '1') {
@@ -463,6 +469,22 @@ const updateLocalSafetyCache = async () => {
 
     localSafetyCache.regional_safety = newRegionalSafety;
     localSafetyCache.regional_grid = newRegionalGrid;
+
+    // Sync site-specific safety locks (v2.5.5)
+    cursor = '0';
+    const newSiteSafety = {};
+    do {
+      const siteReply = await redisClient.scan(cursor, { MATCH: `${SAFETY_LOCK_KEY}:site:*`, COUNT: 100 });
+      cursor = siteReply.cursor;
+      if (siteReply.keys.length > 0) {
+        const values = await redisClient.mGet(siteReply.keys);
+        siteReply.keys.forEach((key, index) => {
+          const siteId = key.split(':').pop();
+          newSiteSafety[siteId] = (values[index] === 'true' || values[index] === '1');
+        });
+      }
+    } while (cursor !== '0' && cursor !== 0);
+    localSafetyCache.site_safety = newSiteSafety;
   } catch (err) {
     console.error('❌ [L2] Failed to update local safety cache:', err.message);
   }
@@ -670,9 +692,10 @@ async function startSafetyConsumer() {
         console.log(`⚠️ [L2] DER Alarm Reported: Site=${siteIdVal}, Type=${payload.alarm_type}, Severity=${payload.severity}`);
         if (siteIdVal) {
           await redisClient.setEx(`l7:site:alarm:${siteIdVal}`, 3600, JSON.stringify(payload));
-          // If critical alarm, log for engineering audit
+          // If critical alarm, set site-specific safety lock (v2.5.5)
           if (payload.severity === 'CRITICAL') {
-            console.warn(`🚨 [L2] CRITICAL DER ALARM at Site ${siteIdVal}. Monitoring for grid instability.`);
+            console.warn(`🚨 [L2] CRITICAL DER ALARM at Site ${siteIdVal}. Locking site dispatch for 900s.`);
+            await redisClient.setEx(`${SAFETY_LOCK_KEY}:site:${siteIdVal}`, 900, '1');
           }
         }
       } else if (topic === 'ADVANCE_CHARGE_SIGNAL') {

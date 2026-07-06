@@ -1,7 +1,7 @@
 # MiGrid Master Backlog & Strategic Dependency Matrix
 
-**Version:** 10.1.5
-**Last Updated:** April 2026
+**Version:** 10.1.6
+**Last Updated:** June 2026
 **Status:** Phase 6 "AI & Optimization" (Active)
 
 ---
@@ -33,14 +33,14 @@
 
 | Downstream Layer | Dependency | Upstream Source | Impact of Failure | Status |
 |:---|:---|:---|:---|:---|
-| **L11 ML Engine** | High-Fidelity Logs | **L1 Physics (v10.1.5)** | ML training data lacks regional context | ✅ Active |
+| **L11 ML Engine** | High-Fidelity Logs | **L1 Physics (v10.1.6)** | ML training data lacks regional context | ✅ Active |
 | **L5 Driver DX** | PnC Auth Status | **L7 Device Gateway** | Driver cannot use Plug & Charge sessions | ✅ Active |
 | **L9 Commerce** | Billing Reconciliation | **L1 Physics / L4 Market** | Inaccurate split-billing or tariff logic | ✅ Active |
-| **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.2 Active |
-| **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal (v2.5.3)** | Missing high-fidelity metadata for L11 | ✅ Active |
-| **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine (v5.17.0)** | Rewards fail for 'ISO Explorer' challenges | ✅ Sync |
-| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway (v3.8.7)** | VTN cannot see market-aware grid signals | ✅ Sync |
-| **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.3.7)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
+| **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.3 Active |
+| **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal (v2.5.5)** | Missing high-fidelity metadata for L11 | ✅ Active |
+| **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine (v5.18.0)** | Rewards fail for 'ISO Explorer' challenges | ✅ Sync |
+| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway (v3.8.9)** | VTN cannot see market-aware grid signals | ✅ Sync |
+| **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.3.8)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
 
 ---
 
@@ -54,11 +54,12 @@
 - [✓] **Contextual Safety Locks**: metadata-enriched `l1:safety:lock:context` in Redis.
 - [✓] **API Security**: Integrated `helmet` and secured `/data/training/physics`.
 
-### Layer 2: Grid Signal (v2.5.3)
+### Layer 2: Grid Signal (v2.5.5)
 - [✓] **Telemetry Hardening**: implemented `isNaN` protection for physics/confidence scores.
 - [✓] **L11 Parity**: enforced strict `.toFixed(4)` string formatting for audit trails.
 - [✓] **Secure Reporting**: authenticateToken and PII masking applied to `/openadr/v3/reports`.
 - [✓] **Fleet Security**: Hardened global data endpoints to reject `fleet_id` tokens.
+- [✓] **Resilience [L2-133]**: Implemented site-specific safety isolation for `CRITICAL` DER alarms.
 
 ### Layer 3: VPP Aggregator (v3.3.2)
 - [✓] **Redis Capacity Cache**: Sub-50ms reporting for L4 bidding.

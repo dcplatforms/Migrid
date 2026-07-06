@@ -2,7 +2,7 @@
 
 # MiGrid Platform Status Report
 
-**Version 10.1.5** • **April 2026**
+**Version 10.1.6** • **June 2026**
 
 [![Phase](https://img.shields.io/badge/Phase_6-AI_&_Optimization-orange.svg)](../docs/roadmap.md)
 [![Progress](https://img.shields.io/badge/Progress-84%25_Complete-blue.svg)](PLATFORM_STATUS.md)
@@ -22,7 +22,7 @@ As of April 2026, the MiGrid platform has completed its transition to an **11-la
 
 - [x] **11 of 11 layers** fully operational (L1-L11)
 - [x] **Phases 1-5** complete (Q1 2026)
-- [~] **Phase 6** AI & Optimization (Active Q2 2026)
+- [~] **Phase 6** AI & Optimization (Active June 2026)
 
 </td>
 <td width="50%" valign="top">
@@ -798,7 +798,7 @@ done
 | Layer | Service | Version | Status |
 | :--- | :--- | :--- | :--- |
 | **L1** | Physics Engine | `10.1.5` | ✅ Operational |
-| **L2** | Grid Signal | `2.5.3` | ✅ Operational |
+| **L2** | Grid Signal | `2.5.5` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.2` | ✅ Operational |
 | **L4** | Market Gateway | `3.8.7` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
@@ -811,14 +811,14 @@ done
 
 ---
 
-## Latest Release Wins (April 2026)
+## Latest Release Wins (June 2026)
 
-- **L1 Physics Engine (v10.1.5)**: Implemented **localSafetyCache [L1-133]** for sub-millisecond resilience and achieved Phase 6 telemetry parity via strict `.toFixed(4)` string formatting.
-- **L7 Device Gateway (v5.11.0)**: Deployed **localSafetyCache [L7-133]** for resilient dispatch; hardened DER alarm handling via OCPP 2.1 `NotifyDERAlarm` broadcasting.
-- **L10 Token Engine (v4.3.7)**: Standardized asynchronous **Reward Batching** worker and hardened site identification via `extractSiteId`.
-- **L4 Market Gateway (v3.8.7)**: Enforced high-fidelity telemetry standards with `safeFloat` utility and strict string-formatted auditing for ML parity.
-- **L2 Grid Signal (v2.5.3)**: Hardened telemetry parsing with `isNaN` protection and aligned scoring outputs with L11 AI standards.
-- **L6 Engagement Engine (v5.17.0)**: Standardized site identification and enforced strict string-formatting for all physics and confidence scores.
+- **L1 Physics Engine (v10.1.6)**: Standardized granular site-specific safety locks (`l1:safety:lock:site:<SITE_ID>`) for physics-based grid dispatch isolation.
+- **L2 Grid Signal (v2.5.5)**: Implemented sub-millisecond site-specific safety isolation triggered by `CRITICAL` DER alarms from L7.
+- **L7 Device Gateway (v5.13.0)**: Enhanced `NotifyDERAlarm` broadcasting with regional metadata and site-specific safety triggers.
+- **L4 Market Gateway (v3.8.9)**: Synchronized hardware health penalties and auditability metadata for high-fidelity bidding.
+- **L10 Token Engine (v4.3.8)**: Hardened hardware health penalty logic (-0.05 per alarm) and refined site identification.
+- **L6 Engagement Engine (v5.18.0)**: Deployed 'Hardware Health Guardian' achievement; synchronized 4-decimal telemetry standards.
 
 ---
 
@@ -838,7 +838,7 @@ The platform is now actively utilizing high-fidelity data for **L11: ML Engine**
 
 *The Operating System for Sustainable Fleet Electrification*
 
-**Last Updated:** April 2026 • **Platform Version:** 10.1.5 • **Roadmap Status:** 84% Complete (82/98 features)
+**Last Updated:** June 2026 • **Platform Version:** 10.1.6 • **Roadmap Status:** 85% Complete (83/98 features)
 
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-blue.svg)](https://github.com/dcplatforms/Migrid)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)

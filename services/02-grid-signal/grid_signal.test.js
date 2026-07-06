@@ -308,10 +308,10 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body).toHaveProperty('timestamp');
   });
 
-  test('GET /health should return correct version (v2.5.4)', async () => {
+  test('GET /health should return correct version (v2.5.5)', async () => {
     const response = await request(app).get('/health');
     expect(response.status).toBe(200);
-    expect(response.body.version).toBe('2.5.4');
+    expect(response.body.version).toBe('2.5.5');
   });
 
   test('GET /openadr/v3/reports should return regional market contexts', async () => {
