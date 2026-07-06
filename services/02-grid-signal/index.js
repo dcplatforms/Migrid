@@ -120,7 +120,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.5.4',
+    version: '2.5.5',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'

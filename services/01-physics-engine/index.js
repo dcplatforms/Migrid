@@ -43,7 +43,8 @@ let isOffline = false;
 // [L1-133] Sub-millisecond local safety cache
 const localSafetyCache = {
   global: false,
-  regional: {}
+  regional: {},
+  site: {}
 };
 
 // 1. Database Connection
@@ -88,7 +89,7 @@ const authenticateToken = (req, res, next) => {
 app.get('/health', (req, res) => {
   res.json({
     service: 'physics-engine',
-    version: '10.1.5',
+    version: '10.1.6',
     status: 'healthy',
     layer: 'L1'
   });
@@ -149,11 +150,20 @@ async function connectServices() {
 }
 
 /**
+ * [L1 v10.1.6] safeFloat: Robust isNaN protection for telemetry scoring
+ * Enforces strict 4-decimal string formatting (.toFixed(4)).
+ */
+function safeFloat(val, fallback = 0.0) {
+  const parsed = parseFloat(val);
+  return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
+}
+
+/**
  * [L1-118] Calculate Data Confidence Score for L11 ML Engine
  * @param {number} streak - Current sentinel streak
  * @param {string} lastSync - ISO string of last sync
  * @param {object} siteLoadData - Optional site load data { loadKw, limitKw }
- * @returns {number} Confidence score (0.0000 to 1.0000)
+ * @returns {string} Confidence score (0.0000 to 1.0000)
  */
 function calculateConfidenceScore(streak, lastSync, siteLoadData) {
   let score = 0.5; // Base confidence
@@ -184,7 +194,7 @@ function calculateConfidenceScore(streak, lastSync, siteLoadData) {
     }
   }
 
-  return Math.max(0, Math.min(1.0, score)).toFixed(4);
+  return safeFloat(Math.max(0, Math.min(1.0, score)));
 }
 
 /**
@@ -199,8 +209,8 @@ function normalizeIso(iso) {
  * Standardized for multi-site parity (site_id, siteId, location_id, locationId)
  */
 function extractSiteId(payload) {
-  if (!payload) return SITE_ID;
-  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || SITE_ID;
+  if (!payload) return null;
+  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
 }
 
 /**
@@ -220,7 +230,7 @@ function calculatePhysicsMetadata(payload) {
     physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
   }
 
-  const scoreStr = physicsScore.toFixed(4);
+  const scoreStr = safeFloat(physicsScore);
   // [L1-130] Sentinel Hardening: Support boolean, string, and integer (1) formats
   const explicitSentinel = payload.is_sentinel_fidelity === true ||
                            payload.is_sentinel_fidelity === 'true' ||
@@ -289,7 +299,7 @@ async function handlePhysicsAlert(msg) {
   }
 
   // [L1-121] Fetch Site Load Data for Confidence Scoring
-  const alertSiteId = extractSiteId(payload.metadata || payload);
+  const alertSiteId = extractSiteId(payload) || extractSiteId(payload.metadata) || SITE_ID;
   const buildingLoadKw = parseFloat(await redisClient.get(`site:${alertSiteId}:building_load_kw`)) || 0;
   const siteConfig = await redisClient.hGetAll(`site:${alertSiteId}:config`) || {};
   const limitKw = parseFloat(siteConfig.max_capacity_kw) || 0;
@@ -313,6 +323,12 @@ async function handlePhysicsAlert(msg) {
       if (isoRegion) {
         await redisClient.setEx(`${SAFETY_LOCK_KEY}:${isoRegion}`, SAFETY_LOCK_TTL, 'true');
         localSafetyCache.regional[isoRegion] = true;
+      }
+
+      // [L1-135] Site-Specific Lock: Activate granular site isolation for L7 v5.13.0
+      if (alertSiteId) {
+        await redisClient.setEx(`${SAFETY_LOCK_KEY}:site:${alertSiteId}`, SAFETY_LOCK_TTL, 'true');
+        localSafetyCache.site[alertSiteId] = true;
       }
 
       // Phase 5 Enhancement: Detailed Safety Lock Context for L2/L4 transparency
@@ -406,6 +422,7 @@ async function updateLocalSafetyCache() {
 
     let cursor = '0';
     const newRegionalLocks = {};
+    const newSiteLocks = {};
     do {
       const reply = await redisClient.scan(cursor, { MATCH: `${SAFETY_LOCK_KEY}:*`, COUNT: 100 });
       cursor = reply.cursor;
@@ -413,12 +430,23 @@ async function updateLocalSafetyCache() {
         const values = await redisClient.mGet(reply.keys);
         reply.keys.forEach((key, index) => {
           if (key === SAFETY_LOCK_CONTEXT_KEY) return;
-          const iso = key.split(':').pop().toUpperCase();
-          newRegionalLocks[iso] = (values[index] === 'true' || values[index] === '1');
+          const parts = key.split(':');
+          const value = (values[index] === 'true' || values[index] === '1');
+
+          if (parts.length > 3 && parts[3] === 'site') {
+            // [L1-135] Site-specific lock: l1:safety:lock:site:<SITE_ID>
+            const siteId = parts.slice(4).join(':');
+            newSiteLocks[siteId] = value;
+          } else {
+            // Regional lock: l1:safety:lock:<ISO>
+            const iso = parts.pop().toUpperCase();
+            newRegionalLocks[iso] = value;
+          }
         });
       }
     } while (cursor !== '0' && cursor !== 0);
     localSafetyCache.regional = newRegionalLocks;
+    localSafetyCache.site = newSiteLocks;
   } catch (err) {
     console.error('❌ [L1 Physics] Failed to update local safety cache:', err.message);
   }
@@ -479,9 +507,9 @@ async function reconcileLogs() {
       // [L1-124] Re-calculate scores for high-fidelity reconciliation
       // Note: We use the stored scores if available (Hardened Offline Mode)
       const physicsMetadata = calculatePhysicsMetadata(payload);
-      const physicsScore = payload.physics_score ? parseFloat(payload.physics_score).toFixed(4) : physicsMetadata.physicsScore;
+      const physicsScore = payload.physics_score ? safeFloat(payload.physics_score) : physicsMetadata.physicsScore;
       const isPhysicsHighFidelity = parseFloat(physicsScore) > 0.95;
-      const confidenceScore = payload.confidence_score ? parseFloat(payload.confidence_score).toFixed(4) : (0.5).toFixed(4);
+      const confidenceScore = payload.confidence_score ? safeFloat(payload.confidence_score) : safeFloat(0.5);
       const isHighFidelity = isPhysicsHighFidelity || parseFloat(confidenceScore) > 0.95;
       // [L1-130] Sentinel Hardening: Support boolean, string, and integer (1) formats
       const explicitSentinel = payload.is_sentinel_fidelity === true ||
@@ -495,7 +523,7 @@ async function reconcileLogs() {
         session_id: payload.session_id,
         vehicle_id: payload.vehicle_id,
         vin: payload.vin,
-        site_id: extractSiteId(payload.metadata || payload),
+        site_id: extractSiteId(payload) || extractSiteId(payload.metadata) || SITE_ID,
         efficiency_pct: payload.efficiency_pct,
         variance_pct: payload.variance_pct,
         resource_type: payload.resource_type || 'EV',
@@ -643,7 +671,7 @@ async function syncDigitalTwin() {
         }
       }
 
-      const physicsScore = parseFloat(vehicle.physics_score || 1.0).toFixed(4);
+      const physicsScore = safeFloat(vehicle.physics_score || 1.0);
 
       // [L1-124] April 2026 High-Fidelity Standard
       const isHighFidelity = parseFloat(physicsScore) > 0.95 || parseFloat(confidenceScore) > 0.95;
@@ -724,7 +752,8 @@ module.exports = {
   reconcileLogs,
   start,
   getSyncIntervalId: () => syncIntervalId,
-  getLastMarketPrice: () => lastMarketPrice
+  getLastMarketPrice: () => lastMarketPrice,
+  safeFloat
 };
 
 process.on('SIGTERM', async () => {

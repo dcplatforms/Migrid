@@ -125,7 +125,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.17.0', // Weekly Mission: DER Sentinel & Standardized Site ID
+    version: '5.18.0', // Weekly Mission: DER Sentinel & Standardized Site ID
     status: 'healthy',
     layer: 'L6'
   });
