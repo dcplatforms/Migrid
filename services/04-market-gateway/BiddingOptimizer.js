@@ -53,6 +53,7 @@ class BiddingOptimizer {
 
     if (iso) {
       try {
+        const isoKey = iso.toUpperCase().replace(/-/g, '');
         // [L3 v3.3.0 Upgrade] Prioritize high-fidelity regional breakdown
         const hfKey = 'vpp:capacity:regional:high_fidelity';
         const legacyKey = 'vpp:capacity:regional';
@@ -61,8 +62,6 @@ class BiddingOptimizer {
           this.redisClient.get(hfKey),
           this.redisClient.get(legacyKey)
         ]);
-
-        const isoKey = iso.toUpperCase().replace(/-/g, '');
 
         // 1. Attempt high-fidelity lookup
         if (hfRaw) {
@@ -135,6 +134,10 @@ class BiddingOptimizer {
         const isoKey = iso.toUpperCase().replace(/-/g, '');
         l4Regional = !!this.localCache.l4_regional[isoKey];
       }
+
+      // [L4 v3.8.9] Site-specific isolation: Granular locks (site_safety) do not trigger
+      // a global halt. Instead, we rely on L3 to subtract locked site capacity from
+      // the aggregated totals. We only halt here for system-wide or regional locks.
       return {
         l1: this.localCache.l1_physics,
         l4: this.localCache.l4_grid || l4Regional
@@ -167,10 +170,26 @@ class BiddingOptimizer {
     await this.connect();
     const isoKey = iso.toUpperCase().replace(/-/g, '');
 
+    // 4. Fetch Capacity Data BEFORE early-return checks (v3.8.9 audit requirement)
+    const {
+      capacity: pVppKw,
+      fidelity: capacityFidelityFromRedis,
+      breakdown,
+      physics_score: pScoreFromL3,
+      confidence_score: cScoreFromL3
+    } = await this.getAggregatedCapacity(iso);
+    const pVppMw = pVppKw.dividedBy(1000);
+
     // 1. Verify the Physics & Grid signals: Check for safety locks before bidding
     const locks = await this.getSafetyLockStatus(iso);
 
-    // 2. Fetch safety lock context for audit (L11 ML Engine readiness)
+    // 2. [L4 v3.8.9] Hardware Health Penalty logic
+    const alarmKey = `l4:regional:alarms:${isoKey}`;
+    const alarmCountRaw = await this.redisClient.get(alarmKey);
+    const regionalAlarmCount = parseInt(alarmCountRaw || '0');
+    const hardwarePenalty = Decimal.min(0.30, new Decimal(regionalAlarmCount).times(0.05));
+
+    // 3. Fetch safety lock context for audit (L11 ML Engine readiness)
     // [L4-133] Optimized: Use localCache for zero-latency audit metadata
     let physicsScore = this.localCache?.physics_score || "1.0000";
     let confidenceScore = this.localCache?.confidence_score || "1.0000";
@@ -201,9 +220,12 @@ class BiddingOptimizer {
       } catch (err) {
         console.warn('[BiddingOptimizer] Failed to fetch safety lock context from Redis:', err.message);
       }
-    } else {
-      // In a real scenario, we might still want to fetch the full context for the audit log
-      // if it's too big to keep in localCache. But for now, we use the cached values.
+    }
+
+    // [L4 v3.8.6] Synchronize scores with L3 High-Fidelity context if available
+    if (capacityFidelityFromRedis === 'HIGH_FIDELITY') {
+      physicsScore = pScoreFromL3;
+      confidenceScore = cScoreFromL3;
     }
 
     // High-Fidelity logic: physics_score > 0.95 OR confidence_score > 0.95 (Align with L10 v4.3.5)
@@ -212,7 +234,7 @@ class BiddingOptimizer {
     isSentinelFidelity = isSentinel(isSentinelFidelity, physicsScore);
     const capacityFidelity = isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD';
 
-    // 3. Handle Halted Bidding
+    // 5. Handle Halted Bidding
     if (locks.l1 || locks.l4) {
       if (locks.l1) {
         console.warn(`🚨 [L4 Market Gateway v3.8.0] Bidding halted: L1 safety lock is active for ${iso}`);
@@ -236,26 +258,20 @@ class BiddingOptimizer {
           is_high_fidelity: isHighFidelity,
           is_sentinel_fidelity: isSentinelFidelity,
           capacity_fidelity: capacityFidelity,
-          audit_context: auditContext,
+          regional_alarm_count: regionalAlarmCount,
+          hardware_penalty: hardwarePenalty.toNumber(),
+          audit_context: {
+            ...auditContext,
+            ev_capacity_kw: breakdown.ev,
+            bess_capacity_kw: breakdown.bess,
+            v3_capacity_fidelity: capacityFidelityFromRedis === 'HIGH_FIDELITY',
+            is_sentinel_fidelity: isSentinelFidelity,
+            site_aware_sync: true
+          },
+          pVppKw: pVppKw.toNumber(),
           timestamp: new Date().toISOString()
         }
       };
-    }
-
-    // 4. Fetch Capacity Data
-    const {
-      capacity: pVppKw,
-      fidelity: capacityFidelityFromRedis,
-      breakdown,
-      physics_score: pScoreFromL3,
-      confidence_score: cScoreFromL3
-    } = await this.getAggregatedCapacity(iso);
-    const pVppMw = pVppKw.dividedBy(1000);
-
-    // [L4 v3.8.6] Synchronize scores with L3 High-Fidelity context if available
-    if (capacityFidelityFromRedis === 'HIGH_FIDELITY') {
-      physicsScore = pScoreFromL3;
-      confidenceScore = cScoreFromL3;
     }
 
     // [L4-BESS-OPT] Resource-Aware Degradation Costs
@@ -325,7 +341,8 @@ class BiddingOptimizer {
         const greenPremium = isGreenHour ? new Decimal(greenPremiumValue) : new Decimal(0);
 
         if (lmpMwh.gt(degradationCostMwh.plus(greenPremium))) {
-          pBidMw = pVppMw.times(capacityMultiplier);
+          // [L4 v3.8.9] Apply Hardware Health Penalty to bid quantity
+          pBidMw = pVppMw.times(capacityMultiplier).times(new Decimal(1.0).minus(hardwarePenalty));
         }
       }
 
@@ -342,6 +359,8 @@ class BiddingOptimizer {
         is_high_fidelity: isHighFidelity,
         is_sentinel_fidelity: isSentinelFidelity,
         capacity_fidelity: capacityFidelityFromRedis, // Already normalized in getAggregatedCapacity
+        regional_alarm_count: regionalAlarmCount,
+        hardware_penalty: hardwarePenalty.toNumber(),
         audit_context: {
           ...auditContext,
           ev_capacity_kw: breakdown.ev,

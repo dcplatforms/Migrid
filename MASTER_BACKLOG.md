@@ -12,7 +12,7 @@
 |:---:|:---|:---:|:---|:---:|
 | **P0** | **ML Demand Forecasting** | L11 (ML Engine) | ✅ Phase 6 Telemetry Parity (100%) | Phase 6 |
 | **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | ✅ L7 v5.11.0 localSafetyCache (100%) | Phase 5 |
-| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 v3.8.7 AI Readiness (100% Complete) | Phase 5 |
+| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 v3.8.9 Hardware-Aware Resilience (100% Complete) | Phase 5 |
 | **P3** | **OCPI 2.2 Roaming** | L7 (Device) | ✅ L9 v5.1.0 tariff engine sync (100% Complete) | Phase 5 |
 | **P4** | **BESS RL Bidding** | L4 (Market) | 🚧 L3 BESS Integration (75% Complete) | Phase 6 |
 
@@ -39,7 +39,7 @@
 | **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.2 Active |
 | **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal (v2.5.3)** | Missing high-fidelity metadata for L11 | ✅ Active |
 | **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine (v5.17.0)** | Rewards fail for 'ISO Explorer' challenges | ✅ Sync |
-| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway (v3.8.7)** | VTN cannot see market-aware grid signals | ✅ Sync |
+| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway (v3.8.9)** | VTN cannot see market-aware grid signals | ✅ Sync |
 | **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.3.7)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
 
 ---
@@ -66,7 +66,8 @@
 - [✓] **Multi-Site Parity**: Implemented `extractSiteId` for standardized site identification.
 - [~] **BESS Integration**: Support for stationary storage assets (75%).
 
-### Layer 4: Market Gateway (v3.8.7)
+### Layer 4: Market Gateway (v3.8.9)
+- [✓] **Hardware-Aware Resilience**: Site-specific safety isolation and dynamic hardware health penalties.
 - [✓] **ML Parity**: Enforced strict string formatting (`.toFixed(4)`) for all scores.
 - [✓] **NaN Protection**: Hardened bidding logic via `safeFloat` utility.
 - [✓] **Multi-Site Parity**: Hardened grid signal consumer with multi-key site identification.

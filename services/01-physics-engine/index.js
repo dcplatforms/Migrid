@@ -88,7 +88,7 @@ const authenticateToken = (req, res, next) => {
 app.get('/health', (req, res) => {
   res.json({
     service: 'physics-engine',
-    version: '10.1.5',
+    version: '10.1.6',
     status: 'healthy',
     layer: 'L1'
   });

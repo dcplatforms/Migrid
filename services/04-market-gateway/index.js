@@ -35,6 +35,7 @@ const localSafetyCache = {
   l1_physics: false,
   l4_grid: false,
   l4_regional: {},
+  site_safety: {},
   physics_score: "1.0000",
   confidence_score: "1.0000",
   is_sentinel_fidelity: false,
@@ -139,25 +140,32 @@ async function updateLocalSafetyCache() {
       localSafetyCache.regional_confidence = unified.regional_confidence || {};
     }
 
-    // Regional locks discovery
+    // Regional and Site locks discovery
     const newRegionalLocks = {};
+    const newSiteLocks = {};
     let cursor = '0';
     do {
-      const reply = await redisClient.scan(cursor, { MATCH: 'l4:grid:lock:*', COUNT: 100 });
+      const reply = await redisClient.scan(cursor, { MATCH: 'l*:*lock:*', COUNT: 100 });
       cursor = reply.cursor;
       if (reply.keys.length > 0) {
         const values = await redisClient.mGet(reply.keys);
         reply.keys.forEach((key, index) => {
-          const iso = key.split(':').pop().toUpperCase();
           const val = values[index];
-          if (val === 'true' || val === '1') {
-            newRegionalLocks[iso] = true;
+          const isLocked = (val === 'true' || val === '1');
+
+          if (key.startsWith('l4:grid:lock:')) {
+            const iso = key.split(':').pop().toUpperCase();
+            if (isLocked) newRegionalLocks[iso] = true;
+          } else if (key.startsWith('l1:safety:lock:site:')) {
+            const siteId = key.split(':').pop();
+            if (isLocked) newSiteLocks[siteId] = true;
           }
         });
       }
     } while (cursor !== 0 && cursor !== '0');
 
     localSafetyCache.l4_regional = newRegionalLocks;
+    localSafetyCache.site_safety = newSiteLocks;
     localSafetyCache.last_updated = new Date().toISOString();
   } catch (err) {
     console.error('❌ [Market Gateway] Failed to update local safety cache:', err.message);
@@ -267,9 +275,24 @@ async function startGridSignalConsumer() {
 
         if (topic === 'DER_ALARM_REPORTED') {
           console.log(`🚨 [Market Gateway] DER Alarm reported: ${signal.alarmType} (Severity: ${signal.severity})`);
+
+          // [L4 v3.8.9] Hardware Health Tracking: Increment regional alarm count
+          const alarmIso = (signal.iso_region || 'CAISO').toUpperCase().replace(/-/g, '');
+          const alarmKey = `l4:regional:alarms:${alarmIso}`;
+          await redisClient.incr(alarmKey);
+          await redisClient.expire(alarmKey, 3600); // 1-hour TTL for penalty window
+
           if (signal.severity === 'CRITICAL' || signal.severity === 'HIGH') {
             const alarmRegion = (signal.iso_region || 'SYSTEM_WIDE').toUpperCase().replace(/-/g, '');
             const lockDuration = 1800; // 30 minutes for hardware alarms
+
+            // [L4 v3.8.9] Site-Specific Safety Isolation
+            if (siteIdVal && siteIdVal !== 'SYSTEM_WIDE') {
+              const siteLockKey = `l1:safety:lock:site:${siteIdVal}`;
+              await redisClient.setEx(siteLockKey, lockDuration, 'true');
+              console.warn(`[Market Gateway] Site-Specific Safety Lock ACTIVATED for ${siteIdVal} due to ${signal.severity} alarm`);
+            }
+
             if (alarmRegion !== 'SYSTEM_WIDE') {
               const regionLockKey = `l4:grid:lock:${alarmRegion}`;
               await redisClient.setEx(regionLockKey, lockDuration, 'true');
@@ -379,7 +402,7 @@ app.get('/health', async (req, res) => {
   // [L4-133] Sub-millisecond response via localSafetyCache
   res.json({
     service: 'market-gateway',
-    version: '3.8.8',
+    version: '3.8.9',
     status: 'healthy',
     mode: process.env.USE_LIVE_DATA === 'true' ? 'LIVE' : 'SIMULATION',
     layer: 'L4',
@@ -387,7 +410,8 @@ app.get('/health', async (req, res) => {
     safety_locks: {
       l1_physics: localSafetyCache.l1_physics,
       l4_grid: localSafetyCache.l4_grid,
-      l4_regional: localSafetyCache.l4_regional
+      l4_regional: localSafetyCache.l4_regional,
+      site_safety: localSafetyCache.site_safety
     },
     telemetry: {
       physics_score: localSafetyCache.physics_score,
