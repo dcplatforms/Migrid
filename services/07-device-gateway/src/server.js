@@ -27,10 +27,12 @@ const localConnections = new Map();
 /**
  * [L7-133] Sub-millisecond local safety and grid lock cache
  * Polled from Redis every 5s to ensure edge resilience and zero-latency dispatch.
+ * [L7-135] Expanded to include site-specific locks.
  */
 const localSafetyCache = {
   global: false,
-  regional: {} // Maps ISO region (e.g., CAISO) to boolean lock status
+  regional: {}, // Maps ISO region (e.g., CAISO) to boolean lock status
+  site: {}     // Maps siteId to boolean lock status
 };
 
 async function updateLocalSafetyCache() {
@@ -38,23 +40,31 @@ async function updateLocalSafetyCache() {
     const globalLock = await redis.get('l1:safety:lock');
     localSafetyCache.global = (globalLock === 'true' || globalLock === '1');
 
-    // Scan for all regional grid locks (L4 sync)
+    // Scan for all regional and site grid locks (L1/L4 sync)
     let cursor = '0';
     const newRegionalLocks = {};
+    const newSiteLocks = {};
+
     do {
-      // Use ioredis scan stream or scan
-      const [newCursor, keys] = await redis.scan(cursor, 'MATCH', 'l4:grid:lock:*', 'COUNT', 100);
+      const [newCursor, keys] = await redis.scan(cursor, 'MATCH', 'l*:*lock:*', 'COUNT', 200);
       cursor = newCursor;
       if (keys.length > 0) {
         const values = await redis.mget(keys);
         keys.forEach((key, index) => {
-          const iso = key.split(':').pop().toUpperCase();
-          newRegionalLocks[iso] = (values[index] === 'true' || values[index] === '1');
+          const val = (values[index] === 'true' || values[index] === '1');
+          if (key.startsWith('l4:grid:lock:')) {
+            const iso = key.split(':').pop().toUpperCase();
+            newRegionalLocks[iso] = val;
+          } else if (key.startsWith('l1:safety:lock:site:')) {
+            const siteId = key.split(':').pop();
+            newSiteLocks[siteId] = val;
+          }
         });
       }
     } while (cursor !== '0');
 
     localSafetyCache.regional = newRegionalLocks;
+    localSafetyCache.site = newSiteLocks;
   } catch (err) {
     console.error('❌ [L7] Failed to update local safety cache:', err.message);
   }
@@ -78,7 +88,7 @@ app.get('/health', (req, res) => {
     service: 'Device Gateway',
     layer: 'L7',
     status: 'OK',
-    version: '5.12.0',
+    version: '5.13.0',
     podId: process.env.POD_ID || 'gateway-instance-1'
   });
 });
@@ -223,7 +233,7 @@ const handleControlSignal = async (topic, payload) => {
     // 1. Verify the Physics: Check for L1 Safety Lock before dispatching control
     // [L7-133] Use local cache for sub-millisecond resilience
     if (localSafetyCache.global) {
-        console.warn(`🛑 [L7] Control Signal HALTED. L1 Safety Lock is ACTIVE (Cached).`);
+        console.warn(`🛑 [L7] Control Signal HALTED. Global L1 Safety Lock is ACTIVE (Cached).`);
         return;
     }
 
@@ -267,12 +277,19 @@ async function sendSetChargingProfile(chargePointId, limitKw, mode) {
         return;
     }
 
-    // [L7-133] Use local connection context for zero-latency region lookup
+    // [L7-133] Use local connection context for zero-latency region/site lookup
     const isoRegion = connection.isoRegion || 'CAISO';
+    const siteId = connection.siteId;
 
     // [L7-133] Use local cache for sub-millisecond grid lock verification
     if (localSafetyCache.regional[isoRegion]) {
         console.warn(`🛑 [L7] Control Signal HALTED for ${chargePointId}. L4 GRID LOCK in ${isoRegion} is ACTIVE (Cached).`);
+        return;
+    }
+
+    // [L7-135] Enforce site-specific safety isolation
+    if (siteId && localSafetyCache.site[siteId]) {
+        console.warn(`🛑 [L7] Control Signal HALTED for ${chargePointId}. L1 SITE LOCK for ${siteId} is ACTIVE (Cached).`);
         return;
     }
 

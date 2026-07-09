@@ -17,11 +17,13 @@ const extractSiteId = (payload) => {
 };
 
 /**
- * [L7 v5.12.0] safeFloat: Robust isNaN protection for telemetry scoring
+ * [L7 v5.13.0] safeFloat: Robust isNaN protection and 4-decimal string formatting
+ * Enforces MiGrid Phase 6 ML parity standard.
  */
 const safeFloat = (val, fallback = 0.0) => {
     const parsed = parseFloat(val);
-    return isNaN(parsed) ? fallback : parsed;
+    const result = isNaN(parsed) ? fallback : parsed;
+    return result.toFixed(4);
 };
 
 async function connectProducer() {
@@ -117,14 +119,15 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
 
     // 2. Standardized Output: Broadcast a unified schema to Kafka
     // [L1-127] Standardize all energy/power values to 4 decimal places for L11 ML Engine parity
+    // safeFloat (v5.13.0) returns a string formatted to 4 decimals.
     event = {
         chargePointId,
         site_id: siteId,
         timestamp: payload.timestamp || new Date().toISOString(),
-        energyActiveImport: importEnergy.toFixed(4),
-        energyActiveExport: exportEnergy.toFixed(4),
-        powerActiveImport: importPower.toFixed(4),
-        powerActiveExport: exportPower.toFixed(4),
+        energyActiveImport: importEnergy,
+        energyActiveExport: exportEnergy,
+        powerActiveImport: importPower,
+        powerActiveExport: exportPower,
         protocol: protocol,
         iso_region: isoRegion,
         physics_score: hf.physicsScore,
@@ -133,7 +136,7 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
         is_sentinel_fidelity: hf.isSentinelFidelity,
         fidelity_status: hf.fidelityStatus,
         resource_type: resourceType,
-        source: 'L7_GATEWAY_V5.12.0'
+        source: 'L7_GATEWAY_V5.13.0'
     };
 
     await producer.send({
@@ -187,7 +190,7 @@ async function publishSessionEvent(type, payload) {
 }
 
 function extractMeterValue(payload, measurand) {
-    if (!payload || !payload.meterValue) return 0.0;
+    if (!payload || !payload.meterValue) return (0.0).toFixed(4);
     for (const mv of payload.meterValue) {
         for (const rv of mv.sampledValue) {
             if (rv.measurand === measurand || (measurand === 'Energy.Active.Import.Register' && rv.measurand === undefined)) {
@@ -195,13 +198,13 @@ function extractMeterValue(payload, measurand) {
             }
         }
     }
-    return 0.0;
+    return (0.0).toFixed(4);
 }
 
 function extractBidirValue(bidirEnergyFlowData, measurand) {
-    if (!bidirEnergyFlowData) return 0.0;
+    if (!bidirEnergyFlowData) return (0.0).toFixed(4);
     const entry = bidirEnergyFlowData.find(d => d.measurand === measurand);
-    return entry ? safeFloat(entry.value) : 0.0;
+    return entry ? safeFloat(entry.value) : (0.0).toFixed(4);
 }
 
-module.exports = { connectProducer, publishTelemetry, publishSessionEvent };
+module.exports = { connectProducer, publishTelemetry, publishSessionEvent, safeFloat };
