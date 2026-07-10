@@ -797,16 +797,16 @@ done
 
 | Layer | Service | Version | Status |
 | :--- | :--- | :--- | :--- |
-| **L1** | Physics Engine | `10.1.5` | ✅ Operational |
-| **L2** | Grid Signal | `2.5.3` | ✅ Operational |
-| **L3** | VPP Aggregator | `3.3.2` | ✅ Operational |
-| **L4** | Market Gateway | `3.8.7` | ✅ Operational |
+| **L1** | Physics Engine | `10.1.6` | ✅ Operational |
+| **L2** | Grid Signal | `2.5.5` | ✅ Operational |
+| **L3** | VPP Aggregator | `3.3.3` | ✅ Operational |
+| **L4** | Market Gateway | `3.8.9` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
-| **L6** | Engagement Engine | `5.17.0` | ✅ Operational |
-| **L7** | Device Gateway | `5.11.0` | ✅ Operational |
+| **L6** | Engagement Engine | `5.18.0` | ✅ Operational |
+| **L7** | Device Gateway | `5.13.0` | ✅ Operational |
 | **L8** | Energy Manager | `2.1.0` | ✅ Operational |
 | **L9** | Commerce Engine | `5.1.0` | ✅ Operational |
-| **L10**| Token Engine | `4.3.7` | ✅ Operational |
+| **L10**| Token Engine | `4.3.8` | ✅ Operational |
 | **L11**| ML Engine | `0.5.0` | ✅ Operational |
 
 ---

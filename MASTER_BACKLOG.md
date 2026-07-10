@@ -1,7 +1,7 @@
 # MiGrid Master Backlog & Strategic Dependency Matrix
 
-**Version:** 10.1.5
-**Last Updated:** April 2026
+**Version:** 10.1.6
+**Last Updated:** June 2026
 **Status:** Phase 6 "AI & Optimization" (Active)
 
 ---
@@ -33,20 +33,20 @@
 
 | Downstream Layer | Dependency | Upstream Source | Impact of Failure | Status |
 |:---|:---|:---|:---|:---|
-| **L11 ML Engine** | High-Fidelity Logs | **L1 Physics (v10.1.5)** | ML training data lacks regional context | ✅ Active |
+| **L11 ML Engine** | High-Fidelity Logs | **L1 Physics (v10.1.6)** | ML training data lacks regional context | ✅ Active |
 | **L5 Driver DX** | PnC Auth Status | **L7 Device Gateway** | Driver cannot use Plug & Charge sessions | ✅ Active |
 | **L9 Commerce** | Billing Reconciliation | **L1 Physics / L4 Market** | Inaccurate split-billing or tariff logic | ✅ Active |
-| **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.2 Active |
-| **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal (v2.5.3)** | Missing high-fidelity metadata for L11 | ✅ Active |
-| **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine (v5.17.0)** | Rewards fail for 'ISO Explorer' challenges | ✅ Sync |
+| **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.3 Active |
+| **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal (v2.5.5)** | Missing high-fidelity metadata for L11 | ✅ Active |
+| **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine (v5.18.0)** | Rewards fail for 'ISO Explorer' challenges | ✅ Sync |
 | **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway (v3.8.7)** | VTN cannot see market-aware grid signals | ✅ Sync |
-| **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.3.7)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
+| **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.3.8)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
 
 ---
 
 ## 🛠️ Active Engineering Sprints (Phase 6)
 
-### Layer 1: Physics Engine (v10.1.5)
+### Layer 1: Physics Engine (v10.1.6)
 - [✓] **[L1-133] Local Safety Cache**: 5s background poller for sub-millisecond resilience.
 - [✓] **Phase 6 Parity**: Enforced strict .toFixed(4) string formatting for all scores.
 - [✓] **Standardized Site ID**: Implemented `extractSiteId` for multi-site identification.
@@ -54,19 +54,19 @@
 - [✓] **Contextual Safety Locks**: metadata-enriched `l1:safety:lock:context` in Redis.
 - [✓] **API Security**: Integrated `helmet` and secured `/data/training/physics`.
 
-### Layer 2: Grid Signal (v2.5.3)
+### Layer 2: Grid Signal (v2.5.5)
 - [✓] **Telemetry Hardening**: implemented `isNaN` protection for physics/confidence scores.
 - [✓] **L11 Parity**: enforced strict `.toFixed(4)` string formatting for audit trails.
 - [✓] **Secure Reporting**: authenticateToken and PII masking applied to `/openadr/v3/reports`.
 - [✓] **Fleet Security**: Hardened global data endpoints to reject `fleet_id` tokens.
 
-### Layer 3: VPP Aggregator (v3.3.2)
+### Layer 3: VPP Aggregator (v3.3.3)
 - [✓] **Redis Capacity Cache**: Sub-50ms reporting for L4 bidding.
 - [✓] **Fuse Rule 2.0**: 20% SoC hard floor integrated into capacity formula.
 - [✓] **Multi-Site Parity**: Implemented `extractSiteId` for standardized site identification.
 - [~] **BESS Integration**: Support for stationary storage assets (75%).
 
-### Layer 4: Market Gateway (v3.8.7)
+### Layer 4: Market Gateway (v3.8.9)
 - [✓] **ML Parity**: Enforced strict string formatting (`.toFixed(4)`) for all scores.
 - [✓] **NaN Protection**: Hardened bidding logic via `safeFloat` utility.
 - [✓] **Multi-Site Parity**: Hardened grid signal consumer with multi-key site identification.
@@ -74,7 +74,7 @@
 - [✓] **AI Readiness**: Training endpoints for fuel-mix, load-forecast, and net-load active.
 - [~] **BESS RL Bidding**: Research phase for reinforcement learning models (10%).
 
-### Layer 6: Engagement Engine (v5.17.0)
+### Layer 6: Engagement Engine (v5.18.0)
 - [✓] **Phase 6 Alignment**: Standardized physics and confidence scores as 4-decimal strings.
 - [✓] **Multi-Site Parity**: Hardened site identification via `extractSiteId`.
 - [✓] **AI Model Master**: Achievement for 100+ cumulative high-fidelity sessions.
@@ -82,14 +82,16 @@
 - [✓] **Solar Flare**: Achievement for 25 cumulative solar ramp responses.
 - [✓] **Sentinel Elite**: Achievement for 50 total sentinel-fidelity sessions.
 
-### Layer 7: Device Gateway (v5.11.0)
+### Layer 7: Device Gateway (v5.13.0)
 - [✓] **[L7-133] Resilience**: Implemented `localSafetyCache` for sub-millisecond dispatch.
 - [✓] **DER Alarms**: Enhanced hardware-agnostic alarm handling via `NotifyDERAlarm`.
 - [✓] **ISO 15118-20**: Hardened Certificate Exchange and EMAID handling (100%).
 - [✓] **ML Parity**: Enforced strict string-formatted telemetry (.toFixed(4)).
 - [✓] **Security Hardening**: Integrated helmet() and updated Kafka tagging.
 
-### Layer 10: Token Engine (v4.3.7)
+### Layer 10: Token Engine (v4.3.8)
+- [✓] **Hardware Health Penalty**: Implemented dynamic reward reduction (-0.05/alarm) in `applyHardwarePenalty`.
+- [✓] **Telemetry Precision**: Hardened `safeFloat` with '0.0000' fallback for L11 ML parity.
 - [✓] **Reward Batching**: Standardized atomic background worker for reward minting.
 - [✓] **ML Parity**: Enforced strict .toFixed(4) telemetry formatting.
 - [✓] **Site Awareness**: Standardized identification via `extractSiteId`.
