@@ -61,6 +61,16 @@ function extractSiteId(payload) {
   return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
 }
 
+/**
+ * [L10 v4.3.8] safeFloat: Robust isNaN protection for telemetry scoring
+ * Enforces strict 4-decimal string formatting.
+ * Default fallback is 0.0 to uphold "Proof of Physics equals Proof of Value".
+ */
+function safeFloat(val, fallback = 0.0) {
+  const parsed = parseFloat(val);
+  return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
+}
+
 // --- Helper Functions for Database Interaction ---
 
 async function getRewardRule(actionType) {
@@ -95,7 +105,7 @@ async function getOrCreateDriverWallet(driverId) {
 }
 
 async function logRewardTransaction(driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status = 'pending', iso = 'CAISO', physicsScore = null, isHighFidelity = false, multiplierReason = 'Standard Reward', confidenceScore = null, resourceType = 'EV', isSentinelFidelity = false, siteId = null) {
-  // L10 v4.3.7: Standardize physics and confidence scores as 4-decimal strings for L11 ML parity using safeFloat
+  // L10 v4.3.8: Standardize physics and confidence scores as 4-decimal strings for L11 ML parity using safeFloat
   const physicsScoreFormatted = (physicsScore !== null && physicsScore !== undefined) ? safeFloat(physicsScore) : null;
   const confidenceScoreFormatted = (confidenceScore !== null && confidenceScore !== undefined) ? safeFloat(confidenceScore) : null;
 
@@ -184,25 +194,6 @@ async function checkIdempotency(driverId, triggeringEventId, ruleId) {
   return res.rows.length > 0 ? res.rows[0] : null;
 }
 
-/**
- * Helper: Standardized site ID extraction for multi-key parity (L1/L4/L7)
- * Handles site_id, siteId, location_id, and locationId.
- */
-function extractSiteId(payload) {
-  if (!payload) return null;
-  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
-}
-
-/**
- * [L10 v4.3.7] safeFloat: Robust isNaN protection for telemetry scoring
- * Enforces strict 4-decimal string formatting.
- * Default fallback is 0.0 to uphold "Proof of Physics equals Proof of Value".
- */
-function safeFloat(val, fallback = 0.0) {
-  const parsed = parseFloat(val);
-  return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
-}
-
 // --- Reward Multiplier Logic ---
 
 async function getSiteMultiplier(siteId) {
@@ -218,6 +209,37 @@ async function getSiteMultiplier(siteId) {
     console.error(`[L10] Error fetching site multiplier from Redis for ${siteId}:`, err.message);
   }
   return { multiplier: new Decimal(1.0), reason: 'Standard Site Rate' };
+}
+
+/**
+ * [L10 v4.3.8] applyHardwarePenalty: Reduces rewards based on regional alarms
+ * Penalty: -0.05 per alarm in l4:regional:alarms:<ISO>, capped at 0.30.
+ * Synchronized with L4 Market Gateway v3.8.9.
+ */
+async function applyHardwarePenalty(isoRaw, totalMultiplier, multiplierReason) {
+  const iso = isoRaw.toUpperCase().replace(/-/g, '');
+  let updatedMultiplier = new Decimal(totalMultiplier);
+  let updatedReason = multiplierReason;
+
+  try {
+    const alarmCountStr = await redisClient.get(`l4:regional:alarms:${iso}`);
+    if (alarmCountStr) {
+      const alarmCount = parseInt(alarmCountStr);
+      if (alarmCount > 0) {
+        // Penalty: 0.05 per alarm, capped at 0.30 (6 alarms)
+        const penalty = Decimal.min(new Decimal(alarmCount).times('0.05'), '0.30');
+        updatedMultiplier = updatedMultiplier.minus(penalty);
+        if (updatedMultiplier.lt(0)) updatedMultiplier = new Decimal(0);
+
+        updatedReason += ` (Hardware Penalty: -${penalty.toNumber()} due to ${alarmCount} alarms)`;
+        console.log(`[L10 Strategy] Applied Hardware Health Penalty for ${iso}: -${penalty.toNumber()}x`);
+      }
+    }
+  } catch (err) {
+    console.error(`[L10] Error fetching regional alarms from Redis for ${iso}:`, err.message);
+  }
+
+  return { multiplier: updatedMultiplier, reason: updatedReason };
 }
 
 async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
@@ -258,7 +280,7 @@ async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '4.3.7',
+    version: '4.3.8',
     status: 'healthy',
     layer: 'L10'
   });
@@ -295,7 +317,7 @@ app.get('/data/training/rewards', authenticateToken, async (req, res) => {
     res.json({
       count: result.rows.length,
       data: result.rows,
-      source: 'L10_TOKEN_ENGINE_V4.3.7',
+      source: 'L10_TOKEN_ENGINE_V4.3.8',
       fidelity_tier: 'SENTINEL'
     });
   } catch (error) {
@@ -363,16 +385,16 @@ async function start() {
           const vppAligned = !!(is_vpp_event || isVppEvent);
 
           // Robust Payload Validation and Standardization (Snake_case & CamelCase support)
-          // [L10 v4.3.7] Perform numeric parsing and validation before formatting
+          // [L10 v4.3.8] Perform numeric parsing and validation before formatting
           let physicsScoreRaw = (physics_score !== undefined) ? physics_score : physicsScore;
           let confidenceScoreRaw = (confidence_score !== undefined) ? confidence_score : confidenceScore;
 
           let physicsScoreNum = physicsScoreRaw !== undefined ? parseFloat(physicsScoreRaw) : null;
           let confidenceScoreNum = confidenceScoreRaw !== undefined ? parseFloat(confidenceScoreRaw) : null;
 
-          // Enforce 4-decimal string formatting for persistent storage/logs
-          const physicsScoreVal = (physicsScoreNum !== null) ? safeFloat(physicsScoreNum) : null;
-          const confidenceScoreVal = (confidenceScoreNum !== null) ? safeFloat(confidenceScoreNum) : null;
+          // Enforce 4-decimal string formatting for persistent storage/logs using safeFloat
+          const physicsScoreFormatted = (physicsScoreNum !== null) ? safeFloat(physicsScoreNum) : null;
+          const confidenceScoreFormatted = (confidenceScoreNum !== null) ? safeFloat(confidenceScoreNum) : null;
 
           const isHighFidelityVal = is_high_fidelity !== undefined ? is_high_fidelity : (isHighFidelity !== undefined ? isHighFidelity : false);
           const isSentinelFidelityVal = is_sentinel_fidelity !== undefined ? is_sentinel_fidelity : (isSentinelFidelity !== undefined ? isSentinelFidelity : false);
@@ -391,10 +413,6 @@ async function start() {
           let rule_id;
           let multiplierReason = 'Standard Reward';
 
-          // Robust payload validation and parsing for persistence
-          const physicsScorePersist = physicsScoreVal;
-          const confidenceScorePersist = confidenceScoreVal;
-
           if (physicsScoreNum !== null && isNaN(physicsScoreNum)) {
             console.warn(`[L10 Audit] Received invalid physics_score for event ${event_id}. Skipping.`);
             return;
@@ -405,7 +423,7 @@ async function start() {
                                        (physicsScoreNum !== null && physicsScoreNum > 0.95) ||
                                        (confidenceScoreNum !== null && confidenceScoreNum > 0.95);
 
-          // L10 v4.3.7 Sentinel Fidelity Tier: physics_score > 0.99 or explicit sentinel flag (supports boolean, string 'true', and integer 1)
+          // L10 v4.3.8 Sentinel Fidelity Tier: physics_score > 0.99 or explicit sentinel flag
           const isSentinelFidelityPersist = (isSentinelFidelityVal === true || isSentinelFidelityVal === 'true' || isSentinelFidelityVal === 1) ||
                                            (physicsScoreNum !== null && physicsScoreNum > 0.99);
 
@@ -419,7 +437,7 @@ async function start() {
           }
           rule_id = rule ? rule.rule_id : '00000000-0000-0000-0000-000000000000';
 
-          // 2. Idempotency Check (Fixed parameter order: driver_id, event_id, rule_id)
+          // 2. Idempotency Check
           const existingReward = await checkIdempotency(driver_id, event_id, rule_id);
           if (existingReward) {
             console.log(`[L10 Idempotency] Reward already exists for ${action_type} (Event: ${event_id}). Status: ${existingReward.status}. Skipping.`);
@@ -432,11 +450,11 @@ async function start() {
             console.log(`[L10] Behavioral ${action_type} by driver ${driver_id}. Awarding ${pointsAwarded.toNumber()} tokens. [Resource: ${resourceTypeVal}]`);
           } else {
             // Proof of Physics Gate: Energy-based rewards must have verified physics
-            if (physicsScorePersist !== null) {
+            if (physicsScoreNum !== null) {
               const fidelityStatus = isHighFidelityPersist ? 'HIGH_FIDELITY' : 'STANDARD';
 
-              if (physicsScorePersist <= 0.0) {
-                console.warn(`[L10 Audit] [${fidelityStatus}] Rejected reward for event ${event_id}: Physics Score too low (${physicsScorePersist}). Driver: ${driver_id} [Resource: ${resourceTypeVal}]`);
+              if (physicsScoreNum <= 0.0) {
+                console.warn(`[L10 Audit] [${fidelityStatus}] Rejected reward for event ${event_id}: Physics Score too low (${physicsScoreNum}). Driver: ${driver_id} [Resource: ${resourceTypeVal}]`);
                 return;
               }
             } else {
@@ -449,8 +467,13 @@ async function start() {
             const siteMultiplier = await getSiteMultiplier(siteIdVal);
 
             // Compound Multipliers
-            const totalMultiplier = marketMultiplier.multiplier.times(siteMultiplier.multiplier);
+            let totalMultiplier = marketMultiplier.multiplier.times(siteMultiplier.multiplier);
             multiplierReason = marketMultiplier.multiplier.eq(1.0) ? siteMultiplier.reason : `${marketMultiplier.reason} + ${siteMultiplier.reason}`;
+
+            // [L10 v4.3.8] Apply Hardware Health Penalty
+            const penaltyResult = await applyHardwarePenalty(iso, totalMultiplier, multiplierReason);
+            totalMultiplier = penaltyResult.multiplier;
+            multiplierReason = penaltyResult.reason;
 
             const baseReward = new Decimal(source_value || 0).times(rule.reward_multiplier);
             pointsAwarded = baseReward.times(totalMultiplier).toDecimalPlaces(8);
@@ -472,10 +495,10 @@ async function start() {
           pointsAwarded.toNumber(),
           'queued',
           iso,
-          physicsScorePersist,
+          physicsScoreNum, // logRewardTransaction handles safeFloat internally
           isHighFidelityPersist,
           multiplierReason,
-          confidenceScorePersist,
+          confidenceScoreNum,
           resourceTypeVal,
           isSentinelFidelityPersist,
           siteIdVal
@@ -506,4 +529,4 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
-module.exports = { app, getDynamicMultiplier, getSiteMultiplier, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY, redisClient };
+module.exports = { app, getDynamicMultiplier, getSiteMultiplier, applyHardwarePenalty, safeFloat, extractSiteId, LMP_THRESHOLD_SURPLUS, LMP_THRESHOLD_SCARCITY, redisClient };

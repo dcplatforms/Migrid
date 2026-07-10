@@ -40,7 +40,7 @@
 | **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal (v2.5.3)** | Missing high-fidelity metadata for L11 | ✅ Active |
 | **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine (v5.17.0)** | Rewards fail for 'ISO Explorer' challenges | ✅ Sync |
 | **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway (v3.8.7)** | VTN cannot see market-aware grid signals | ✅ Sync |
-| **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.3.7)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
+| **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.3.8)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
 
 ---
 
@@ -89,7 +89,8 @@
 - [✓] **ML Parity**: Enforced strict string-formatted telemetry (.toFixed(4)).
 - [✓] **Security Hardening**: Integrated helmet() and updated Kafka tagging.
 
-### Layer 10: Token Engine (v4.3.7)
+### Layer 10: Token Engine (v4.3.8)
+- [✓] **Hardware Penalty**: Implemented penalty logic synchronized with L4 regional alarms.
 - [✓] **Reward Batching**: Standardized atomic background worker for reward minting.
 - [✓] **ML Parity**: Enforced strict .toFixed(4) telemetry formatting.
 - [✓] **Site Awareness**: Standardized identification via `extractSiteId`.
