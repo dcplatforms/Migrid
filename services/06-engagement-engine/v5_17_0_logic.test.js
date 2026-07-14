@@ -50,9 +50,9 @@ describe('L6 Engagement Engine v5.17.0 - DER Sentinel & Training Data', () => {
     jest.clearAllMocks();
   });
 
-  test('Health check returns version v5.17.0', async () => {
+  test('Health check returns version v5.18.0', async () => {
     const res = await request(app).get('/health');
-    expect(res.body.version).toBe('5.17.0');
+    expect(res.body.version).toBe('5.18.0');
     expect(res.body.status).toBe('healthy');
   });
 

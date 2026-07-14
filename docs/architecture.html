@@ -125,11 +125,11 @@
                             <span class="px-2 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-[10px] mono text-indigo-400">v4.3.8 Active ✓</span>
                         </div>
                         <p class="text-zinc-400 mb-4 leading-relaxed">
-                            Enables dynamic rewards and async **Reward Batching**. Implements Hardware Health Penalty reducing rewards per regional alarm. Enforces strict .toFixed(4) telemetry for Phase 6 parity.
+                            Enables dynamic rewards and behavioral triggers (DER alarm, solar ramp). Hardened via `safeFloat` and `.toFixed(4)` telemetry for Phase 6 parity.
                         </p>
                         <div class="flex flex-wrap gap-2">
                             <span class="badge badge-cyan text-[10px]">ERC-20</span>
-                            <span class="badge badge-emerald text-[10px]">Hardware Penalty</span>
+                            <span class="badge badge-emerald text-[10px]">Behavioral Rewards</span>
                             <span class="badge badge-emerald text-[10px]">Sentinel Fidelity</span>
                         </div>
                     </div>
@@ -185,10 +185,10 @@
                     <div>
                         <div class="flex items-center gap-3 mb-2">
                             <h3 class="text-2xl font-bold text-orange-400">Device Gateway</h3>
-                            <span class="px-2 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-[10px] mono text-orange-400">v5.13.0 Active ✓</span>
+                            <span class="px-2 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-[10px] mono text-orange-400">v5.12.0 Active ✓</span>
                         </div>
                         <p class="text-zinc-400 mb-4 leading-relaxed">
-                            Hardware abstraction layer for OCPP 2.1 and ISO 15118. Optimized heartbeat indexing and normalized individual DER alarm broadcasts for L4 parity.
+                            Hardware abstraction for OCPP 2.1. Implemented **localSafetyCache [L7-133]**, **safeFloat hardening**, and **Heartbeat availability tracking**.
                         </p>
                         <div class="flex flex-wrap gap-2">
                             <span class="badge badge-cyan text-[10px]">OCPP 2.1 / 2.0.1</span>
@@ -209,11 +209,11 @@
                             <span class="px-2 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-[10px] mono text-rose-400">v5.18.0 Active ✓</span>
                         </div>
                         <p class="text-zinc-400 mb-4 leading-relaxed">
-                            Manages grid response achievements and regional challenges. Deployed 'Hardware Health Guardian' achievement and hardened metadata enrichment for Phase 6.
+                            Manages grid response achievements and regional challenges. New **'Hardware Health Guardian'** achievement rewards drivers for sites with zero regional alarms.
                         </p>
                         <div class="flex flex-wrap gap-2">
                             <span class="badge badge-cyan text-[10px]">WebSockets</span>
-                            <span class="badge badge-emerald text-[10px]">Hardware Guardian</span>
+                            <span class="badge badge-emerald text-[10px]">Health Guardian</span>
                             <span class="badge badge-emerald text-[10px]">Phase 6 Alignment</span>
                         </div>
                     </div>
@@ -248,14 +248,14 @@
                     <div>
                         <div class="flex items-center gap-3 mb-2">
                             <h3 class="text-2xl font-bold text-purple-400">Market Gateway</h3>
-                            <span class="px-2 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-[10px] mono text-purple-400">v3.8.9 Active ✓</span>
+                            <span class="px-2 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-[10px] mono text-purple-400">v3.8.8 Active ✓</span>
                         </div>
                         <p class="text-zinc-400 mb-4 leading-relaxed">
-                            Arbitrage engine with hardware-aware bidding. Enforces strict string-formatted auditing (.toFixed(4)) and integrates DER Alarms for Phase 6 parity.
+                            Arbitrage engine with **localSafetyCache [L4-133]**. Enforces strict string-formatted auditing and `safeFloat` hardening for Phase 6 parity.
                         </p>
                         <div class="flex flex-wrap gap-2">
                             <span class="badge badge-cyan text-[10px]">LMP Optimization</span>
-                            <span class="badge badge-emerald text-[10px]">String Audit (.toFixed4)</span>
+                            <span class="badge badge-emerald text-[10px]">localSafetyCache</span>
                             <span class="badge badge-cyan text-[10px]">AI Training Data</span>
                             <span class="badge badge-emerald text-[10px]">Nord Pool</span>
                         </div>
@@ -291,14 +291,14 @@
                     <div>
                         <div class="flex items-center gap-3 mb-2">
                             <h3 class="text-2xl font-bold text-green-400">Grid Signal</h3>
-                            <span class="px-2 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-[10px] mono text-green-400">v2.5.5 Active ✓</span>
+                            <span class="px-2 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-[10px] mono text-green-400">v2.5.4 Active ✓</span>
                         </div>
                         <p class="text-zinc-400 mb-4 leading-relaxed">
-                            OpenADR 3.0 VEN with site-specific safety locks. Hardened telemetry parsing and secured reporting for Phase 6 ML Engine audit trails.
+                            OpenADR 3.0 VEN with **localSafetyCache [L2-133]** and **safeFloat hardening** for Phase 6 ML Engine audit trails.
                         </p>
                         <div class="flex flex-wrap gap-2">
                             <span class="badge badge-cyan text-[10px]">OpenADR 3.0</span>
-                            <span class="badge badge-emerald text-[10px]">Secure Reports</span>
+                            <span class="badge badge-emerald text-[10px]">localSafetyCache</span>
                             <span class="badge badge-emerald text-[10px]">Fleet-ID Hardened</span>
                         </div>
                     </div>
@@ -315,7 +315,7 @@
                             <span class="px-2 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-[10px] mono text-cyan-400">v10.1.6 Core ✓</span>
                         </div>
                         <p class="text-zinc-300 mb-4 leading-relaxed">
-                            The "Green Audit" layer. Achieved 100% site-specific resilience and strict .toFixed(4) string formatting for Phase 6 parity.
+                            The "Green Audit" layer. Implemented **localSafetyCache [L1-133]**, **safeFloat hardening**, and strict Phase 6 telemetry parity.
                         </p>
                         <div class="flex flex-wrap gap-2 mb-6">
                             <span class="badge badge-cyan text-[10px]">Samsara</span>

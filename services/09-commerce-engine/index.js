@@ -61,11 +61,8 @@ app.post('/invoices/generate', authenticateToken, async (req, res) => {
   }
 
   try {
-    // Note: The following logic depends on 'session', 'rate', and 'sessionId' being defined.
-    // Preserving the original intent while fixing syntax and adding error handling.
-    const cost = session.energy_dispensed_kwh * rate;
-    await pool.query('UPDATE charging_sessions SET cost = $1 WHERE id = $2', [cost, sessionId]);
-    res.json({ success: true, cost });
+    const result = await InvoicingService.aggregateSessionsAndCreateInvoice({ fleet_id, start_date, end_date });
+    res.json({ success: true, invoice: result });
   } catch (err) {
     console.error('[Invoice Generation Error]', err);
     res.status(500).json({ error: 'An internal server error occurred' });
@@ -95,14 +92,22 @@ app.post('/drivers/assign', authenticateToken, async (req, res) => {
 });
 
 app.post('/billing/calculate/:sessionId', authenticateToken, async (req, res) => {
+  const { sessionId } = req.params;
   try {
-    const invoice = await InvoicingService.aggregateSessionsAndCreateInvoice({ fleet_id, start_date, end_date });
-    if (!invoice) {
-      return res.status(404).json({ error: 'No billable sessions found' });
+    // Security: Check if session belongs to user's fleet
+    const sessionRes = await pool.query(
+      'SELECT cs.id FROM charging_sessions cs JOIN vehicles v ON cs.vehicle_id = v.id WHERE cs.id = $1 AND v.fleet_id = $2',
+      [sessionId, req.user.fleet_id]
+    );
+
+    if (sessionRes.rows.length === 0) {
+      return res.status(403).json({ error: 'Unauthorized or session not found' });
     }
-    res.status(201).json(invoice);
+
+    const cost = await InvoicingService.calculateSessionCost(sessionId);
+    res.json({ success: true, sessionId, cost });
   } catch (err) {
-    console.error('[Invoice Generation Error]', err);
+    console.error('[Billing Calculation Error]', err);
     res.status(500).json({ error: 'An internal server error occurred' });
   }
 });
