@@ -34,7 +34,10 @@ describe('BiddingOptimizer', () => {
     const lowLmp = 15.00;
     const capacityKw = 500; // 0.5 MW
 
-    mockRedisClient.get.mockResolvedValue(capacityKw.toString());
+    mockRedisClient.get.mockImplementation((key) => {
+      if (key === 'vpp:capacity:available') return Promise.resolve(capacityKw.toString());
+      return Promise.resolve(null);
+    });
     mockPricingService.getDayAheadForecast.mockResolvedValue([
       { location: 'SLAP_PGP2-APND', price_per_mwh: lowLmp, timestamp: new Date() }
     ]);
@@ -60,7 +63,10 @@ describe('BiddingOptimizer', () => {
     const highLmp = 30.00;
     const capacityKw = 500; // 0.5 MW
 
-    mockRedisClient.get.mockResolvedValue(capacityKw.toString());
+    mockRedisClient.get.mockImplementation((key) => {
+      if (key === 'vpp:capacity:available') return Promise.resolve(capacityKw.toString());
+      return Promise.resolve(null);
+    });
     mockPricingService.getDayAheadForecast.mockResolvedValue([
       { location: 'SLAP_PGP2-APND', price_per_mwh: highLmp, timestamp: new Date() }
     ]);
@@ -81,7 +87,10 @@ describe('BiddingOptimizer', () => {
 
   test('should handle multiple intervals in the day-ahead forecast', async () => {
     const capacityKw = 1000; // 1.0 MW
-    mockRedisClient.get.mockResolvedValue(capacityKw.toString());
+    mockRedisClient.get.mockImplementation((key) => {
+      if (key === 'vpp:capacity:available') return Promise.resolve(capacityKw.toString());
+      return Promise.resolve(null);
+    });
 
     const now = new Date();
     const forecast = [
@@ -185,7 +194,10 @@ describe('BiddingOptimizer', () => {
     const lmp = 40.00;
     const capacityKw = 500;
 
-    mockRedisClient.get.mockResolvedValue(capacityKw.toString());
+    mockRedisClient.get.mockImplementation((key) => {
+      if (key === 'vpp:capacity:available') return Promise.resolve(capacityKw.toString());
+      return Promise.resolve(null);
+    });
     mockPricingService.getDayAheadForecast.mockResolvedValue([
       { location: 'LOC1', price_per_mwh: lmp, timestamp: new Date() }
     ]);
@@ -356,5 +368,63 @@ describe('BiddingOptimizer', () => {
     expect(bids[0]).toContain('38=0.75');
     expect(audit.audit_context.ev_capacity_kw).toBe(750);
     expect(audit.audit_context.bess_capacity_kw).toBe(0);
+  });
+
+  test('should apply hardware health penalty based on regional alarms', async () => {
+    const capacityKw = 1000;
+    mockRedisClient.get.mockResolvedValue(capacityKw.toString());
+    mockPricingService.getDayAheadForecast.mockResolvedValue([
+      { location: 'LOC1', price_per_mwh: 100.00, timestamp: new Date() }
+    ]);
+
+    // Scenario: 2 regional alarms in CAISO = -0.10 penalty
+    // Default confidence is 1.0000. Expected adjusted confidence: 0.9000
+    const localCache = {
+      l1_physics: false,
+      l4_grid: false,
+      l4_regional: {},
+      l4_regional_alarms: { 'CAISO': 2 },
+      physics_score: "1.0000",
+      confidence_score: "1.0000",
+      last_updated: new Date().toISOString()
+    };
+
+    const optimizerWithCache = new BiddingOptimizer(mockPool, 'redis://localhost:6379', localCache);
+    optimizerWithCache.pricingService = mockPricingService;
+
+    const { audit } = await optimizerWithCache.generateDayAheadBids('CAISO');
+
+    expect(audit.confidence_score).toBe("0.9000");
+    expect(audit.regional_alarm_count).toBe(2);
+    expect(audit.hardware_penalty).toBe("0.1000");
+  });
+
+  test('should cap hardware health penalty at 0.30', async () => {
+    const capacityKw = 1000;
+    mockRedisClient.get.mockResolvedValue(capacityKw.toString());
+    mockPricingService.getDayAheadForecast.mockResolvedValue([
+      { location: 'LOC1', price_per_mwh: 100.00, timestamp: new Date() }
+    ]);
+
+    // Scenario: 10 regional alarms in CAISO = -0.50 penalty, but capped at -0.30
+    // Default confidence is 1.0000. Expected adjusted confidence: 0.7000
+    const localCache = {
+      l1_physics: false,
+      l4_grid: false,
+      l4_regional: {},
+      l4_regional_alarms: { 'CAISO': 10 },
+      physics_score: "1.0000",
+      confidence_score: "1.0000",
+      last_updated: new Date().toISOString()
+    };
+
+    const optimizerWithCache = new BiddingOptimizer(mockPool, 'redis://localhost:6379', localCache);
+    optimizerWithCache.pricingService = mockPricingService;
+
+    const { audit } = await optimizerWithCache.generateDayAheadBids('CAISO');
+
+    expect(audit.confidence_score).toBe("0.7000");
+    expect(audit.regional_alarm_count).toBe(10);
+    expect(audit.hardware_penalty).toBe("0.3000");
   });
 });

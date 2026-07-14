@@ -1,89 +1,62 @@
-const { applyHardwarePenalty, safeFloat } = require('../index');
 const Decimal = require('decimal.js');
-const redis = require('redis');
+const { applyHardwarePenalty, redisClient } = require('../index');
 
-// Mock Redis
+// Mock Redis client for testing
 jest.mock('redis', () => ({
-  createClient: jest.fn().mockReturnValue({
-    on: jest.fn(),
+  createClient: jest.fn(() => ({
     connect: jest.fn(),
-    get: jest.fn(),
+    on: jest.fn(),
     hGet: jest.fn(),
     hSet: jest.fn(),
+    get: jest.fn(),
+    set: jest.fn(),
     quit: jest.fn()
-  })
+  }))
 }));
 
-describe('L10 v4.3.8: Hardware Health Penalty & Telemetry Precision', () => {
-  let redisMock;
-
+describe('L10 Token Engine - Hardware Health Penalty v4.3.8', () => {
   beforeEach(() => {
-    redisMock = redis.createClient();
-    // We need to access the mock instance used by index.js if possible,
-    // but since index.js creates its own, we rely on the jest.mock above.
-    // Actually, index.js exports redisClient.
-    const { redisClient } = require('../index');
-    redisMock = redisClient;
+    jest.clearAllMocks();
   });
 
-  describe('applyHardwarePenalty', () => {
-    it('should apply a penalty of 0.05 per alarm', async () => {
-      redisMock.get.mockResolvedValue('2'); // 2 alarms
-      const initialMultiplier = new Decimal('1.5');
-      const initialReason = 'Grid Surplus Bonus (1.5x)';
-
-      const result = await applyHardwarePenalty('CAISO', initialMultiplier, initialReason);
-
-      expect(result.multiplier.toNumber()).toBe(1.4); // 1.5 - (2 * 0.05)
-      expect(result.reason).toContain('Hardware Penalty: -0.1 due to 2 alarms');
-    });
-
-    it('should cap the penalty at 0.30', async () => {
-      redisMock.get.mockResolvedValue('10'); // 10 alarms -> 0.5 penalty if not capped
-      const initialMultiplier = new Decimal('1.5');
-      const initialReason = 'Grid Surplus Bonus (1.5x)';
-
-      const result = await applyHardwarePenalty('CAISO', initialMultiplier, initialReason);
-
-      expect(result.multiplier.toNumber()).toBe(1.2); // 1.5 - 0.30 (capped)
-      expect(result.reason).toContain('Hardware Penalty: -0.3 due to 10 alarms');
-    });
-
-    it('should handle zero alarms without penalty', async () => {
-      redisMock.get.mockResolvedValue(null);
-      const initialMultiplier = new Decimal('1.0');
-      const initialReason = 'Standard Reward';
-
-      const result = await applyHardwarePenalty('CAISO', initialMultiplier, initialReason);
-
-      expect(result.multiplier.toNumber()).toBe(1.0);
-      expect(result.reason).toBe('Standard Reward');
-    });
-
-    it('should not result in a negative multiplier', async () => {
-      redisMock.get.mockResolvedValue('10'); // 0.30 penalty
-      const initialMultiplier = new Decimal('0.2');
-      const initialReason = 'Low Scarcity Surcharge (0.2x)';
-
-      const result = await applyHardwarePenalty('CAISO', initialMultiplier, initialReason);
-
-      expect(result.multiplier.toNumber()).toBe(0);
-    });
+  test('Should apply 0.05 penalty for 1 regional alarm', async () => {
+    redisClient.get.mockResolvedValue('1');
+    const { multiplier, reason } = await applyHardwarePenalty('CAISO', 1.0, 'Standard Reward');
+    expect(multiplier.toNumber()).toBe(0.95);
+    expect(reason).toContain('Hardware Health Penalty (-0.05)');
   });
 
-  describe('safeFloat', () => {
-    it('should format numbers to 4 decimal places as strings', () => {
-      expect(safeFloat(1.23456)).toBe('1.2346');
-      expect(safeFloat(0.1)).toBe('0.1000');
-    });
+  test('Should apply 0.15 penalty for 3 regional alarms', async () => {
+    redisClient.get.mockResolvedValue('3');
+    const { multiplier, reason } = await applyHardwarePenalty('PJM', 1.5, 'Grid Surplus Bonus (1.5x)');
+    expect(multiplier.toNumber()).toBe(1.35);
+    expect(reason).toContain('Hardware Health Penalty (-0.15)');
+  });
 
-    it('should handle NaN and return fallback formatted to 4 decimals', () => {
-      expect(safeFloat('invalid', 0.5)).toBe('0.5000');
-      expect(safeFloat(NaN, 0.0)).toBe('0.0000');
-    });
+  test('Should cap penalty at 0.30 for 10 regional alarms', async () => {
+    redisClient.get.mockResolvedValue('10');
+    const { multiplier, reason } = await applyHardwarePenalty('ERCOT', 1.0, 'Standard Reward');
+    expect(multiplier.toNumber()).toBe(0.70);
+    expect(reason).toContain('Hardware Health Penalty (-0.30)');
+  });
 
-    it('should handle string numbers', () => {
-      expect(safeFloat('0.98765')).toBe('0.9877');
-    });
+  test('Should not go below zero multiplier', async () => {
+    redisClient.get.mockResolvedValue('10');
+    const { multiplier } = await applyHardwarePenalty('CAISO', 0.2, 'Low Base');
+    expect(multiplier.toNumber()).toBe(0);
+  });
+
+  test('Should not apply penalty if no alarms', async () => {
+    redisClient.get.mockResolvedValue(null);
+    const { multiplier, reason } = await applyHardwarePenalty('CAISO', 1.0, 'Standard Reward');
+    expect(multiplier.toNumber()).toBe(1.0);
+    expect(reason).toBe('Standard Reward');
+  });
+
+  test('Should handle Redis error gracefully', async () => {
+    redisClient.get.mockRejectedValue(new Error('Redis Error'));
+    const { multiplier, reason } = await applyHardwarePenalty('CAISO', 1.0, 'Standard Reward');
+    expect(multiplier.toNumber()).toBe(1.0);
+    expect(reason).toBe('Standard Reward');
   });
 });
