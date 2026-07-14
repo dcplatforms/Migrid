@@ -46,8 +46,10 @@
 
 ## 🛠️ Active Engineering Sprints (Phase 6)
 
-### Layer 1: Physics Engine (v10.1.5)
+### Layer 1: Physics Engine (v10.1.6)
 - [✓] **[L1-133] Local Safety Cache**: 5s background poller for sub-millisecond resilience.
+- [✓] **[L1-135] Hardware Safety**: Kafka consumer for DER alarms to trigger site locks.
+- [✓] **[L1-136] Telemetry Hardening**: implemented `safeFloat` for robust `isNaN` protection.
 - [✓] **Phase 6 Parity**: Enforced strict .toFixed(4) string formatting for all scores.
 - [✓] **Standardized Site ID**: Implemented `extractSiteId` for multi-site identification.
 - [✓] **Digital Twin Sync**: Hardened fleet-filtered Redis sync with string handling.
