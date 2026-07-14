@@ -220,7 +220,7 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.billing_mode).toBe('PERSONAL');
   });
 
-  test('should set safety lock and context in Redis for PHYSICS_FRAUD', async () => {
+  test('should set safety lock, context, and site-specific lock in Redis for PHYSICS_FRAUD', async () => {
     const msg = {
       payload: JSON.stringify({
         event_type: 'PHYSICS_FRAUD',
@@ -357,7 +357,7 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.market_price_at_session).toBe(125.5);
   });
 
-  test('should handle CAPACITY_VIOLATION from aggressive market bid and activate safety lock', async () => {
+  test('should handle CAPACITY_VIOLATION from aggressive market bid and activate safety locks', async () => {
     const msg = {
       payload: JSON.stringify({
         event_type: 'CAPACITY_VIOLATION',
@@ -366,6 +366,7 @@ describe('L1 Physics Engine Alert Handling', () => {
         current_soc: 19.9,
         threshold: 20.0,
         vpp_active: true,
+        site_id: 'SITE-TEXAS-001',
         metadata: { msg: 'BESS Discharge Rejection: SoC < 20% (Aggressive Market Bid Rejected)' }
       })
     };
@@ -374,6 +375,7 @@ describe('L1 Physics Engine Alert Handling', () => {
 
     // Verify Safety Lock activation
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock', 900, 'true');
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:site:SITE-TEXAS-001', 900, 'true');
 
     // Verify Context richness
     const contextValue = JSON.parse(global.mockRedisSetEx.mock.calls.find(call => call[0] === 'l1:safety:lock:context')[2]);
@@ -617,6 +619,15 @@ describe('L1 Physics Engine Alert Handling', () => {
 
     expect(typeof alertValue.confidence_score).toBe('string');
     expect(alertValue.confidence_score).toBe("0.6000");
+  });
+
+  test('[L1 v10.1.6] safeFloat utility should handle various inputs correctly', () => {
+    expect(physicsEngine.safeFloat(0.95)).toBe("0.9500");
+    expect(physicsEngine.safeFloat("0.98567")).toBe("0.9857");
+    expect(physicsEngine.safeFloat(NaN)).toBe("0.0000");
+    expect(physicsEngine.safeFloat(undefined)).toBe("0.0000");
+    expect(physicsEngine.safeFloat(null)).toBe("0.0000");
+    expect(physicsEngine.safeFloat("not-a-number", 1.0)).toBe("1.0000");
   });
 });
 

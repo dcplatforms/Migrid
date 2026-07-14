@@ -166,11 +166,20 @@ async function connectServices() {
 }
 
 /**
+ * [L1 v10.1.6] safeFloat: Robust isNaN protection for telemetry scoring
+ * Enforces strict 4-decimal string formatting (.toFixed(4)).
+ */
+function safeFloat(val, fallback = 0.0) {
+  const parsed = parseFloat(val);
+  return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
+}
+
+/**
  * [L1-118] Calculate Data Confidence Score for L11 ML Engine
  * @param {number} streak - Current sentinel streak
  * @param {string} lastSync - ISO string of last sync
  * @param {object} siteLoadData - Optional site load data { loadKw, limitKw }
- * @returns {number} Confidence score (0.0000 to 1.0000)
+ * @returns {string} Confidence score (0.0000 to 1.0000)
  */
 function calculateConfidenceScore(streak, lastSync, siteLoadData) {
   let score = 0.5; // Base confidence
@@ -242,8 +251,8 @@ function safeFloat(val, fallback = 0.0) {
  * Standardized for multi-site parity (site_id, siteId, location_id, locationId)
  */
 function extractSiteId(payload) {
-  if (!payload) return SITE_ID;
-  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || SITE_ID;
+  if (!payload) return null;
+  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
 }
 
 /**
@@ -572,7 +581,7 @@ async function reconcileLogs() {
         session_id: payload.session_id,
         vehicle_id: payload.vehicle_id,
         vin: payload.vin,
-        site_id: extractSiteId(payload.metadata || payload),
+        site_id: extractSiteId(payload) || extractSiteId(payload.metadata) || SITE_ID,
         efficiency_pct: payload.efficiency_pct,
         variance_pct: payload.variance_pct,
         resource_type: payload.resource_type || 'EV',
@@ -805,7 +814,8 @@ module.exports = {
   reconcileLogs,
   start,
   getSyncIntervalId: () => syncIntervalId,
-  getLastMarketPrice: () => lastMarketPrice
+  getLastMarketPrice: () => lastMarketPrice,
+  safeFloat
 };
 
 process.on('SIGTERM', async () => {
