@@ -233,6 +233,9 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
     // Normalize ISO Region: uppercase and remove hyphens for cross-layer consistency
     const isoRegion = (event.targets?.find(t => t.type === 'region')?.value || '').toUpperCase().replace(/-/g, '');
 
+    // [L2 v2.5.2] Robust multi-key site identification via helper
+    const siteIdVal = extractSiteId(event);
+
     // 1. Check Safety Lock from L1 Physics Engine (Utilize sub-millisecond local cache)
     // [L2-135] Expanded to check site-specific locks
     const siteIdVal = extractSiteId(event);
@@ -251,6 +254,7 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
         reason: isSiteLocked ? 'SITE_SAFETY_LOCK_ACTIVE' : 'SAFETY_VIOLATION_L1',
         message: isSiteLocked ? `Grid dispatch suspended for site ${siteIdVal} due to site-specific safety lock` : 'Grid dispatch suspended due to physics engine safety lock',
         details: details ? { alert_type: details.event_type, severity: details.severity } : 'No details available',
+        site_id: siteIdVal && localSafetyCache.site_safety[siteIdVal] ? siteIdVal : undefined,
         timestamp: new Date().toISOString()
       });
     }
