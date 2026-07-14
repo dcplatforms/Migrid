@@ -140,7 +140,7 @@ describe('L2 Grid Signal Service', () => {
     expect(sentValue.billing_mode).toBe('V2G_OPTIMIZED');
   });
 
-  test('POST /openadr/v3/events should include physics_score and confidence_score in broadcast (v2.5.0)', async () => {
+  test('POST /openadr/v3/events should include physics_score and confidence_score in broadcast (v2.5.5)', async () => {
     redisClient.get.mockImplementation((key) => {
       if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({ physics_score: '0.9850' }));
       return Promise.resolve(null);
@@ -156,7 +156,7 @@ describe('L2 Grid Signal Service', () => {
 
     expect(response.status).toBe(202);
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
-    expect(sentValue.physics_score).toBe('0.9850'); // L2 v2.5.0: String formatting
+    expect(sentValue.physics_score).toBe('0.9850'); // L2 v2.5.5: String formatting
     expect(sentValue.confidence_score).toBe('0.9850');
     expect(sentValue.fidelity_status).toBe('HIGH_FIDELITY');
   });
@@ -177,7 +177,7 @@ describe('L2 Grid Signal Service', () => {
 
     expect(response.status).toBe(202);
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
-    expect(sentValue.physics_score).toBe('0.8500'); // L2 v2.5.0: String formatting
+    expect(sentValue.physics_score).toBe('0.8500'); // L2 v2.5.5: String formatting
     expect(sentValue.fidelity_status).toBe('STANDARD');
   });
 
@@ -466,6 +466,35 @@ describe('L2 Grid Signal Service', () => {
     localSafetyCache.global_safety = false; // Reset
   });
 
+  test('POST /openadr/v3/events should reject when site-specific L1 safety lock is active (L2-135)', async () => {
+    const { localSafetyCache } = require('./index');
+    // Real-world behavior: raw site ID with hyphen should be preserved in cache
+    localSafetyCache.site_safety['SITE-LOCKED-99'] = true;
+
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({
+        reason: 'CRITICAL_DER_ALARM',
+        severity: 'CRITICAL'
+      }));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-site-lock',
+        type: 'demand-response',
+        site_id: 'SITE-LOCKED-99'
+      });
+
+    expect(response.status).toBe(503);
+    expect(response.body.status).toBe('REJECTED');
+    expect(response.body.reason).toBe('SAFETY_VIOLATION_L1');
+
+    localSafetyCache.site_safety['SITE-LOCKED-99'] = false; // Reset
+  });
+
   test('POST /openadr/v3/events should return 400 for invalid payload (Ajv Validation)', async () => {
     const response = await request(app)
       .post('/openadr/v3/events')
@@ -505,6 +534,7 @@ describe('L2 Grid Signal Service', () => {
     });
 
     expect(redisClient.setEx).toHaveBeenCalledWith('l1:safety:lock', 900, '1');
+    expect(redisClient.setEx).toHaveBeenCalledWith('l1:safety:lock:site:SITE-999', 900, '1');
     expect(redisClient.setEx).toHaveBeenCalledWith(
       'l1:safety:lock:context',
       900,
@@ -569,6 +599,32 @@ describe('L2 Grid Signal Service', () => {
       'l8:site:status:SITE-X',
       3600,
       'METER_OFFLINE'
+    );
+  });
+
+  test('startSafetyConsumer should handle CRITICAL DER_ALARM_REPORTED and set site lock (L2-135)', async () => {
+    const { consumer, startSafetyConsumer } = require('./index');
+    await startSafetyConsumer();
+
+    const eachMessage = consumer.run.mock.calls[0][0].eachMessage;
+
+    const criticalAlarm = {
+      site_id: 'SITE-ALARM-1',
+      severity: 'CRITICAL',
+      alarm_type: 'INVERTER_FAULT',
+      timestamp: new Date().toISOString()
+    };
+
+    await eachMessage({
+      topic: 'DER_ALARM_REPORTED',
+      message: { value: Buffer.from(JSON.stringify(criticalAlarm)) }
+    });
+
+    expect(redisClient.setEx).toHaveBeenCalledWith('l1:safety:lock:site:SITE-ALARM-1', 1800, '1');
+    expect(redisClient.setEx).toHaveBeenCalledWith(
+      'l1:safety:lock:site:SITE-ALARM-1:context',
+      1800,
+      expect.stringContaining('"reason":"CRITICAL_DER_ALARM"')
     );
   });
 
@@ -693,7 +749,7 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body.regional_stats.CAISO.vehicle_count).toBe(2);
     expect(response.body.regional_stats.CAISO.ev_count).toBe(1);
     expect(response.body.regional_stats.CAISO.bess_count).toBe(1);
-    expect(response.body.confidence_score).toBe(0.99);
+    expect(response.body.confidence_score).toBe("0.9900");
   });
 
   test('GET /openadr/v3/reports should return L8 site statuses (Optimized with SMEMBERS)', async () => {
@@ -824,7 +880,7 @@ describe('L2 Grid Signal Service', () => {
     expect(sentValue.der_control.set_point_kw).toBe(150.5);
   });
 
-  test('POST /openadr/v3/events should prioritize explicit confidence_score (v2.5.0)', async () => {
+  test('POST /openadr/v3/events should prioritize explicit confidence_score (v2.5.5)', async () => {
     redisClient.get.mockImplementation((key) => {
       if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({
         physics_score: '0.9850',
@@ -843,7 +899,7 @@ describe('L2 Grid Signal Service', () => {
 
     expect(response.status).toBe(202);
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
-    expect(sentValue.confidence_score).toBe('0.9999'); // L2 v2.5.0: String formatting
+    expect(sentValue.confidence_score).toBe('0.9999'); // L2 v2.5.5: String formatting
   });
 
   test('startSafetyConsumer should enforce 10% variance lock for BESS (Phase 5/6 Alignment)', async () => {
@@ -873,9 +929,9 @@ describe('L2 Grid Signal Service', () => {
     );
   });
 
-  test('POST /openadr/v3/events should use regional average confidence (v2.5.0)', async () => {
+  test('POST /openadr/v3/events should use regional average confidence (v2.5.5)', async () => {
     const mockUnifiedContext = {
-      regional_confidence: { CAISO: 0.85 },
+      regional_confidence: { CAISO: '0.8500' },
       regional_capacity: {}
     };
 
@@ -895,7 +951,36 @@ describe('L2 Grid Signal Service', () => {
 
     expect(response.status).toBe(202);
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
-    expect(sentValue.confidence_score).toBe('0.8500'); // L2 v2.5.0: String formatting
+    expect(sentValue.confidence_score).toBe('0.8500'); // L2 v2.5.5: String formatting
+  });
+
+  test('POST /openadr/v3/events should reject when site-specific safety lock is active (v2.5.5)', async () => {
+    const { localSafetyCache } = require('./index');
+    localSafetyCache.site_safety['SITE-ALPHA'] = true;
+
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l1:safety:lock:site:SITE-ALPHA:context') return Promise.resolve(JSON.stringify({
+        event_type: 'PHYSICS_FRAUD',
+        severity: 'FRAUD',
+        site_id: 'SITE-ALPHA'
+      }));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-site-lock-99',
+        type: 'demand-response',
+        site_id: 'SITE-ALPHA'
+      });
+
+    expect(response.status).toBe(503);
+    expect(response.body.reason).toBe('SAFETY_VIOLATION_L1');
+    expect(response.body.details.alert_type).toBe('PHYSICS_FRAUD');
+
+    localSafetyCache.site_safety['SITE-ALPHA'] = false; // Reset
   });
 
   test('startSafetyConsumer should cache ADVANCE_CHARGE_SIGNAL', async () => {
@@ -1035,5 +1120,26 @@ describe('L2 Grid Signal Service', () => {
       .set('Authorization', `Bearer ${systemToken}`);
     expect(response.status).toBe(200);
     expect(response.body.regional_stats.CAISO.sentinel_fidelity_count).toBe(5);
+  });
+
+  test('POST /openadr/v3/events should reject when site-specific safety lock is active (v2.5.5)', async () => {
+    const { localSafetyCache } = require('./index');
+    localSafetyCache.site_safety['SITE-LOCKED-001'] = true;
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-site-lock',
+        type: 'demand-response',
+        site_id: 'SITE-LOCKED-001'
+      });
+
+    expect(response.status).toBe(503);
+    expect(response.body.status).toBe('REJECTED');
+    expect(response.body.reason).toBe('SITE_SAFETY_LOCK_ACTIVE');
+    expect(response.body.message).toContain('SITE-LOCKED-001');
+
+    delete localSafetyCache.site_safety['SITE-LOCKED-001']; // Reset
   });
 });
