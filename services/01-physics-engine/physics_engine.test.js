@@ -1033,46 +1033,63 @@ describe('L1 Physics Engine API Security & Readiness', () => {
   });
 });
 
-describe('L1 Physics Engine Hardware-Aware Safety', () => {
-  test('[L1-135] should activate site lock for CRITICAL DER alarm', async () => {
-    const message = {
-      value: Buffer.from(JSON.stringify({
-        alarmType: 'INVERTER_FAULT',
-        severity: 'CRITICAL',
-        siteId: 'SITE-ALARM-1'
-      }))
-    };
-
-    await physicsEngine.handleDerAlarm(message);
-
-    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:SITE:SITE-ALARM-1', 900, 'true');
+describe('L1 Physics Engine Utility: safeFloat', () => {
+  test('should parse valid floats', () => {
+    expect(physicsEngine.safeFloat(1.23)).toBe(1.23);
+    expect(physicsEngine.safeFloat('4.56')).toBe(4.56);
   });
 
-  test('[L1-135] should activate site lock for HIGH DER alarm', async () => {
-    const message = {
-      value: Buffer.from(JSON.stringify({
-        alarmType: 'OVER_VOLTAGE',
-        severity: 'HIGH',
-        siteId: 'SITE-ALARM-2'
-      }))
-    };
+  test('should return fallback for NaN values', () => {
+    expect(physicsEngine.safeFloat(NaN)).toBe(0.0);
+    expect(physicsEngine.safeFloat('invalid')).toBe(0.0);
+    expect(physicsEngine.safeFloat(undefined, 1.0)).toBe(1.0);
+  });
+});
 
-    await physicsEngine.handleDerAlarm(message);
-
-    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:SITE:SITE-ALARM-2', 900, 'true');
+describe('L1 Physics Engine: handleDerAlarm', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    global.mockRedisSetEx = jest.fn();
   });
 
-  test('[L1-135] should NOT activate site lock for LOW DER alarm', async () => {
-    const message = {
-      value: Buffer.from(JSON.stringify({
-        alarmType: 'COMM_RETRY',
-        severity: 'LOW',
-        siteId: 'SITE-ALARM-3'
-      }))
+  test('should set site safety lock for CRITICAL alarm', async () => {
+    const payload = {
+      severity: 'CRITICAL',
+      site_id: 'SITE-ALARM-1'
     };
 
-    await physicsEngine.handleDerAlarm(message);
+    await physicsEngine.handleDerAlarm(payload);
 
-    expect(global.mockRedisSetEx).not.toHaveBeenCalledWith('l1:safety:lock:SITE:SITE-ALARM-3', 900, 'true');
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith(
+      'l1:safety:lock:SITE:SITE-ALARM-1',
+      900,
+      'true'
+    );
+  });
+
+  test('should set site safety lock for HIGH alarm', async () => {
+    const payload = {
+      severity: 'high',
+      locationId: 'SITE-ALARM-2'
+    };
+
+    await physicsEngine.handleDerAlarm(payload);
+
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith(
+      'l1:safety:lock:SITE:SITE-ALARM-2',
+      900,
+      'true'
+    );
+  });
+
+  test('should NOT set safety lock for LOW alarm', async () => {
+    const payload = {
+      severity: 'LOW',
+      site_id: 'SITE-ALARM-3'
+    };
+
+    await physicsEngine.handleDerAlarm(payload);
+
+    expect(global.mockRedisSetEx).not.toHaveBeenCalled();
   });
 });

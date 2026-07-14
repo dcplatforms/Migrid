@@ -138,12 +138,18 @@ async function connectServices() {
 
     await consumer.connect();
     await consumer.subscribe({ topic: 'DER_ALARM_REPORTED', fromBeginning: false });
+    console.log('✅ [L1 Physics] Connected to Kafka Consumer.');
+
     await consumer.run({
       eachMessage: async ({ topic, partition, message }) => {
-        await handleDerAlarm(message);
+        try {
+          const payload = JSON.parse(message.value.toString());
+          await handleDerAlarm(payload);
+        } catch (err) {
+          console.error('❌ [L1 Physics] Kafka Consumer Error:', err.message);
+        }
       },
     });
-    console.log('✅ [L1 Physics] Connected to Kafka Consumer (DER Alarms).');
 
     await redisClient.connect();
     console.log('✅ [L1 Physics] Connected to Local Redis.');
@@ -198,6 +204,24 @@ function calculateConfidenceScore(streak, lastSync, siteLoadData) {
 }
 
 /**
+ * Handle DER_ALARM_REPORTED events from Kafka (L7)
+ * Activates site-specific safety lock for CRITICAL/HIGH alarms.
+ */
+async function handleDerAlarm(payload) {
+  const severity = (payload.severity || 'LOW').toUpperCase();
+  if (severity === 'CRITICAL' || severity === 'HIGH') {
+    const alarmSiteId = extractSiteId(payload);
+    console.log(`🚨 [L1 Physics] Received ${severity} DER Alarm for site ${alarmSiteId}. Activating Safety Lock.`);
+
+    try {
+      await redisClient.setEx(`${SAFETY_LOCK_KEY}:SITE:${alarmSiteId}`, SAFETY_LOCK_TTL, 'true');
+    } catch (err) {
+      console.error('❌ [L1 Physics] Failed to set site safety lock:', err.message);
+    }
+  }
+}
+
+/**
  * Helper: Standardize ISO region naming for cross-layer consistency
  */
 function normalizeIso(iso) {
@@ -205,12 +229,11 @@ function normalizeIso(iso) {
 }
 
 /**
- * [L1-136] safeFloat: Hardened isNaN protection for telemetry
- * Ensures all physics metrics and confidence scores are 4-decimal strings.
+ * Helper: robust isNaN protection with fallback
  */
-function safeFloat(val, fallback = '0.0000') {
+function safeFloat(val, fallback = 0.0) {
   const parsed = parseFloat(val);
-  return (isNaN(parsed)) ? fallback : parsed.toFixed(4);
+  return isNaN(parsed) ? fallback : parsed;
 }
 
 /**
@@ -329,9 +352,9 @@ async function handlePhysicsAlert(msg) {
 
   // [L1-121] Fetch Site Load Data for Confidence Scoring
   const alertSiteId = extractSiteId(payload.metadata || payload);
-  const buildingLoadKw = parseFloat(await redisClient.get(`site:${alertSiteId}:building_load_kw`)) || 0;
+  const buildingLoadKw = safeFloat(await redisClient.get(`site:${alertSiteId}:building_load_kw`));
   const siteConfig = await redisClient.hGetAll(`site:${alertSiteId}:config`) || {};
-  const limitKw = parseFloat(siteConfig.max_capacity_kw) || 0;
+  const limitKw = safeFloat(siteConfig.max_capacity_kw);
 
   const confidenceScore = calculateConfidenceScore(
     currentStreak,
@@ -518,10 +541,10 @@ async function reconcileLogs() {
       // [L1-124] Re-calculate scores for high-fidelity reconciliation
       // Note: We use the stored scores if available (Hardened Offline Mode)
       const physicsMetadata = calculatePhysicsMetadata(payload);
-      const physicsScore = safeFloat(payload.physics_score || physicsMetadata.physicsScore);
-      const isPhysicsHighFidelity = parseFloat(physicsScore) > 0.95;
-      const confidenceScore = safeFloat(payload.confidence_score || 0.5);
-      const isHighFidelity = isPhysicsHighFidelity || parseFloat(confidenceScore) > 0.95;
+      const physicsScore = payload.physics_score ? safeFloat(payload.physics_score).toFixed(4) : physicsMetadata.physicsScore;
+      const isPhysicsHighFidelity = safeFloat(physicsScore) > 0.95;
+      const confidenceScore = payload.confidence_score ? safeFloat(payload.confidence_score).toFixed(4) : (0.5).toFixed(4);
+      const isHighFidelity = isPhysicsHighFidelity || safeFloat(confidenceScore) > 0.95;
       // [L1-130] Sentinel Hardening: Support boolean, string, and integer (1) formats
       const explicitSentinel = payload.is_sentinel_fidelity === true ||
                                payload.is_sentinel_fidelity === 'true' ||
@@ -647,9 +670,9 @@ async function syncDigitalTwin() {
 
       // [L1-125] Multi-Site Awareness: Cache site load data for performance
       if (!siteCache.has(vehicleSiteId)) {
-        const buildingLoadKw = parseFloat(await redisClient.get(`site:${vehicleSiteId}:building_load_kw`)) || 0;
+        const buildingLoadKw = safeFloat(await redisClient.get(`site:${vehicleSiteId}:building_load_kw`));
         const siteConfig = await redisClient.hGetAll(`site:${vehicleSiteId}:config`) || {};
-        const limitKw = parseFloat(siteConfig.max_capacity_kw) || 0;
+        const limitKw = safeFloat(siteConfig.max_capacity_kw);
         siteCache.set(vehicleSiteId, { loadKw: buildingLoadKw, limitKw });
         console.log(`📡 [L1 Physics] Cached site data for ${vehicleSiteId}: ${buildingLoadKw}kW / ${limitKw}kW`);
       }
@@ -682,10 +705,10 @@ async function syncDigitalTwin() {
         }
       }
 
-      const physicsScore = safeFloat(vehicle.physics_score || 1.0);
+      const physicsScore = safeFloat(vehicle.physics_score, 1.0).toFixed(4);
 
       // [L1-124] April 2026 High-Fidelity Standard
-      const isHighFidelity = parseFloat(physicsScore) > 0.95 || parseFloat(confidenceScore) > 0.95;
+      const isHighFidelity = safeFloat(physicsScore) > 0.95 || safeFloat(confidenceScore) > 0.95;
       // [L1-130] Sentinel Hardening: Support boolean, string, and integer (1) formats
       const explicitSentinel = vehicle.is_sentinel_fidelity === true ||
                                vehicle.is_sentinel_fidelity === 'true' ||
@@ -757,8 +780,11 @@ module.exports = {
   updateLocalSafetyCache,
   handleDerAlarm,
   handlePhysicsAlert,
+  handleDerAlarm,
   calculatePhysicsMetadata,
+  safeFloat,
   producer,
+  consumer,
   connectServices,
   syncDigitalTwin,
   reconcileLogs,
