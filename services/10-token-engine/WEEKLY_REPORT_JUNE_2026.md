@@ -1,18 +1,22 @@
-# L10 Token Engine: Weekly Product Update (June 2026 - v4.3.8)
+# L10 Weekly Report: Token Engine v4.3.8 (June 2026)
 
 ## 1. L10 Web3 & Rewards Report
-*   **Strategic Alignment**: v4.3.8 integrates **Hardware-Aware Resilience** into the token economy. By applying dynamic penalties based on regional alarm density, L10 ensures that rewards are not only physics-verified but also hardware-sensitive, aligning with the "Hardware Health Guardian" (L6) and "Hardware Health Penalty" (L4) themes of June 2026.
-*   **Hardware Health Penalty**: Implemented `applyHardwarePenalty` logic, reducing reward multipliers by 0.05 per active regional alarm (capped at 0.30). This incentivizes drivers and fleet operators to maintain asset health to maximize token yield.
-*   **Telemetry Precision**: Standardized `safeFloat` utility across the service to enforce strict 4-decimal string formatting with a robust '0.0000' fallback, ensuring parity with L11 ML Engine training requirements.
-*   **Site Awareness**: Consolidated `extractSiteId` helper to maintain robust identification across all platform site keys (`site_id`, `siteId`, `location_id`, `locationId`).
+The MiGrid ecosystem has transitioned to platform standard **v10.1.6**, with L10 now operating on version **v4.3.8**. This update focuses on **Hardware-Aware Rewards** and **Telemetry Hardening** to ensure perfect alignment with the Phase 6 AI & Optimization objectives.
+
+### Key Insights:
+*   **Hardware Health Integration**: L10 now proactively subscribes to `DER_ALARM_REPORTED` and monitors regional hardware health via `l4:regional:alarms:<ISO>`. This ensures that reward multipliers are dynamically adjusted to account for regional grid instability.
+*   **Proof of Physics equals Proof of Value**: Hardened `safeFloat` utility enforces a strict 4-decimal string format (`.toFixed(4)`) for all telemetry scoring. This prevents floating-point drift in L11 ML Engine training models.
+*   **Auditability**: All reward logs and Kafka broadcasts now include high-fidelity metadata, supporting the "Verify the Physics" core principle.
 
 ## 2. Backlog Updates
-*   **[P0] Polygon Gas Protection**: (Active) Implementing enhanced retry logic for Polygon RPC nodes.
-*   **[P1] Sentinel Multipliers**: (Research) Evaluating the economic impact of providing a +0.10 multiplier for Sentinel-tier (0.99+) contributions.
-*   **[P2] L10 AI Export Hardening**: Enhance the `/data/training/rewards` endpoint with further filtering for anomaly detection training.
+*   **P0: ML Demand Forecasting (L11 Sync)**: Ensuring L10 reward data is perfectly formatted for L11 training sets (Complete).
+*   **P1: Polygon Gas Optimization**: Researching batch transaction compression for high-frequency reward events (Active).
+*   **P2: Dynamic Scarcity Multipliers**: Aligning L10 multipliers with L4's real-time profitability index (Complete).
 
 ## 3. Engineering Execution
-*   **Logic Enhancement**: Updated `index.js` with `applyHardwarePenalty` integrated into the Kafka consumer reward loop.
-*   **Robust Testing**: Added `tests/hardware_penalty.test.js` verifying penalty logic, capping, and telemetry formatting.
-*   **Version Bump**: Promoted L10 to **v4.3.8**.
-*   **Cross-Layer Parity**: Verified synchronization with L4 v3.8.9 and L6 v5.18.0 standards.
+*   **Implemented `applyHardwarePenalty`**: Introduced a dynamic penalty of **-0.05 per regional alarm** (capped at **-0.30**) to the reward multiplier.
+*   **Hardened `safeFloat`**: All physics and confidence scores are now strictly string-formatted to 4 decimal places.
+*   **Kafka Consumer Upgrade**: Subscribed to the `DER_ALARM_REPORTED` topic for real-time hardware status awareness.
+*   **Idempotency & Batching**: Maintained the atomic batch minting worker to ensure gas efficiency and prevent double-minting.
+
+**Status**: Operational • **Version**: v4.3.8 • **Platform Standard**: v10.1.6
