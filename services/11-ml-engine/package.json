@@ -1,6 +1,6 @@
 {
   "name": "ml-engine",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "description": "MiGrid ML Engine - AI Forecasting and Predictive Analytics",
   "main": "index.js",
   "scripts": {
