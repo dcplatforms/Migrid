@@ -206,6 +206,19 @@ class BiddingOptimizer {
       // if it's too big to keep in localCache. But for now, we use the cached values.
     }
 
+    // [L4 v3.8.9] Hardware Health Penalty: Reduce confidence based on regional alarm density
+    // MiGrid Core Philosophy: Use Decimal.js for financial/energy precision
+    const regionalAlarmCount = this.localCache?.l4_regional_alarms?.[isoKey] || 0;
+    if (regionalAlarmCount > 0) {
+      const alarmPenaltyFactor = new Decimal('0.05');
+      const maxPenalty = new Decimal('0.3');
+      const penalty = Decimal.min(maxPenalty, new Decimal(regionalAlarmCount).times(alarmPenaltyFactor));
+
+      const originalConfidence = new Decimal(confidenceScore);
+      confidenceScore = Decimal.max(0, originalConfidence.minus(penalty)).toFixed(4);
+      console.log(`[BiddingOptimizer] Applied Hardware Health Penalty for ${isoKey}: -${penalty.toFixed(2)} (Alarms: ${regionalAlarmCount})`);
+    }
+
     // High-Fidelity logic: physics_score > 0.95 OR confidence_score > 0.95 (Align with L10 v4.3.5)
     const isHighFidelity = (parseFloat(physicsScore) > 0.95 || parseFloat(confidenceScore) > 0.95);
     // [L4 v3.8.5] Standardized Sentinel logic with fallback
@@ -346,6 +359,7 @@ class BiddingOptimizer {
           ...auditContext,
           ev_capacity_kw: breakdown.ev,
           bess_capacity_kw: breakdown.bess,
+          regional_alarm_count: regionalAlarmCount, // [L4 v3.8.9] L11 ML readiness
           v3_capacity_fidelity: capacityFidelityFromRedis === 'HIGH_FIDELITY',
           is_sentinel_fidelity: isSentinelFidelity,
           site_aware_sync: true // L1 v10.1.3 requirement
