@@ -191,7 +191,8 @@ async function checkIdempotency(driverId, triggeringEventId, ruleId) {
  */
 function safeFloat(val, fallback = 0.0) {
   const parsed = parseFloat(val);
-  return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
+  const result = isNaN(parsed) ? fallback : parsed;
+  return result.toFixed(4);
 }
 
 // --- Reward Multiplier Logic ---
