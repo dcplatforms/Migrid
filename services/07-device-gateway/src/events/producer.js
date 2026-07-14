@@ -188,7 +188,7 @@ async function publishSessionEvent(type, payload) {
 }
 
 function extractMeterValue(payload, measurand) {
-    if (!payload || !payload.meterValue) return 0.0;
+    if (!payload || !payload.meterValue) return (0.0).toFixed(4);
     for (const mv of payload.meterValue) {
         for (const rv of mv.sampledValue) {
             if (rv.measurand === measurand || (measurand === 'Energy.Active.Import.Register' && rv.measurand === undefined)) {
@@ -196,13 +196,13 @@ function extractMeterValue(payload, measurand) {
             }
         }
     }
-    return 0.0;
+    return (0.0).toFixed(4);
 }
 
 function extractBidirValue(bidirEnergyFlowData, measurand) {
-    if (!bidirEnergyFlowData) return 0.0;
+    if (!bidirEnergyFlowData) return (0.0).toFixed(4);
     const entry = bidirEnergyFlowData.find(d => d.measurand === measurand);
-    return entry ? safeFloat(entry.value) : 0.0;
+    return entry ? safeFloat(entry.value) : (0.0).toFixed(4);
 }
 
 module.exports = { connectProducer, publishTelemetry, publishSessionEvent };
