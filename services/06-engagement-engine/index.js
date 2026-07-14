@@ -376,6 +376,17 @@ async function processChargingEvent(event) {
     const vehicleId = event.vehicle_id || event.vehicleId;
     let resourceType = 'EV';
 
+    // Get regional alarm context from Redis
+    const driverData = await pool.query('SELECT f.iso FROM drivers d JOIN fleets f ON d.fleet_id = f.id WHERE d.id = $1', [driverId]);
+    const iso = (driverData.rows[0]?.iso || 'CAISO').toUpperCase().replace(/-/g, '');
+    let regionalAlarmCount = 0;
+    try {
+      const alarmCountRaw = await redisClient.get(`l4:regional:alarms:${iso}`);
+      regionalAlarmCount = parseInt(alarmCountRaw || '0');
+    } catch (err) {
+      console.warn(`[L6] Error fetching regional alarms for ${iso}:`, err.message);
+    }
+
     // Calculate physics_score and isHighFidelity if not already provided
     let physics_score = 1.0;
     let isHighFidelity = true;
@@ -459,6 +470,7 @@ async function processChargingEvent(event) {
       await checkHighConfidenceAchievement(driverId, vehicleId);
       await checkSiteHarmonyAchievement(driverId, vehicleId);
       await checkPhase6DataPioneerAchievement(driverId);
+      await checkHardwareHealthGuardianAchievement(driverId);
 
       // [L6-v5.9.0] BESS Specific Achievements
       if (resourceType === 'BESS') {
@@ -844,6 +856,17 @@ async function handleDerAlarm(payload) {
   const iso = (iso_region || 'CAISO').toUpperCase().replace(/-/g, '');
   console.log(`[L6] Handling DER Alarm: ${alarm_type} (${severity}) - Site: ${siteId}`);
 
+  let regionalAlarmCount = 0;
+  if (iso) {
+    const normalizedIso = iso.toUpperCase().replace(/-/g, '');
+    try {
+      const alarmCountRaw = await redisClient.get(`l4:regional:alarms:${normalizedIso}`);
+      regionalAlarmCount = parseInt(alarmCountRaw || '0');
+    } catch (err) {
+      console.warn(`[L6] Error fetching regional alarms for ${normalizedIso}:`, err.message);
+    }
+  }
+
   if (vehicle_id) {
     const driverRes = await pool.query('SELECT id FROM drivers WHERE id = (SELECT driver_id FROM charging_sessions WHERE vehicle_id = $1 AND end_time IS NULL LIMIT 1)', [vehicle_id]);
     if (driverRes.rows.length > 0) {
@@ -1180,6 +1203,38 @@ async function checkDerSentinelAchievement(driver_id) {
     }
   } catch (error) {
     console.error('[Engagement] Error checking DER Sentinel achievement:', error);
+  }
+}
+
+async function checkHardwareHealthGuardianAchievement(driver_id) {
+  // Requirement: 10 high-fidelity sessions in regions with zero regional alarms
+  // Rewards drivers for participating in sites with perfect hardware health.
+  try {
+    const result = await pool.query(`
+      WITH healthy_sessions AS (
+        SELECT (metadata->>'regional_alarm_count')::int as alarm_count
+        FROM driver_actions
+        WHERE driver_id = $1 AND action_type = 'session_completed'
+          AND (metadata->>'isHighFidelity')::boolean = true
+        ORDER BY created_at DESC
+        LIMIT 10
+      )
+      SELECT COUNT(*) as total,
+             COUNT(*) FILTER (WHERE alarm_count = 0) as healthy_count
+      FROM healthy_sessions
+    `, [driver_id]);
+
+    if (!result.rows || result.rows.length === 0) return;
+    const { total, healthy_count } = result.rows[0];
+
+    if (parseInt(total) >= 10 && parseInt(healthy_count) === 10) {
+      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Hardware Health Guardian'");
+      if (achievement.rows.length > 0) {
+        await awardAchievement(driver_id, achievement.rows[0].id);
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking Hardware Health Guardian achievement:', error);
   }
 }
 
@@ -1928,6 +1983,7 @@ async function start() {
       server.listen(port, () => {
         console.log(`[Engagement Engine] Running on port ${port}`);
         console.log('[Engagement Engine] Features: Leaderboards, Achievements, WebSockets');
+        console.log('[Engagement Engine] v5.18.0: Hardware Health Awareness');
       });
     }
   } catch (err) {
@@ -1961,7 +2017,9 @@ module.exports = {
   checkDerSentinelAchievement,
   updateChallengeProgress,
   handleAdvanceChargeSignal,
+  safeFloat,
   checkSolarSurgeAchievement,
   checkPhase6DataPioneerAchievement,
+  checkHardwareHealthGuardianAchievement,
   producer
 };
