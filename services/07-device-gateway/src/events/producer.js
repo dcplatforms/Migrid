@@ -118,6 +118,7 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
 
     // 2. Standardized Output: Broadcast a unified schema to Kafka
     // [L1-127] Standardize all energy/power values to 4 decimal places for L11 ML Engine parity
+    // Values are already string-formatted via safeFloat()
     event = {
         chargePointId,
         site_id: siteId,
@@ -160,6 +161,11 @@ async function publishSessionEvent(type, payload) {
         iso_region: isoRegion,
         site_id: siteId
     };
+
+    // [L1-127] Ensure energy telemetry is string-formatted to 4 decimal places
+    if (enrichedPayload.energyDispensedKwh !== undefined) {
+        enrichedPayload.energyDispensedKwh = safeFloat(enrichedPayload.energyDispensedKwh);
+    }
 
     // For auditing and high-fidelity verification (L11 ML readiness)
     if (type === 'SESSION_COMPLETED') {
@@ -205,4 +211,4 @@ function extractBidirValue(bidirEnergyFlowData, measurand) {
     return entry ? safeFloat(entry.value) : (0.0).toFixed(4);
 }
 
-module.exports = { connectProducer, publishTelemetry, publishSessionEvent };
+module.exports = { connectProducer, publishTelemetry, publishSessionEvent, safeFloat };
