@@ -200,7 +200,7 @@ function calculateConfidenceScore(streak, lastSync, siteLoadData) {
     }
   }
 
-  return Math.max(0, Math.min(1.0, score)).toFixed(4);
+  return safeFloat(Math.max(0, Math.min(1.0, score)));
 }
 
 /**
@@ -262,7 +262,7 @@ function calculatePhysicsMetadata(payload) {
     physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
   }
 
-  const scoreStr = physicsScore.toFixed(4);
+  const scoreStr = safeFloat(physicsScore);
   // [L1-130] Sentinel Hardening: Support boolean, string, and integer (1) formats
   const explicitSentinel = payload.is_sentinel_fidelity === true ||
                            payload.is_sentinel_fidelity === 'true' ||
@@ -273,6 +273,26 @@ function calculatePhysicsMetadata(payload) {
     isPhysicsHighFidelity: physicsScore > 0.95,
     isSentinelFidelity: explicitSentinel || physicsScore > 0.99
   };
+}
+
+/**
+ * [L1-135] Handle DER Alarms from L7
+ * Activates site-specific safety locks for CRITICAL/HIGH alarms.
+ */
+async function handleDerAlarm(message) {
+  try {
+    const payload = JSON.parse(message.value.toString());
+    const { alarmType, severity, siteId } = payload;
+    const normalizedSiteId = siteId || extractSiteId(payload);
+
+    if (severity === 'CRITICAL' || severity === 'HIGH') {
+      console.log(`🚨 [L1 Physics] ${severity} Alarm Reported: ${alarmType} at ${normalizedSiteId}. Activating Site Lock.`);
+      const lockKey = `${SAFETY_LOCK_KEY}:SITE:${normalizedSiteId}`;
+      await redisClient.setEx(lockKey, SAFETY_LOCK_TTL, 'true');
+    }
+  } catch (err) {
+    console.error('❌ [L1 Physics] DER Alarm processing error:', err.message);
+  }
 }
 
 /**
@@ -758,6 +778,7 @@ module.exports = {
   app,
   localSafetyCache,
   updateLocalSafetyCache,
+  handleDerAlarm,
   handlePhysicsAlert,
   handleDerAlarm,
   calculatePhysicsMetadata,
@@ -775,6 +796,7 @@ module.exports = {
 process.on('SIGTERM', async () => {
   await pgClient.end();
   await producer.disconnect();
+  await consumer.disconnect();
   await redisClient.quit();
   process.exit(0);
 });
