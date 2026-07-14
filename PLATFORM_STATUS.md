@@ -272,16 +272,16 @@ Sell: LMP > $100/MWh (grid services revenue)
 </details>
 
 <details open>
-<summary><b>[5] Weekly Platform Sprint (April 2026)</b></summary>
+<summary><b>[5] Weekly Platform Sprint (June 2026)</b></summary>
 
 Strategic alignment and high-fidelity data integrity updates:
 
-- [✓] **L6 Engagement Engine (v5.16.0)**: Deployed **Phase 6 Data Pioneer** achievement; hardened **isSentinelFidelity** logic.
-- [✓] **L2 Grid Signal (v2.5.2)**: Secured endpoints against `fleet_id` tokens; hardened sentinel logic parity.
-- [✓] **L10 Token Engine (v4.3.6)**: Secured `/data/training/rewards` against `fleet_id` tokens; enforced .toFixed(4) telemetry.
-- [✓] **L4 Market Gateway (v3.8.6)**: Enforced strict .toFixed(4) formatting; hardened `isNaN` protection.
-- [✓] **L7 Device Gateway (v5.10.0)**: Integrated `helmet()`; updated Kafka source tagging.
-- [✓] **L3 VPP Aggregator (v3.3.2)**: Secured `/data/training/capacity` endpoint; integrated `helmet` middleware.
+- [✓] **L6 Engagement Engine (v5.18.0)**: Deployed **Hardware Health Guardian** achievement; hardened site-specific multiplier logic.
+- [✓] **L2 Grid Signal (v2.5.5)**: Implemented site-specific safety lock enforcement on `CRITICAL` alarms.
+- [✓] **L10 Token Engine (v4.3.8)**: Implemented **Hardware Health Penalty** (-0.05 per alarm); hardened `safeFloat` telemetry.
+- [✓] **L4 Market Gateway (v3.8.9)**: Hardened bidding confidence logic and site-specific health tracking via DER Alarms.
+- [✓] **L7 Device Gateway (v5.13.0)**: Optimized heartbeat hash indexing and normalized individual DER alarms.
+- [✓] **L3 VPP Aggregator (v3.3.3)**: Hardened telemetry scoring for ML parity and secured training endpoints.
 
 </details>
 

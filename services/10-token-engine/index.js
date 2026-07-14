@@ -195,6 +195,35 @@ function safeFloat(val, fallback = 0.0) {
   return result.toFixed(4);
 }
 
+/**
+ * [L10 v4.3.8] Hardware Health Penalty
+ * Reduces reward multiplier by 0.05 per regional alarm (capped at 0.3).
+ * Syncs with L4 Market Gateway v3.8.9 logic.
+ */
+async function applyHardwarePenalty(isoRaw, totalMultiplier, multiplierReason) {
+  const iso = isoRaw.toUpperCase().replace(/-/g, '');
+  let alarmCount = 0;
+
+  try {
+    const alarmCountStr = await redisClient.get(`l4:regional:alarms:${iso}`);
+    if (alarmCountStr) {
+      alarmCount = parseInt(alarmCountStr) || 0;
+    }
+  } catch (err) {
+    console.error(`[L10] Error fetching hardware alarms for ${iso}:`, err.message);
+  }
+
+  if (alarmCount > 0) {
+    const penalty = Decimal.min(new Decimal(alarmCount).times('0.05'), '0.30');
+    const newMultiplier = Decimal.max(totalMultiplier.minus(penalty), '0.01');
+    const updatedReason = `${multiplierReason} [Hardware Penalty: -${penalty.toNumber()} (${alarmCount} alarms)]`;
+    console.log(`[L10 Strategy] Applied hardware health penalty for ${iso}: -${penalty.toNumber()}x (Remaining: ${newMultiplier.toNumber()}x)`);
+    return { multiplier: newMultiplier, reason: updatedReason };
+  }
+
+  return { multiplier: totalMultiplier, reason: multiplierReason };
+}
+
 // --- Reward Multiplier Logic ---
 
 /**
