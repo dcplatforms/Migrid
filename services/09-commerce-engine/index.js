@@ -66,11 +66,8 @@ app.post('/invoices/generate', authenticateToken, async (req, res) => {
   }
 
   try {
-    const invoice = await InvoicingService.aggregateSessionsAndCreateInvoice({ fleet_id, start_date, end_date });
-    if (!invoice) {
-      return res.status(404).json({ error: 'No billable sessions found for the specified period' });
-    }
-    res.status(201).json({ success: true, invoice });
+    const result = await InvoicingService.aggregateSessionsAndCreateInvoice({ fleet_id, start_date, end_date });
+    res.json({ success: true, invoice: result });
   } catch (err) {
     console.error('[Invoice Generation Error]', err);
     res.status(500).json({ error: 'An internal server error occurred' });
@@ -102,27 +99,18 @@ app.post('/drivers/assign', authenticateToken, async (req, res) => {
 app.post('/billing/calculate/:sessionId', authenticateToken, async (req, res) => {
   const { sessionId } = req.params;
   try {
-    // IDOR Check: Ensure the session belongs to the user's fleet
+    // Security: Check if session belongs to user's fleet
     const sessionRes = await pool.query(
-      'SELECT cs.id, cs.vehicle_id, cs.energy_dispensed_kwh, cs.start_time FROM charging_sessions cs JOIN vehicles v ON cs.vehicle_id = v.id WHERE cs.id = $1 AND v.fleet_id = $2',
+      'SELECT cs.id FROM charging_sessions cs JOIN vehicles v ON cs.vehicle_id = v.id WHERE cs.id = $1 AND v.fleet_id = $2',
       [sessionId, req.user.fleet_id]
     );
 
     if (sessionRes.rows.length === 0) {
-      return res.status(403).json({ error: 'Unauthorized: Session does not belong to your fleet' });
+      return res.status(403).json({ error: 'Unauthorized or session not found' });
     }
 
-    const session = sessionRes.rows[0];
-    const BillingService = require('./src/services/BillingService');
-    await BillingService.processSessionCompletion({
-        sessionId: session.id,
-        vehicleId: session.vehicle_id,
-        energyDispensedKwh: session.energy_dispensed_kwh,
-        timestamp: session.start_time
-    });
-
-    const updatedSession = await pool.query('SELECT cost FROM charging_sessions WHERE id = $1', [sessionId]);
-    res.json({ success: true, cost: updatedSession.rows[0].cost });
+    const cost = await InvoicingService.calculateSessionCost(sessionId);
+    res.json({ success: true, sessionId, cost });
   } catch (err) {
     console.error('[Billing Calculation Error]', err);
     res.status(500).json({ error: 'An internal server error occurred' });
