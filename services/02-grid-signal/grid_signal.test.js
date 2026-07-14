@@ -1121,4 +1121,25 @@ describe('L2 Grid Signal Service', () => {
     expect(response.status).toBe(200);
     expect(response.body.regional_stats.CAISO.sentinel_fidelity_count).toBe(5);
   });
+
+  test('POST /openadr/v3/events should reject when site-specific safety lock is active (v2.5.5)', async () => {
+    const { localSafetyCache } = require('./index');
+    localSafetyCache.site_safety['SITE-LOCKED-001'] = true;
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-site-lock',
+        type: 'demand-response',
+        site_id: 'SITE-LOCKED-001'
+      });
+
+    expect(response.status).toBe(503);
+    expect(response.body.status).toBe('REJECTED');
+    expect(response.body.reason).toBe('SITE_SAFETY_LOCK_ACTIVE');
+    expect(response.body.message).toContain('SITE-LOCKED-001');
+
+    delete localSafetyCache.site_safety['SITE-LOCKED-001']; // Reset
+  });
 });

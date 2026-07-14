@@ -248,8 +248,8 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
 
       return res.status(503).json({
         status: 'REJECTED',
-        reason: 'SAFETY_VIOLATION_L1',
-        message: 'Grid dispatch suspended due to physics engine safety lock',
+        reason: isSiteLocked ? 'SITE_SAFETY_LOCK_ACTIVE' : 'SAFETY_VIOLATION_L1',
+        message: isSiteLocked ? `Grid dispatch suspended for site ${siteIdVal} due to site-specific safety lock` : 'Grid dispatch suspended due to physics engine safety lock',
         details: details ? { alert_type: details.event_type, severity: details.severity } : 'No details available',
         timestamp: new Date().toISOString()
       });
@@ -628,7 +628,7 @@ const updateRegionalStats = async () => {
         const safetyContext = JSON.parse(safetyContextRaw);
         // [L2 v2.4.5] Prioritize explicit confidence_score from L1 context
         context.confidence_score = safeFloat((safetyContext.confidence_score !== undefined) ? safetyContext.confidence_score :
-                                               (safetyContext.physics_score !== undefined ? safetyContext.physics_score : '1.0'), 1.0);
+                                               (safetyContext.physics_score !== undefined ? safetyContext.physics_score : 1.0), 1.0);
       } catch (e) {}
     } else {
       context.confidence_score = "1.0000"; // Default to full confidence if no locks/alerts
