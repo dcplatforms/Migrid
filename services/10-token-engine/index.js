@@ -185,7 +185,7 @@ async function checkIdempotency(driverId, triggeringEventId, ruleId) {
 }
 
 /**
- * [L10 v4.3.7] safeFloat: Robust isNaN protection for telemetry scoring
+ * [L10 v4.3.8] safeFloat: Robust isNaN protection for telemetry scoring
  * Enforces strict 4-decimal string formatting.
  * Default fallback is 0.0 to uphold "Proof of Physics equals Proof of Value".
  */
@@ -396,7 +396,7 @@ async function start() {
                                        (physicsScoreNum !== null && physicsScoreNum > 0.95) ||
                                        (confidenceScoreNum !== null && confidenceScoreNum > 0.95);
 
-          // L10 v4.3.8 Sentinel Fidelity Tier: physics_score > 0.99 or explicit sentinel flag (supports boolean, string 'true', integer 1, or string '1')
+          // L10 v4.3.8 Sentinel Fidelity Tier: physics_score > 0.99 or explicit sentinel flag (supports boolean, string 'true', integer 1, and string '1')
           const isSentinelFidelityPersist = (isSentinelFidelityVal === true || isSentinelFidelityVal === 'true' || isSentinelFidelityVal === 1 || isSentinelFidelityVal === '1') ||
                                            (physicsScoreNum !== null && physicsScoreNum > 0.99);
 
