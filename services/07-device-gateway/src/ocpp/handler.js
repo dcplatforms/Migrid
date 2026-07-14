@@ -39,10 +39,12 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
 
             case 'Heartbeat':
                 // Update Redis with the last heartbeat timestamp for availability tracking
-                // [L7-v5.13.0] Optimized: Use Redis Hash for scalable heartbeat tracking
-                await redis.hset('l7:heartbeats', chargePointId, new Date().toISOString());
+                // [L7-v5.13.0] Optimized Heartbeat indexing via Redis Hash for scalability
+                const timestamp = new Date().toISOString();
+                await redis.set(`charger_heartbeat:${chargePointId}`, timestamp, 'EX', 86400);
+                await redis.hset('l7:heartbeats', chargePointId, timestamp);
                 ws.send(JSON.stringify([3, messageId, {
-                    currentTime: new Date().toISOString()
+                    currentTime: timestamp
                 }]));
                 break;
 
@@ -152,7 +154,8 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                 // OCPP 2.1 DER Control: Handle alarms from local solar/BESS
                 console.log(`[L7] DER Alarm received from ${chargePointId}:`, payload.alarms);
 
-                // [L7-135] Broadcast individual DER alarms to Kafka for L4 bidding penalty integration
+                // [L7-v5.13.0] Normalize DER alarms for L4 hardware health parity
+                // Broadcast individual alarms to Kafka for L1/L4/L8 awareness
                 if (payload.alarms && Array.isArray(payload.alarms)) {
                     for (const alarm of payload.alarms) {
                         await publishSessionEvent('DER_ALARM_REPORTED', {

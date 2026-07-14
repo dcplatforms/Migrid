@@ -17,12 +17,12 @@ const extractSiteId = (payload) => {
 };
 
 /**
- * [L7 v5.13.0] safeFloat: Robust isNaN protection for telemetry scoring.
- * Returns a string formatted to 4 decimal places for Phase 6 ML parity.
+ * [L7 v5.13.0] safeFloat: Robust isNaN protection for telemetry scoring
+ * Returns string formatted to 4 decimal places for ML parity.
  */
 const safeFloat = (val, fallback = 0.0) => {
     const parsed = parseFloat(val);
-    return (isNaN(parsed) ? fallback : parsed).toFixed(4);
+    return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
 };
 
 async function connectProducer() {
@@ -194,7 +194,7 @@ async function publishSessionEvent(type, payload) {
 }
 
 function extractMeterValue(payload, measurand) {
-    if (!payload || !payload.meterValue) return safeFloat(0.0);
+    if (!payload || !payload.meterValue) return (0.0).toFixed(4);
     for (const mv of payload.meterValue) {
         for (const rv of mv.sampledValue) {
             if (rv.measurand === measurand || (measurand === 'Energy.Active.Import.Register' && rv.measurand === undefined)) {
@@ -202,13 +202,13 @@ function extractMeterValue(payload, measurand) {
             }
         }
     }
-    return safeFloat(0.0);
+    return (0.0).toFixed(4);
 }
 
 function extractBidirValue(bidirEnergyFlowData, measurand) {
-    if (!bidirEnergyFlowData) return safeFloat(0.0);
+    if (!bidirEnergyFlowData) return (0.0).toFixed(4);
     const entry = bidirEnergyFlowData.find(d => d.measurand === measurand);
-    return entry ? safeFloat(entry.value) : safeFloat(0.0);
+    return entry ? safeFloat(entry.value) : (0.0).toFixed(4);
 }
 
 module.exports = { connectProducer, publishTelemetry, publishSessionEvent, safeFloat };

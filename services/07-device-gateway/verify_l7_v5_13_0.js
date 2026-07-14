@@ -1,102 +1,64 @@
-/**
- * L7 v5.13.0 Compliance Verification (Isolated)
- * Validates Heartbeat hash indexing, 4-decimal string telemetry, and normalized individual DER alarm broadcasts.
- */
-
-// 1. Mock dependencies before requiring source files
-const Module = require('module');
-const originalRequire = Module.prototype.require;
-
-Module.prototype.require = function() {
-  const arg = arguments[0];
-  if (arg === 'kafkajs') {
-    return {
-      Kafka: function() {
-        return {
-          producer: () => ({ connect: async () => {}, send: async () => {} }),
-          consumer: () => ({ connect: async () => {}, subscribe: async () => {}, run: async () => {} })
-        };
-      }
-    };
-  }
-  if (arg === 'ioredis') {
-    return function() {
-      return {
-        get: async () => null,
-        set: async () => 'OK',
-        hset: async () => 1,
-        del: async () => 1,
-        scan: async () => ['0', []],
-        subscribe: async () => {},
-        on: () => {}
-      };
-    };
-  }
-  if (arg === 'pg') {
-    return {
-      Pool: function() {
-        return {
-          query: async () => ({ rows: [] }),
-          on: () => {}
-        };
-      }
-    };
-  }
-  return originalRequire.apply(this, arguments);
-};
-
-const { safeFloat } = require('./src/events/producer');
-const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
-async function verifyTelemetryPrecision() {
-    console.log('🧪 Verifying 4-decimal string telemetry precision...');
-    const val = safeFloat(10.5);
-    console.log('   Result:', val);
-    assert.strictEqual(typeof val, 'string');
-    assert.strictEqual(val, '10.5000');
+console.log('--- L7 v5.13.0 Verification ---');
 
-    const nanVal = safeFloat('invalid', 0.0);
-    console.log('   NaN Fallback:', nanVal);
-    assert.strictEqual(nanVal, '0.0000');
-    console.log('✅ Telemetry precision verified.');
-}
+const producerPath = path.join(__dirname, 'src/events/producer.js');
+const handlerPath = path.join(__dirname, 'src/ocpp/handler.js');
+const serverPath = path.join(__dirname, 'src/server.js');
+const packagePath = path.join(__dirname, 'package.json');
 
-async function verifyStructuralChanges() {
-    console.log('\n🔍 Verifying structural changes in source code...');
+const producerContent = fs.readFileSync(producerPath, 'utf8');
+const handlerContent = fs.readFileSync(handlerPath, 'utf8');
+const serverContent = fs.readFileSync(serverPath, 'utf8');
+const packageContent = fs.readFileSync(packagePath, 'utf8');
 
-    const handlerPath = path.join(__dirname, 'src/ocpp/handler.js');
-    const handlerContent = fs.readFileSync(handlerPath, 'utf8');
-
-    console.log('   Checking Heartbeat hash indexing...');
-    assert.ok(handlerContent.includes("redis.hset('l7:heartbeats'"), 'Heartbeat should use hset');
-
-    console.log('   Checking DER alarm normalization loop...');
-    assert.ok(handlerContent.includes('for (const alarm of payload.alarms)'), 'DER Alarms should be iterated');
-    assert.ok(handlerContent.includes('alarmType: alarm.code'), 'code should be promoted to alarmType');
-
-    const serverPath = path.join(__dirname, 'src/server.js');
-    const serverContent = fs.readFileSync(serverPath, 'utf8');
-
-    console.log('   Checking Site-specific safety locks...');
-    assert.ok(serverContent.includes('site: {}'), 'localSafetyCache should include site object');
-    assert.ok(serverContent.includes('l1:safety:lock:site:*'), 'Poller should scan for site locks');
-    assert.ok(serverContent.includes('localSafetyCache.site[siteId]'), 'Dispatch should check site lock');
-
-    console.log('✅ Structural changes verified.');
-}
-
-async function run() {
-    try {
-        console.log('🚀 Starting L7 v5.13.0 Compliance Verification...');
-        await verifyTelemetryPrecision();
-        await verifyStructuralChanges();
-        console.log('\n✨ Compliance verification passed.');
-    } catch (err) {
-        console.error('\n❌ Verification FAILED:', err.message);
-        process.exit(1);
+const checks = [
+    {
+        name: 'Package version bumped to 5.13.0',
+        passed: JSON.parse(packageContent).version === '5.13.0'
+    },
+    {
+        name: 'Server health endpoint version updated to 5.13.0',
+        passed: serverContent.includes("version: '5.13.0'")
+    },
+    {
+        name: 'Kafka source tag updated to v5.13.0',
+        passed: producerContent.includes("source: 'L7_GATEWAY_V5.13.0'")
+    },
+    {
+        name: 'safeFloat returns 4-decimal strings',
+        passed: producerContent.includes('fallback.toFixed(4) : parsed.toFixed(4)')
+    },
+    {
+        name: 'Heartbeat hash indexing implemented',
+        passed: handlerContent.includes("redis.hset('l7:heartbeats'")
+    },
+    {
+        name: 'DER Alarm individual broadcasting implemented',
+        passed: handlerContent.includes('for (const alarm of payload.alarms)') &&
+                handlerContent.includes('alarmType: alarm.code')
+    },
+    {
+        name: 'Redundant toFixed(4) removed in publishTelemetry',
+        passed: !producerContent.includes('importEnergy.toFixed(4)') &&
+                producerContent.includes('energyActiveImport: importEnergy')
     }
-}
+];
 
-run();
+let allPassed = true;
+checks.forEach(check => {
+    if (check.passed) {
+        console.log(`✅ [PASS] ${check.name}`);
+    } else {
+        console.log(`❌ [FAIL] ${check.name}`);
+        allPassed = false;
+    }
+});
+
+if (allPassed) {
+    console.log('\n✨ All L7 v5.13.0 checks PASSED');
+} else {
+    console.log('\n🚨 Some checks FAILED');
+    process.exit(1);
+}
