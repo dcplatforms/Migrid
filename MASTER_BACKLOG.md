@@ -1,8 +1,8 @@
 # MiGrid Master Backlog & Strategic Dependency Matrix
 
-**Version:** 10.1.5
-**Last Updated:** April 2026
-**Status:** Phase 6 "AI & Optimization" (Active)
+**Version:** 10.1.6
+**Last Updated:** June 2026
+**Status:** Phase 6 "AI & Optimization" (Active — 60%)
 
 ---
 
@@ -15,8 +15,6 @@
 | **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 v3.8.8 AI Readiness (100% Complete) | Phase 5 |
 | **P3** | **OCPI 2.2 Roaming** | L7 (Device) | ✅ L9 v5.1.0 tariff engine sync (100% Complete) | Phase 5 |
 | **P4** | **BESS RL Bidding** | L4 (Market) | 🚧 L3 BESS Integration (75% Complete) | Phase 6 |
-
-| **P5** | **Resource-Aware Bidding** | L4 (Market) | ✅ L3 v3.3.2 High-Fidelity Breakdown | Phase 5 |
 
 | Priority | Task ID | Description | Primary Layers | Status | Strategic Alignment |
 |:---:|:---:|:---|:---:|:---:|:---|
@@ -63,7 +61,8 @@
 - [✓] **Secure Reporting**: authenticateToken and PII masking applied to `/openadr/v3/reports`.
 - [✓] **Fleet Security**: Hardened global data endpoints to reject `fleet_id` tokens.
 
-### Layer 3: VPP Aggregator (v3.3.2)
+### Layer 3: VPP Aggregator (v3.3.3)
+- [✓] **Sentinel Fidelity Hardening**: Supports boolean, string, and integer formats for sentinel flags.
 - [✓] **Redis Capacity Cache**: Sub-50ms reporting for L4 bidding.
 - [✓] **Fuse Rule 2.0**: 20% SoC hard floor integrated into capacity formula.
 - [✓] **Multi-Site Parity**: Implemented `extractSiteId` for standardized site identification.
@@ -78,7 +77,8 @@
 - [✓] **AI Readiness**: Training endpoints for fuel-mix, load-forecast, and net-load active.
 - [~] **BESS RL Bidding**: Research phase for reinforcement learning models (10%).
 
-### Layer 6: Engagement Engine (v5.17.0)
+### Layer 6: Engagement Engine (v5.18.0)
+- [✓] **Hardware Health Guardian**: Achievement for 10 sessions at sites with zero regional alarms.
 - [✓] **Phase 6 Alignment**: Standardized physics and confidence scores as 4-decimal strings.
 - [✓] **Multi-Site Parity**: Hardened site identification via `extractSiteId`.
 - [✓] **AI Model Master**: Achievement for 100+ cumulative high-fidelity sessions.
