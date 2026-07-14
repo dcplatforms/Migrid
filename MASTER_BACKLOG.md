@@ -83,9 +83,8 @@
 - [✓] **Phase 6 Alignment**: Standardized physics and confidence scores as 4-decimal strings.
 - [✓] **Multi-Site Parity**: Hardened site identification via `extractSiteId`.
 - [✓] **AI Model Master**: Achievement for 100+ cumulative high-fidelity sessions.
-- [✓] **Phase 6 Data Pioneer**: Achievement for 5 consecutive sessions with physics_score > 0.99.
-- [✓] **Solar Flare**: Achievement for 25 cumulative solar ramp responses.
 - [✓] **Sentinel Elite**: Achievement for 50 total sentinel-fidelity sessions.
+- [✓] **DER Sentinel**: Achievement for 3 responses to NotifyDERAlarm safety events.
 
 ### Layer 7: Device Gateway (v5.12.0)
 - [✓] **[L7-133] Resilience**: Implemented `localSafetyCache` for sub-millisecond dispatch.

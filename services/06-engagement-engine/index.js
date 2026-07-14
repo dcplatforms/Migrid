@@ -564,8 +564,8 @@ async function processChargingEvent(event) {
         data: {
           session_id: sessionId,
           points,
-          physics_score: physics_score.toFixed(4),
-          confidence_score: confidence_score.toFixed(4),
+          physics_score: safeFloat(physics_score),
+          confidence_score: safeFloat(confidence_score),
           fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD',
           multiplier_reason: multiplierReason,
           site_id: siteId
@@ -666,7 +666,7 @@ async function processChargingEvent(event) {
           source_value: energyDischargedKwh,
           event_id: sessionId,
           iso: iso,
-          physics_score: (1.0).toFixed(4), // V2G discharge is verified by protocol and VPP controller
+          physics_score: safeFloat(1.0), // V2G discharge is verified by protocol and VPP controller
           is_high_fidelity: true,
           multiplier_reason: multiplierReason,
           resource_type: event.resourceType || event.resource_type || 'EV' // Propagate resource type for L10 auditing
@@ -1045,7 +1045,7 @@ async function handleGridSignal(payload) {
               source_value: reward,
               event_id: chalId,
               iso: row.iso,
-              physics_score: (1.0).toFixed(4),
+              physics_score: safeFloat(1.0),
               is_high_fidelity: true
             })
           }]
@@ -1082,7 +1082,7 @@ async function handleGridSignal(payload) {
               source_value: points,
               event_id: achId,
               iso: row.iso,
-              physics_score: (1.0).toFixed(4),
+              physics_score: safeFloat(1.0),
               is_high_fidelity: true
             })
           }]
@@ -1448,7 +1448,7 @@ async function updateChallengeProgress(driver_id, challenge_type) {
               source_value: chal.rows[0].token_reward || chal.rows[0].points_reward,
               event_id: challenge.id,
               iso: isoForChallenge,
-              physics_score: (1.0).toFixed(4), // Behavioral achievements are logically verified
+              physics_score: safeFloat(1.0), // Behavioral achievements are logically verified
               is_high_fidelity: true
             })
           }]
@@ -1860,7 +1860,7 @@ async function awardAchievement(driver_id, achievement_id) {
           source_value: points,
           event_id: achievement_id,
           iso: iso,
-          physics_score: (1.0).toFixed(4), // Achievements are logically verified behavioral states
+          physics_score: safeFloat(1.0), // Achievements are logically verified behavioral states
           is_high_fidelity: true
         })
       }]
@@ -2015,6 +2015,7 @@ module.exports = {
   checkHighConfidenceAchievement,
   checkSiteHarmonyAchievement,
   checkDerSentinelAchievement,
+  checkHardwareHealthGuardianAchievement,
   updateChallengeProgress,
   handleAdvanceChargeSignal,
   safeFloat,
