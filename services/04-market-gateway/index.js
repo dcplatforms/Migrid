@@ -35,7 +35,7 @@ const localSafetyCache = {
   l1_physics: false,
   l4_grid: false,
   l4_regional: {},
-  l4_regional_alarms: {},
+  l4_regional_alarms: {}, // [L4 v3.8.9] Track hardware alarm density
   physics_score: "1.0000",
   confidence_score: "1.0000",
   is_sentinel_fidelity: false,
@@ -175,7 +175,23 @@ async function updateLocalSafetyCache() {
     } while (cursor !== 0 && cursor !== '0');
 
     localSafetyCache.l4_regional = newRegionalLocks;
+
+    // [L4 v3.8.9] Hardware Alarm Density Discovery
+    const newRegionalAlarms = {};
+    let alarmCursor = '0';
+    do {
+      const reply = await redisClient.scan(alarmCursor, { MATCH: 'l4:regional:alarms:*', COUNT: 100 });
+      alarmCursor = reply.cursor;
+      if (reply.keys.length > 0) {
+        const values = await redisClient.mGet(reply.keys);
+        reply.keys.forEach((key, index) => {
+          const iso = key.split(':').pop().toUpperCase();
+          newRegionalAlarms[iso] = parseInt(values[index] || '0');
+        });
+      }
+    } while (alarmCursor !== 0 && alarmCursor !== '0');
     localSafetyCache.l4_regional_alarms = newRegionalAlarms;
+
     localSafetyCache.last_updated = new Date().toISOString();
   } catch (err) {
     console.error('❌ [Market Gateway] Failed to update local safety cache:', err.message);
@@ -243,6 +259,20 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
       }
     }
 
+    // [L4 v3.8.9] Hardware Health Penalty: Reduce confidence based on regional alarm density
+    // Penalty: -0.05 per active regional hardware alarm (max penalty 0.3)
+    // MiGrid Core Philosophy: Use Decimal.js for zero rounding errors
+    const regionalAlarmCount = localSafetyCache.l4_regional_alarms[currentIso] || 0;
+    if (regionalAlarmCount > 0) {
+      const alarmPenaltyFactor = new Decimal('0.05');
+      const maxPenalty = new Decimal('0.3');
+      const penalty = Decimal.min(maxPenalty, new Decimal(regionalAlarmCount).times(alarmPenaltyFactor));
+
+      const originalConfidence = new Decimal(confidenceScore);
+      confidenceScore = Decimal.max(0, originalConfidence.minus(penalty)).toFixed(4);
+      console.log(`[Market Gateway] Applied Hardware Health Penalty for ${iso}: -${penalty.toFixed(2)} (Alarms: ${regionalAlarmCount})`);
+    }
+
     const isHighFidelity = (parseFloat(physicsScore) > 0.95 || parseFloat(confidenceScore) > 0.95);
     // [L4 v3.8.5] Standardized Sentinel logic with fallback
     isSentinelFidelity = isSentinel(isSentinelFidelity, physicsScore);
@@ -256,6 +286,7 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
       degradation_cost_mwh: degradationCostMwh.toNumber(),
       physics_score: physicsScore,
       confidence_score: confidenceScore,
+      regional_alarm_count: regionalAlarmCount, // [L4 v3.8.9] L11 ML readiness
       is_high_fidelity: isHighFidelity,
       is_sentinel_fidelity: isSentinelFidelity,
       fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD',
@@ -297,14 +328,23 @@ async function startGridSignalConsumer() {
         const isSentinelFidelity = isSentinel(signal.is_sentinel_fidelity, physicsScore);
 
         if (topic === 'DER_ALARM_REPORTED') {
-          console.log(`🚨 [Market Gateway] DER Alarm reported: ${signal.alarmType} (Severity: ${signal.severity})`);
-          if (signal.severity === 'CRITICAL' || signal.severity === 'HIGH') {
-            const alarmRegion = (signal.iso_region || 'SYSTEM_WIDE').toUpperCase().replace(/-/g, '');
+          const alarmRegion = (signal.iso_region || 'SYSTEM_WIDE').toUpperCase().replace(/-/g, '');
+          const alarms = signal.alarms || [];
+          console.log(`🚨 [Market Gateway] DER Alarm reported from ${signal.chargePointId} in ${alarmRegion}. Count: ${alarms.length}`);
+
+          if (signal.severity === 'CRITICAL' || signal.severity === 'HIGH' || alarms.some(a => a.severity === 'CRITICAL' || a.severity === 'HIGH')) {
             const lockDuration = 1800; // 30 minutes for hardware alarms
+
+            // [L4 v3.8.9] Track regional hardware health density
             if (alarmRegion !== 'SYSTEM_WIDE') {
+              const alarmCountKey = `l4:regional:alarms:${alarmRegion}`;
+              const alarmCount = Math.max(1, alarms.length);
+              await redisClient.incrBy(alarmCountKey, alarmCount);
+              await redisClient.expire(alarmCountKey, lockDuration);
+
               const regionLockKey = `l4:grid:lock:${alarmRegion}`;
               await redisClient.setEx(regionLockKey, lockDuration, 'true');
-              console.warn(`[Market Gateway] L4 Regional Grid Lock ACTIVATED for ${alarmRegion} for ${lockDuration}s due to hardware alarm`);
+              console.warn(`[Market Gateway] L4 Regional Grid Lock & Alarm Count incremented for ${alarmRegion}`);
             } else {
               await redisClient.setEx('l4:grid:lock', lockDuration, 'true');
               console.warn(`[Market Gateway] L4 Global Grid Lock ACTIVATED for ${lockDuration}s due to critical hardware alarm`);
@@ -418,7 +458,8 @@ app.get('/health', async (req, res) => {
     safety_locks: {
       l1_physics: localSafetyCache.l1_physics,
       l4_grid: localSafetyCache.l4_grid,
-      l4_regional: localSafetyCache.l4_regional
+      l4_regional: localSafetyCache.l4_regional,
+      l4_regional_alarms: localSafetyCache.l4_regional_alarms
     },
     telemetry: {
       physics_score: localSafetyCache.physics_score,
