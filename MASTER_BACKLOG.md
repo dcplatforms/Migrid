@@ -2,7 +2,7 @@
 
 **Version:** 10.1.6
 **Last Updated:** June 2026
-**Status:** Phase 6 "AI & Optimization" (Active)
+**Status:** Phase 6 "AI & Optimization" (Active — 60%)
 
 ---
 
@@ -11,21 +11,19 @@
 | Priority | Feature / Task | Primary Layer | Blocking Dependencies | Target Phase |
 |:---:|:---|:---:|:---|:---:|
 | **P0** | **ML Demand Forecasting** | L11 (ML Engine) | ✅ Phase 6 Telemetry Parity (100%) | Phase 6 |
-| **P1** | **Hardware Health Guardian** | L6 (Engagement) | ✅ L4 Regional Alarm Redis Parity (100%) | Phase 6 |
-| **P2** | **Site-Specific Safety Isolation**| L1 (Physics) | ✅ L7 NotifyDERAlarm Refactor (100%) | Phase 6 |
-| **P3** | **Hardware Health Penalty** | L4 (Market) | ✅ L7 DER Alarm Normalization (100%) | Phase 6 |
-| **P4** | **BESS RL Bidding** | L4 (Market) | 🚧 L3 BESS Integration (85% Complete) | Phase 6 |
-
-| **P5** | **Resource-Aware Bidding** | L4 (Market) | ✅ L3 v3.3.3 High-Fidelity Breakdown | Phase 5 |
+| **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | ✅ L7 v5.12.0 localSafetyCache (100%) | Phase 5 |
+| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 v3.8.8 AI Readiness (100% Complete) | Phase 5 |
+| **P3** | **OCPI 2.2 Roaming** | L7 (Device) | ✅ L9 v5.1.0 tariff engine sync (100% Complete) | Phase 5 |
+| **P4** | **BESS RL Bidding** | L4 (Market) | 🚧 L3 BESS Integration (75% Complete) | Phase 6 |
 
 | Priority | Task ID | Description | Primary Layers | Status | Strategic Alignment |
 |:---:|:---:|:---|:---:|:---:|:---|
-| 1 | **HW-HEALTH-PENALTY** | Implementation of Hardware Health Penalties (-0.05 per alarm) in bidding and rewards | L4, L10 | ✅ 100% | Phase 6: Hardware-Aware Economics |
-| 2 | **SITE-SAFETY-LOCKS** | Site-specific safety locks triggered by CRITICAL DER Alarms (900s TTL) | L1, L2, L7 | ✅ 100% | Phase 6: Automated Resilience |
-| 3 | **HW-HEALTH-GUARDIAN**| Achievement for sessions at sites with zero regional alarms | L6 | ✅ 100% | Phase 6: Behavioral Optimization |
-| 4 | **L11-TELEMETRY-PARITY**| Standardization of 4-decimal string telemetry across all 11 layers | All | ✅ 100%| Phase 6: AI Training Quality |
+| 1 | **ISO-15118-PC** | Full ISO 15118-20 Bidirectional Certificate Exchange & Plug & Charge UI (OCPP 2.1) | L7, L5, L1 | ✅ 100% (v5.13.0) | Phase 5: Enterprise Scale |
+| 2 | **COMMERCE-BILLING** | Complete L9 Commerce Engine Tariff Engine and Flexible Billing Logic | L9, L5 | ✅ 100% | Phase 5: Commerce Sync |
+| 3 | **OCPI-2.2-ROAM** | OCPI 2.2 Roaming Integration for cross-network orchestration | L7, L9 | ✅ 100% | Phase 5: Global Expansion |
+| 4 | **REGIONAL-CHALLENGE** | Implementation of L6 Regional Team Challenges & Live Grid Events | L6, L2 | ✅ 100%| Phase 5: Grid-Aware Gamification |
 | 5 | **ML-FORECASTING** | L11 ML Engine: Demand Forecasting and Predictive Analytics Foundation | L11, L3 | 60% | Phase 6: AI & Optimization |
-| 6 | **KAFKA-ALARM-REFACTOR**| Refactored DER alarm broadcasting for granular individual events | L7 | ✅ 100% | Phase 5: Technical Debt |
+| 6 | **L2-NAN-HARDEN** | Hardened telemetry parsing with `isNaN` protection and `.toFixed(4)` parity. | L2 | ✅ 100% | Phase 5: Enterprise Scale |
 
 ---
 
@@ -33,52 +31,76 @@
 
 | Downstream Layer | Dependency | Upstream Source | Impact of Failure | Status |
 |:---|:---|:---|:---|:---|
-| **L1 Physics Engine** | Site-Specific Locks | **L7 Device Gateway (v5.13.0)**| Safety isolation fails for hardware alarms | ✅ Active |
-| **L4 Market Gateway** | Regional Alarm Count | **Redis (L7 Heartbeat/Alarm)** | Bidding optimizer ignores hardware health | ✅ Active |
-| **L10 Token Engine** | Health Multiplier | **L4 Market Optimizer** | Reward multipliers out of sync with bid price | ✅ Active |
-| **L6 Engagement** | Regional Alarm Meta | **L7 NotifyDERAlarm** | Achievements fail to reward hardware health | ✅ Active |
-| **L11 ML Engine** | 4-Decimal Strings | **L1/L3/L4/L6/L10** | ML training data lacks precision parity | ✅ Active |
-| **L2 Grid Signal** | Auto-Isolation | **L7 DER Alarm Severity** | Grid signals ignore site hardware failures | ✅ Active |
+| **L11 ML Engine** | High-Fidelity Logs | **L1 Physics (v10.1.5)** | ML training data lacks regional context | ✅ Active |
+| **L5 Driver DX** | PnC Auth Status | **L7 Device Gateway (v5.12.0)** | Driver cannot use Plug & Charge sessions | ✅ Active |
+| **L9 Commerce** | Billing Reconciliation | **L1 Physics / L4 Market** | Inaccurate split-billing or tariff logic | ✅ Active |
+| **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.2 Active |
+| **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal (v2.5.4)** | Missing high-fidelity metadata for L11 | ✅ Active |
+| **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine (v5.17.0)** | Rewards fail for 'ISO Explorer' challenges | ✅ Sync |
+| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway (v3.8.8)** | VTN cannot see market-aware grid signals | ✅ Sync |
+| **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.3.8)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
 
 ---
 
 ## 🛠️ Active Engineering Sprints (Phase 6)
 
 ### Layer 1: Physics Engine (v10.1.6)
-- [✓] **Site-Specific Safety Locks**: Implemented `l1:safety:lock:site:<SITE_ID>` in `handlePhysicsAlert`.
-- [✓] **Scan Optimization**: `updateLocalSafetyCache` uses `redisClient.scan` for site-level keys.
-- [✓] **ML Parity**: Enforced strict .toFixed(4) string formatting for all physics/confidence scores.
+- [✓] **[L1-133] Local Safety Cache**: 5s background poller for sub-millisecond resilience.
+- [✓] **[L1-135] Hardware Safety**: Kafka consumer for DER alarms to trigger site locks.
+- [✓] **[L1-136] Telemetry Hardening**: implemented `safeFloat` for robust `isNaN` protection.
+- [✓] **Phase 6 Parity**: Enforced strict .toFixed(4) string formatting for all scores.
+- [✓] **Standardized Site ID**: Implemented `extractSiteId` for multi-site identification.
+- [✓] **Digital Twin Sync**: Hardened fleet-filtered Redis sync with string handling.
+- [✓] **Contextual Safety Locks**: metadata-enriched `l1:safety:lock:context` in Redis.
+- [✓] **API Security**: Integrated `helmet` and secured `/data/training/physics`.
 
-### Layer 2: Grid Signal (v2.5.5)
-- [✓] **Auto-Isolation**: Kafka consumer sets Redis site-specific locks upon `CRITICAL` alarms.
-- [✓] **L11 Parity**: Enforced strict `.toFixed(4)` string formatting for audit trails.
+### Layer 2: Grid Signal (v2.5.4)
+- [✓] **[L2-133] Resilience**: Implemented `localSafetyCache` and 5s poller.
+- [✓] **Telemetry Hardening**: implemented `isNaN` protection for physics/confidence scores.
+- [✓] **L11 Parity**: enforced strict `.toFixed(4)` string formatting for audit trails.
 - [✓] **Secure Reporting**: authenticateToken and PII masking applied to `/openadr/v3/reports`.
 
 ### Layer 3: VPP Aggregator (v3.3.3)
-- [✓] **Telemetry Hardening**: Standardized `safeFloat` utility for 4-decimal string formatting.
+- [✓] **Sentinel Fidelity Hardening**: Supports boolean, string, and integer formats for sentinel flags.
+- [✓] **Redis Capacity Cache**: Sub-50ms reporting for L4 bidding.
 - [✓] **Fuse Rule 2.0**: 20% SoC hard floor integrated into capacity formula.
-- [~] **BESS Integration**: Support for stationary storage assets (85%).
+- [✓] **Multi-Site Parity**: Implemented `extractSiteId` for standardized site identification.
+- [✓] **ML Parity**: Enforced strict .toFixed(4) string formatting via `safeFloat`.
+- [~] **BESS Integration**: Support for stationary storage assets (75%).
 
-### Layer 4: Market Gateway (v3.8.9)
-- [✓] **Hardware Health Penalty**: Integrated `Decimal.js` penalty logic (0.05/alarm) into bids.
-- [✓] **Bidding Auditability**: Included `regional_alarm_count` in audit metadata.
-- [✓] **Bidding Logic Hardening**: `capacity_fidelity` calculated before safety lock checks.
-- [~] **BESS RL Bidding**: Research phase for reinforcement learning models (15%).
+### Layer 4: Market Gateway (v3.8.8)
+- [✓] **[L4-133] Resilience**: Implemented `localSafetyCache` for sub-millisecond bidding.
+- [✓] **ML Parity**: Enforced strict string formatting (`.toFixed(4)`) for all scores.
+- [✓] **NaN Protection**: Hardened bidding logic via `safeFloat` utility.
+- [✓] **Multi-Site Parity**: Hardened grid signal consumer with multi-key site identification.
+- [✓] **Bidding Auditability**: High-fidelity audit context for all bids.
+- [✓] **AI Readiness**: Training endpoints for fuel-mix, load-forecast, and net-load active.
+- [~] **BESS RL Bidding**: Research phase for reinforcement learning models (10%).
 
 ### Layer 6: Engagement Engine (v5.18.0)
-- [✓] **Hardware Health Guardian**: Achievement for drivers using sites with zero regional alarms.
-- [✓] **Metadata Enrichment**: Enriched charging events with regional alarm metadata for L11.
-- [✓] **Telemetry Hardening**: Enforced 4-decimal string formatting via `safeFloat`.
+- [✓] **Hardware Health Guardian**: Achievement for 10 sessions at sites with zero regional alarms.
+- [✓] **Phase 6 Alignment**: Standardized physics and confidence scores as 4-decimal strings.
+- [✓] **Multi-Site Parity**: Hardened site identification via `extractSiteId`.
+- [✓] **AI Model Master**: Achievement for 100+ cumulative high-fidelity sessions.
+- [✓] **Sentinel Elite**: Achievement for 50 total sentinel-fidelity sessions.
+- [✓] **DER Sentinel**: Achievement for 3 responses to NotifyDERAlarm safety events.
 
-### Layer 7: Device Gateway (v5.13.0)
-- [✓] **NotifyDERAlarm Refactor**: Broadcasts individual Kafka events with root-level severity.
-- [✓] **Heartbeat Optimization**: Optimized tracking via Redis Hash `l7:heartbeats`.
-- [✓] **Site-Specific Safety**: Validates site-level locks before dispatching setChargingProfile.
+### Layer 7: Device Gateway (v5.12.0)
+- [✓] **[L7-133] Resilience**: Implemented `localSafetyCache` for sub-millisecond dispatch.
+- [✓] **Heartbeat Tracking**: Persisted charger availability to Redis.
+- [✓] **DER Alarms**: Enhanced hardware-agnostic alarm handling via `NotifyDERAlarm`.
+- [✓] **ISO 15118-20**: Hardened Certificate Exchange and EMAID handling (100%).
+- [✓] **ML Parity**: Standardized 4-decimal string telemetry and hardened sentinel logic.
+- [✓] **Availability**: Optimized Heartbeat indexing via Redis Hashes for 10k+ scalability.
+- [✓] **Security Hardening**: Integrated helmet() and updated Kafka tagging.
 
 ### Layer 10: Token Engine (v4.3.8)
-- [✓] **Hardware Health Penalty**: Applied multiplier reductions (-0.05 per alarm) to rewards.
-- [✓] **Syntax Fix**: Resolved duplicate `extractSiteId` declaration causing SyntaxError.
-- [✓] **ML Parity**: Enforced strict .toFixed(4) telemetry formatting via `safeFloat`.
+- [✓] **Behavioral Expansion**: Added `der_alarm_response` and `solar_ramp_response`.
+- [✓] **Reward Batching**: Standardized atomic background worker for reward minting.
+- [✓] **ML Parity**: Enforced strict .toFixed(4) telemetry formatting.
+- [✓] **Site Awareness**: Standardized identification via `extractSiteId`.
+- [✓] **Global Data Security**: Restricted `/data/training/rewards` to admin tokens.
+- [✓] **Sentinel Fidelity**: Detection and flag (is_sentinel_fidelity) for score > 0.99.
 
 ---
 
