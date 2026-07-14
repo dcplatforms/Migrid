@@ -125,7 +125,7 @@ initKafka().catch(console.error);
 app.get('/health', (req, res) => {
   res.json({
     service: 'engagement-engine',
-    version: '5.17.0', // Weekly Mission: DER Sentinel & Standardized Site ID
+    version: '5.18.0', // Weekly Mission: Hardware Health Guardian & ML Parity
     status: 'healthy',
     layer: 'L6'
   });
@@ -298,7 +298,7 @@ app.get('/data/training/engagement', authenticateToken, async (req, res) => {
     res.json({
       count: result.rows.length,
       data: result.rows,
-      source: 'L6_ENGAGEMENT_ENGINE_V5.17.0',
+      source: 'L6_ENGAGEMENT_ENGINE_V5.18.0',
       fidelity_tier: 'HIGH_FIDELITY'
     });
   } catch (error) {
@@ -340,6 +340,15 @@ app.get('/challenges/active', authenticateToken, async (req, res) => {
 function extractSiteId(payload) {
   if (!payload) return null;
   return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
+}
+
+/**
+ * [L6 v5.18.0] safeFloat: Robust isNaN protection for telemetry scoring
+ * Enforces strict 4-decimal string formatting for L11 ML parity.
+ */
+function safeFloat(val, fallback = 1.0) {
+  const parsed = parseFloat(val);
+  return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
 }
 
 async function processChargingEvent(event) {
@@ -419,8 +428,29 @@ async function processChargingEvent(event) {
       physics_score = Math.max(0, Math.min(1, 1 - (variance / varianceThreshold)));
       isHighFidelity = physics_score > 0.95 || confidence_score > 0.95;
 
+      // [L6-v5.18.0] Hardware Health Awareness: Fetch regional alarm count for L11 ML audit
+      let regionalAlarmCount = 0;
+      try {
+        const alarmCountStr = await redisClient.get(`l4:regional:alarms:${iso}`);
+        regionalAlarmCount = parseInt(alarmCountStr || '0');
+      } catch (err) {
+        console.error(`[L6] Error fetching regional alarms for ${iso}:`, err.message);
+      }
+
       await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
-        [driverId, 'session_completed', JSON.stringify({ sessionId, energyDispensedKwh: event.energyDispensedKwh, isLowVariance, physics_score, isHighFidelity, resource_type: resourceType, variance_percentage: variance, site_id: siteId, is_sentinel_fidelity: isSentinelFidelity })]);
+        [driverId, 'session_completed', JSON.stringify({
+          sessionId,
+          energyDispensedKwh: event.energyDispensedKwh,
+          isLowVariance,
+          physics_score: safeFloat(physics_score),
+          confidence_score: safeFloat(confidence_score),
+          isHighFidelity,
+          resource_type: resourceType,
+          variance_percentage: variance,
+          site_id: siteId,
+          is_sentinel_fidelity: isSentinelFidelity,
+          regional_alarm_count: regionalAlarmCount
+        })]);
 
       await checkFirstSessionAchievement(driverId);
       await updateStreaks(driverId);
@@ -449,6 +479,7 @@ async function processChargingEvent(event) {
       await checkSentinelEliteAchievement(driverId);
       await checkAIModelMasterAchievement(driverId);
       await checkMultiSiteMaestroAchievement(driverId);
+      await checkHardwareHealthGuardianAchievement(driverId, iso);
         await updateChallengeProgress(driverId, 'low_variance_charging');
 
         // [L6-118] ML Data Pioneer: Specifically for very high fidelity data
@@ -538,17 +569,20 @@ async function processChargingEvent(event) {
             source_value: parseFloat(event.energyDispensedKwh),
             event_id: sessionId,
             iso: iso,
-            physics_score: physics_score.toFixed(4),
-            confidence_score: confidence_score.toFixed(4),
+            physics_score: safeFloat(physics_score),
+            confidence_score: safeFloat(confidence_score),
             is_high_fidelity: isHighFidelity,
             is_vpp_event: !!(event.isVPPEvent || event.is_vpp_event),
             multiplier_reason: multiplierReason,
-            resource_type: resourceType
+            resource_type: resourceType,
+            site_id: siteId
           })
         }
       ];
 
       if (isFinal) {
+        // [L6-v5.18.0] Enriched session completion with hardware health metadata
+        const regionalAlarmCount = parseInt(await redisClient.get(`l4:regional:alarms:${iso}`) || '0');
         l10Messages.push({
           value: JSON.stringify({
             driver_id: driverId,
@@ -556,12 +590,14 @@ async function processChargingEvent(event) {
             source_value: parseFloat(event.energyDispensedKwh),
             event_id: sessionId,
             iso: iso,
-            physics_score: physics_score.toFixed(4),
-            confidence_score: confidence_score.toFixed(4),
+            physics_score: safeFloat(physics_score),
+            confidence_score: safeFloat(confidence_score),
             is_high_fidelity: isHighFidelity,
             is_vpp_event: !!(event.isVPPEvent || event.is_vpp_event),
             multiplier_reason: multiplierReason,
-            resource_type: resourceType
+            resource_type: resourceType,
+            site_id: siteId,
+            regional_alarm_count: regionalAlarmCount
           })
         });
       }
@@ -802,9 +838,10 @@ async function handleVPPParticipationUpdate(payload) {
 }
 
 async function handleDerAlarm(payload) {
-  // New handler for OCPP 2.1 NotifyDERAlarm signals from L7
-  const { alarm_type, severity, vehicle_id } = payload;
+  // [L6 v5.18.0] Hardened DER Alarm handling: track resolution and hardware health
+  const { alarm_type, severity, vehicle_id, iso_region } = payload;
   const siteId = extractSiteId(payload);
+  const iso = (iso_region || 'CAISO').toUpperCase().replace(/-/g, '');
   console.log(`[L6] Handling DER Alarm: ${alarm_type} (${severity}) - Site: ${siteId}`);
 
   if (vehicle_id) {
@@ -812,7 +849,15 @@ async function handleDerAlarm(payload) {
     if (driverRes.rows.length > 0) {
       const driverId = driverRes.rows[0].id;
       await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
-        [driverId, 'der_alarm_response', JSON.stringify({ alarm_type, severity, site_id: siteId, physics_score: (1.0).toFixed(4), is_high_fidelity: true })]);
+        [driverId, 'der_alarm_response', JSON.stringify({
+          alarm_type,
+          severity,
+          site_id: siteId,
+          iso: iso,
+          physics_score: safeFloat(1.0),
+          confidence_score: safeFloat(1.0),
+          is_high_fidelity: true
+        })]);
 
       await checkDerSentinelAchievement(driverId);
     }
@@ -1077,6 +1122,42 @@ async function checkMultiSiteMaestroAchievement(driver_id) {
     }
   } catch (error) {
     console.error('[Engagement] Error checking Multi-Site Maestro achievement:', error);
+  }
+}
+
+async function checkHardwareHealthGuardianAchievement(driver_id, iso) {
+  // [L6 v5.18.0] Hardware Health Guardian Achievement
+  // Requirement: 10 consecutive high-fidelity sessions in a region with 0 active hardware alarms.
+  // This rewards drivers who favor healthy sites, ensuring high-fidelity data for L11.
+  try {
+    const alarmCountStr = await redisClient.get(`l4:regional:alarms:${iso}`);
+    const alarmCount = parseInt(alarmCountStr || '0');
+
+    if (alarmCount === 0) {
+      const result = await pool.query(`
+        WITH recent_sessions AS (
+          SELECT (metadata->>'isHighFidelity')::boolean as is_hf
+          FROM driver_actions
+          WHERE driver_id = $1 AND action_type = 'session_completed'
+          ORDER BY created_at DESC
+          LIMIT 10
+        )
+        SELECT COUNT(*) as total,
+               COUNT(*) FILTER (WHERE is_hf = true) as hf_count
+        FROM recent_sessions
+      `, [driver_id]);
+
+      const { total, hf_count } = result.rows[0];
+
+      if (parseInt(total) >= 10 && parseInt(hf_count) === 10) {
+        const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Hardware Health Guardian'");
+        if (achievement.rows.length > 0) {
+          await awardAchievement(driver_id, achievement.rows[0].id);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[Engagement] Error checking Hardware Health Guardian achievement:', error);
   }
 }
 
