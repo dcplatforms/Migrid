@@ -2,7 +2,7 @@
 
 # MiGrid Platform Status Report
 
-**Version 10.1.6** • **June 2026**
+**Version 10.1.6** • **May 2026**
 
 [![Phase](https://img.shields.io/badge/Phase_6-AI_&_Optimization-orange.svg)](../docs/roadmap.md)
 [![Progress](https://img.shields.io/badge/Progress-84%25_Complete-blue.svg)](PLATFORM_STATUS.md)
@@ -36,7 +36,7 @@ Features Delivered:     █████████████████░�
 Standards Compliance:   ████████████████░░░░ 80%
 ```
 
-**82 of 98 features** delivered (Metric Audit June 2026)
+**82 of 98 features** delivered (Metric Audit May 2026)
 
 </td>
 </tr>
@@ -797,13 +797,13 @@ done
 
 | Layer | Service | Version | Status |
 | :--- | :--- | :--- | :--- |
-| **L1** | Physics Engine | `10.1.6` | ✅ Operational |
-| **L2** | Grid Signal | `2.5.5` | ✅ Operational |
-| **L3** | VPP Aggregator | `3.3.3` | ✅ Operational |
-| **L4** | Market Gateway | `3.8.9` | ✅ Operational |
+| **L1** | Physics Engine | `10.1.5` | ✅ Operational |
+| **L2** | Grid Signal | `2.5.4` | ✅ Operational |
+| **L3** | VPP Aggregator | `3.3.2` | ✅ Operational |
+| **L4** | Market Gateway | `3.8.8` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
-| **L6** | Engagement Engine | `5.18.0` | ✅ Operational |
-| **L7** | Device Gateway | `5.13.0` | ✅ Operational |
+| **L6** | Engagement Engine | `5.17.0` | ✅ Operational |
+| **L7** | Device Gateway | `5.12.0` | ✅ Operational |
 | **L8** | Energy Manager | `2.1.0` | ✅ Operational |
 | **L9** | Commerce Engine | `5.1.0` | ✅ Operational |
 | **L10**| Token Engine | `4.3.8` | ✅ Operational |
@@ -811,14 +811,15 @@ done
 
 ---
 
-## Latest Release Wins (June 2026)
+## Latest Release Wins (May 2026)
 
-- **L4 Market Gateway (v3.8.9)**: Implemented **Hardware Health Penalty** logic, reducing bidding confidence by 0.05 per regional alarm (capped at 0.3) to account for grid-edge instability.
-- **L10 Token Engine (v4.3.8)**: Hardened **Hardware Health Penalty** integration for rewards; refactored regional alarm scanning via ISO-normalized Redis lookups (`l4:regional:alarms:<ISO>`).
-- **L2 Grid Signal (v2.5.5)**: Integrated **site-specific grid safety locks** [L2-135], automatically rejecting OpenADR events for sites reporting 'CRITICAL' or 'HIGH' severity alarms.
-- **L1 Physics Engine (v10.1.6)**: Activated site-specific `l1:safety:lock` via Kafka consumer for `DER_ALARM_REPORTED`, ensuring edge-resilient safety for hardware-distressed assets.
-- **L7 Device Gateway (v5.13.0)**: Optimized **Heartbeat Hash Indexing** (`l7:heartbeats`) for scalable fleet tracking and standardized individual `NotifyDERAlarm` broadcasts for cross-layer bidding penalties.
-- **L6 Engagement Engine (v5.18.0)**: Deployed **'Hardware Health Guardian'** achievement, rewarding drivers for high-fidelity sessions at sites with zero regional hardware alarms.
+- **L1 Physics Engine (v10.1.5)**: Implemented **localSafetyCache [L1-133]** for sub-millisecond resilience and achieved Phase 6 telemetry parity via strict `.toFixed(4)` string formatting.
+- **L7 Device Gateway (v5.12.0)**: Deployed **localSafetyCache [L7-133]** for resilient dispatch; hardened DER alarm handling via OCPP 2.1 `NotifyDERAlarm` broadcasting and Heartbeat availability tracking.
+- **L10 Token Engine (v4.3.8)**: Expanded behavioral rewards to include `der_alarm_response` and `solar_ramp_response`; hardened telemetry via `safeFloat` and `.toFixed(4)` parity.
+- **L4 Market Gateway (v3.8.8)**: Implemented **localSafetyCache [L4-133]** for sub-millisecond bidding resilience; enforced high-fidelity telemetry standards with `safeFloat` utility.
+- **L2 Grid Signal (v2.5.4)**: Implemented **localSafetyCache [L2-133]** and 5s poller for resilient event handling; hardened telemetry parsing with `isNaN` protection.
+- **L5 Driver API (v4.1.0)**: Hardened `POST /auth/register` against IDOR via `fleet_id` UUID validation and database existence checks.
+- **L6 Engagement Engine (v5.17.0)**: Standardized site identification via `extractSiteId` and enforced strict string-formatting for all physics and confidence scores.
 
 ---
 
