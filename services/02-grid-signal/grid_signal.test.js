@@ -466,6 +466,35 @@ describe('L2 Grid Signal Service', () => {
     localSafetyCache.global_safety = false; // Reset
   });
 
+  test('POST /openadr/v3/events should reject when site-specific L1 safety lock is active (L2-135)', async () => {
+    const { localSafetyCache } = require('./index');
+    // Real-world behavior: raw site ID with hyphen should be preserved in cache
+    localSafetyCache.site_safety['SITE-LOCKED-99'] = true;
+
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({
+        reason: 'CRITICAL_DER_ALARM',
+        severity: 'CRITICAL'
+      }));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-site-lock',
+        type: 'demand-response',
+        site_id: 'SITE-LOCKED-99'
+      });
+
+    expect(response.status).toBe(503);
+    expect(response.body.status).toBe('REJECTED');
+    expect(response.body.reason).toBe('SAFETY_VIOLATION_L1');
+
+    localSafetyCache.site_safety['SITE-LOCKED-99'] = false; // Reset
+  });
+
   test('POST /openadr/v3/events should return 400 for invalid payload (Ajv Validation)', async () => {
     const response = await request(app)
       .post('/openadr/v3/events')
@@ -505,6 +534,7 @@ describe('L2 Grid Signal Service', () => {
     });
 
     expect(redisClient.setEx).toHaveBeenCalledWith('l1:safety:lock', 900, '1');
+    expect(redisClient.setEx).toHaveBeenCalledWith('l1:safety:lock:site:SITE-999', 900, '1');
     expect(redisClient.setEx).toHaveBeenCalledWith(
       'l1:safety:lock:context',
       900,
@@ -569,6 +599,32 @@ describe('L2 Grid Signal Service', () => {
       'l8:site:status:SITE-X',
       3600,
       'METER_OFFLINE'
+    );
+  });
+
+  test('startSafetyConsumer should handle CRITICAL DER_ALARM_REPORTED and set site lock (L2-135)', async () => {
+    const { consumer, startSafetyConsumer } = require('./index');
+    await startSafetyConsumer();
+
+    const eachMessage = consumer.run.mock.calls[0][0].eachMessage;
+
+    const criticalAlarm = {
+      site_id: 'SITE-ALARM-1',
+      severity: 'CRITICAL',
+      alarm_type: 'INVERTER_FAULT',
+      timestamp: new Date().toISOString()
+    };
+
+    await eachMessage({
+      topic: 'DER_ALARM_REPORTED',
+      message: { value: Buffer.from(JSON.stringify(criticalAlarm)) }
+    });
+
+    expect(redisClient.setEx).toHaveBeenCalledWith('l1:safety:lock:site:SITE-ALARM-1', 1800, '1');
+    expect(redisClient.setEx).toHaveBeenCalledWith(
+      'l1:safety:lock:site:SITE-ALARM-1:context',
+      1800,
+      expect.stringContaining('"reason":"CRITICAL_DER_ALARM"')
     );
   });
 
@@ -693,7 +749,7 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body.regional_stats.CAISO.vehicle_count).toBe(2);
     expect(response.body.regional_stats.CAISO.ev_count).toBe(1);
     expect(response.body.regional_stats.CAISO.bess_count).toBe(1);
-    expect(response.body.confidence_score).toBe(0.99);
+    expect(response.body.confidence_score).toBe("0.9900");
   });
 
   test('GET /openadr/v3/reports should return L8 site statuses (Optimized with SMEMBERS)', async () => {
