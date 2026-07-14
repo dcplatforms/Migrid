@@ -34,7 +34,10 @@ describe('BiddingOptimizer', () => {
     const lowLmp = 15.00;
     const capacityKw = 500; // 0.5 MW
 
-    mockRedisClient.get.mockResolvedValue(capacityKw.toString());
+    mockRedisClient.get.mockImplementation((key) => {
+      if (key === 'vpp:capacity:available') return Promise.resolve(capacityKw.toString());
+      return Promise.resolve(null);
+    });
     mockPricingService.getDayAheadForecast.mockResolvedValue([
       { location: 'SLAP_PGP2-APND', price_per_mwh: lowLmp, timestamp: new Date() }
     ]);
@@ -60,7 +63,10 @@ describe('BiddingOptimizer', () => {
     const highLmp = 30.00;
     const capacityKw = 500; // 0.5 MW
 
-    mockRedisClient.get.mockResolvedValue(capacityKw.toString());
+    mockRedisClient.get.mockImplementation((key) => {
+      if (key === 'vpp:capacity:available') return Promise.resolve(capacityKw.toString());
+      return Promise.resolve(null);
+    });
     mockPricingService.getDayAheadForecast.mockResolvedValue([
       { location: 'SLAP_PGP2-APND', price_per_mwh: highLmp, timestamp: new Date() }
     ]);
@@ -81,7 +87,10 @@ describe('BiddingOptimizer', () => {
 
   test('should handle multiple intervals in the day-ahead forecast', async () => {
     const capacityKw = 1000; // 1.0 MW
-    mockRedisClient.get.mockResolvedValue(capacityKw.toString());
+    mockRedisClient.get.mockImplementation((key) => {
+      if (key === 'vpp:capacity:available') return Promise.resolve(capacityKw.toString());
+      return Promise.resolve(null);
+    });
 
     const now = new Date();
     const forecast = [
@@ -185,7 +194,10 @@ describe('BiddingOptimizer', () => {
     const lmp = 40.00;
     const capacityKw = 500;
 
-    mockRedisClient.get.mockResolvedValue(capacityKw.toString());
+    mockRedisClient.get.mockImplementation((key) => {
+      if (key === 'vpp:capacity:available') return Promise.resolve(capacityKw.toString());
+      return Promise.resolve(null);
+    });
     mockPricingService.getDayAheadForecast.mockResolvedValue([
       { location: 'LOC1', price_per_mwh: lmp, timestamp: new Date() }
     ]);

@@ -53,6 +53,7 @@ class BiddingOptimizer {
 
     if (iso) {
       try {
+        const isoKey = iso.toUpperCase().replace(/-/g, '');
         // [L3 v3.3.0 Upgrade] Prioritize high-fidelity regional breakdown
         const hfKey = 'vpp:capacity:regional:high_fidelity';
         const legacyKey = 'vpp:capacity:regional';
@@ -61,8 +62,6 @@ class BiddingOptimizer {
           this.redisClient.get(hfKey),
           this.redisClient.get(legacyKey)
         ]);
-
-        const isoKey = iso.toUpperCase().replace(/-/g, '');
 
         // 1. Attempt high-fidelity lookup
         if (hfRaw) {
@@ -190,7 +189,13 @@ class BiddingOptimizer {
     // 1. Verify the Physics & Grid signals: Check for safety locks before bidding
     const locks = await this.getSafetyLockStatus(iso, siteId);
 
-    // 2. Fetch safety lock context for audit (L11 ML Engine readiness)
+    // 2. [L4 v3.8.9] Hardware Health Penalty logic
+    const alarmKey = `l4:regional:alarms:${isoKey}`;
+    const alarmCountRaw = await this.redisClient.get(alarmKey);
+    const regionalAlarmCount = parseInt(alarmCountRaw || '0');
+    const hardwarePenalty = Decimal.min(0.30, new Decimal(regionalAlarmCount).times(0.05));
+
+    // 3. Fetch safety lock context for audit (L11 ML Engine readiness)
     // [L4-133] Optimized: Use localCache for zero-latency audit metadata
     let physicsScore = this.localCache?.physics_score || "1.0000";
     let confidenceScore = this.localCache?.confidence_score || "1.0000";
@@ -242,7 +247,7 @@ class BiddingOptimizer {
     isSentinelFidelity = isSentinel(isSentinelFidelity, physicsScore);
     const capacityFidelity = isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD';
 
-    // 3. Handle Halted Bidding
+    // 5. Handle Halted Bidding
     if (locks.l1 || locks.l4) {
       const isHighFidelity = (parseFloat(physicsScore) > 0.95 || parseFloat(confidenceScore) > 0.95);
       const capacityFidelity = isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD';
@@ -384,7 +389,8 @@ class BiddingOptimizer {
         const greenPremium = isGreenHour ? new Decimal(greenPremiumValue) : new Decimal(0);
 
         if (lmpMwh.gt(degradationCostMwh.plus(greenPremium))) {
-          pBidMw = pVppMw.times(capacityMultiplier);
+          // [L4 v3.8.9] Apply Hardware Health Penalty to bid quantity
+          pBidMw = pVppMw.times(capacityMultiplier).times(new Decimal(1.0).minus(hardwarePenalty));
         }
       }
 
