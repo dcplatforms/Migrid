@@ -11,8 +11,8 @@
 | Priority | Feature / Task | Primary Layer | Blocking Dependencies | Target Phase |
 |:---:|:---|:---:|:---|:---:|
 | **P0** | **ML Demand Forecasting** | L11 (ML Engine) | ✅ Phase 6 Telemetry Parity (100%) | Phase 6 |
-| **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | ✅ L7 v5.11.0 localSafetyCache (100%) | Phase 5 |
-| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 v3.8.7 AI Readiness (100% Complete) | Phase 5 |
+| **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | ✅ L7 v5.12.0 localSafetyCache (100%) | Phase 5 |
+| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 v3.8.8 AI Readiness (100% Complete) | Phase 5 |
 | **P3** | **OCPI 2.2 Roaming** | L7 (Device) | ✅ L9 v5.1.0 tariff engine sync (100% Complete) | Phase 5 |
 | **P4** | **BESS RL Bidding** | L4 (Market) | 🚧 L3 BESS Integration (75% Complete) | Phase 6 |
 
@@ -34,13 +34,13 @@
 | Downstream Layer | Dependency | Upstream Source | Impact of Failure | Status |
 |:---|:---|:---|:---|:---|
 | **L11 ML Engine** | High-Fidelity Logs | **L1 Physics (v10.1.5)** | ML training data lacks regional context | ✅ Active |
-| **L5 Driver DX** | PnC Auth Status | **L7 Device Gateway** | Driver cannot use Plug & Charge sessions | ✅ Active |
+| **L5 Driver DX** | PnC Auth Status | **L7 Device Gateway (v5.12.0)** | Driver cannot use Plug & Charge sessions | ✅ Active |
 | **L9 Commerce** | Billing Reconciliation | **L1 Physics / L4 Market** | Inaccurate split-billing or tariff logic | ✅ Active |
 | **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.2 Active |
-| **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal (v2.5.3)** | Missing high-fidelity metadata for L11 | ✅ Active |
+| **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal (v2.5.4)** | Missing high-fidelity metadata for L11 | ✅ Active |
 | **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine (v5.17.0)** | Rewards fail for 'ISO Explorer' challenges | ✅ Sync |
-| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway (v3.8.7)** | VTN cannot see market-aware grid signals | ✅ Sync |
-| **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.3.7)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
+| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway (v3.8.8)** | VTN cannot see market-aware grid signals | ✅ Sync |
+| **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.3.8)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
 
 ---
 
@@ -56,7 +56,8 @@
 - [✓] **Contextual Safety Locks**: metadata-enriched `l1:safety:lock:context` in Redis.
 - [✓] **API Security**: Integrated `helmet` and secured `/data/training/physics`.
 
-### Layer 2: Grid Signal (v2.5.3)
+### Layer 2: Grid Signal (v2.5.4)
+- [✓] **[L2-133] Resilience**: Implemented `localSafetyCache` and 5s poller.
 - [✓] **Telemetry Hardening**: implemented `isNaN` protection for physics/confidence scores.
 - [✓] **L11 Parity**: enforced strict `.toFixed(4)` string formatting for audit trails.
 - [✓] **Secure Reporting**: authenticateToken and PII masking applied to `/openadr/v3/reports`.
@@ -68,7 +69,8 @@
 - [✓] **Multi-Site Parity**: Implemented `extractSiteId` for standardized site identification.
 - [~] **BESS Integration**: Support for stationary storage assets (75%).
 
-### Layer 4: Market Gateway (v3.8.7)
+### Layer 4: Market Gateway (v3.8.8)
+- [✓] **[L4-133] Resilience**: Implemented `localSafetyCache` for sub-millisecond bidding.
 - [✓] **ML Parity**: Enforced strict string formatting (`.toFixed(4)`) for all scores.
 - [✓] **NaN Protection**: Hardened bidding logic via `safeFloat` utility.
 - [✓] **Multi-Site Parity**: Hardened grid signal consumer with multi-key site identification.
@@ -84,14 +86,16 @@
 - [✓] **Solar Flare**: Achievement for 25 cumulative solar ramp responses.
 - [✓] **Sentinel Elite**: Achievement for 50 total sentinel-fidelity sessions.
 
-### Layer 7: Device Gateway (v5.11.0)
+### Layer 7: Device Gateway (v5.12.0)
 - [✓] **[L7-133] Resilience**: Implemented `localSafetyCache` for sub-millisecond dispatch.
+- [✓] **Heartbeat Tracking**: Persisted charger availability to Redis.
 - [✓] **DER Alarms**: Enhanced hardware-agnostic alarm handling via `NotifyDERAlarm`.
 - [✓] **ISO 15118-20**: Hardened Certificate Exchange and EMAID handling (100%).
 - [✓] **ML Parity**: Enforced strict string-formatted telemetry (.toFixed(4)).
 - [✓] **Security Hardening**: Integrated helmet() and updated Kafka tagging.
 
-### Layer 10: Token Engine (v4.3.7)
+### Layer 10: Token Engine (v4.3.8)
+- [✓] **Behavioral Expansion**: Added `der_alarm_response` and `solar_ramp_response`.
 - [✓] **Reward Batching**: Standardized atomic background worker for reward minting.
 - [✓] **ML Parity**: Enforced strict .toFixed(4) telemetry formatting.
 - [✓] **Site Awareness**: Standardized identification via `extractSiteId`.

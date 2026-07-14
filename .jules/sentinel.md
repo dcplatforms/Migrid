@@ -49,3 +49,8 @@
 **Vulnerability:** The `/data/training/capacity` endpoint in the VPP Aggregator service allowed any authenticated user (including drivers) to export global historical capacity data.
 **Learning:** While the endpoint was protected by `authenticateToken`, it lacked granular authorization checks. Drivers, whose tokens contain a `fleet_id`, could access aggregate data for the entire platform, which should be restricted to system-level or administrative roles.
 **Prevention:** Endpoints that export global or cross-tenant data must explicitly verify that the requesting user has the appropriate administrative privileges or a system-level token (e.g., by checking for the absence of tenant-restricting fields like `fleet_id`).
+
+## 2026-05-20 - [Relational IDOR in Public Registration]
+**Vulnerability:** The `POST /auth/register` endpoint accepted an unvalidated `fleet_id`, allowing users to register into any fleet.
+**Learning:** Public registration endpoints in multi-tenant systems often focus on input format (email, password strength) but neglect the relational integrity of tenant associations. While a database foreign key might catch the error, it leads to a generic 500 error and doesn't prevent a user from "guessing" a valid UUID of another fleet.
+**Prevention:** Always perform a pre-transaction check to verify that the target tenant ID (e.g., `fleet_id`) not only follows the correct format but actually exists and is authorized for new registrations.
