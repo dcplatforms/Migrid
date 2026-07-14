@@ -1,7 +1,7 @@
 # MiGrid Product Roadmap
 
-**Version:** 10.1.4
-**Last Updated:** April 2026
+**Version:** 10.1.6
+**Last Updated:** June 2026
 **License:** Apache 2.0
 
 ---
@@ -23,7 +23,7 @@ MiGrid is being developed across eight major phases spanning Q1 2025 through Q4 
 
 ---
 
-## Current Status (April 2026)
+## Current Status (June 2026)
 
 **Features Complete:** 82
 **In Progress:** 2
@@ -214,13 +214,13 @@ MiGrid is being developed across eight major phases spanning Q1 2025 through Q4 
 
 *Machine learning and predictive analytics*
 
-### v6.0.0 — AI Forecasting Engine (April 2026) 🔄 Active
+### v6.0.0 — AI Forecasting Engine (June 2026) 🔄 Active
 
 | Layer | Feature | Description | Status |
 |-------|---------|-------------|--------|
 | L11 | ML Engine Foundation | High-fidelity data pipelines and MLflow setup | ✅ Complete |
 | L3 | ML Demand Forecasting | Predict fleet energy demand 24-72h ahead | 🔄 Active |
-| L3 | Dynamic Pricing Optimizer | AI-driven bidding strategy optimization | 🔄 Active |
+| L4 | Dynamic Pricing Optimizer | AI-driven bidding strategy optimization | 🔄 Active |
 | L1 | Predictive Maintenance | Battery health & degradation forecasting | ✅ Complete |
 | L8 | Anomaly Detection | Real-time detection of charging anomalies | ✅ Complete |
 

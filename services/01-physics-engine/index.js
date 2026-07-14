@@ -56,6 +56,7 @@ const kafka = new Kafka({
   brokers: KAFKA_BROKERS,
 });
 const producer = kafka.producer();
+const consumer = kafka.consumer({ groupId: 'physics-engine-group' });
 
 // 3. Redis Connection (Local Sidecar)
 const redisClient = createClient({ url: REDIS_URL });
@@ -134,7 +135,22 @@ async function connectServices() {
     console.log('✅ [L1 Physics] Connected to PostgreSQL.');
 
     await producer.connect();
-    console.log('✅ [L1 Physics] Connected to Kafka.');
+    console.log('✅ [L1 Physics] Connected to Kafka Producer.');
+
+    await consumer.connect();
+    await consumer.subscribe({ topic: 'DER_ALARM_REPORTED', fromBeginning: false });
+    console.log('✅ [L1 Physics] Connected to Kafka Consumer.');
+
+    await consumer.run({
+      eachMessage: async ({ topic, partition, message }) => {
+        try {
+          const payload = JSON.parse(message.value.toString());
+          await handleDerAlarm(payload);
+        } catch (err) {
+          console.error('❌ [L1 Physics] Kafka Consumer Error:', err.message);
+        }
+      },
+    });
 
     await redisClient.connect();
     console.log('✅ [L1 Physics] Connected to Local Redis.');
@@ -198,10 +214,36 @@ function calculateConfidenceScore(streak, lastSync, siteLoadData) {
 }
 
 /**
+ * Handle DER_ALARM_REPORTED events from Kafka (L7)
+ * Activates site-specific safety lock for CRITICAL/HIGH alarms.
+ */
+async function handleDerAlarm(payload) {
+  const severity = (payload.severity || 'LOW').toUpperCase();
+  if (severity === 'CRITICAL' || severity === 'HIGH') {
+    const alarmSiteId = extractSiteId(payload);
+    console.log(`🚨 [L1 Physics] Received ${severity} DER Alarm for site ${alarmSiteId}. Activating Safety Lock.`);
+
+    try {
+      await redisClient.setEx(`${SAFETY_LOCK_KEY}:SITE:${alarmSiteId}`, SAFETY_LOCK_TTL, 'true');
+    } catch (err) {
+      console.error('❌ [L1 Physics] Failed to set site safety lock:', err.message);
+    }
+  }
+}
+
+/**
  * Helper: Standardize ISO region naming for cross-layer consistency
  */
 function normalizeIso(iso) {
   return (iso || 'CAISO').toUpperCase().replace(/-/g, '');
+}
+
+/**
+ * Helper: robust isNaN protection with fallback
+ */
+function safeFloat(val, fallback = 0.0) {
+  const parsed = parseFloat(val);
+  return isNaN(parsed) ? fallback : parsed;
 }
 
 /**
@@ -241,6 +283,26 @@ function calculatePhysicsMetadata(payload) {
     isPhysicsHighFidelity: physicsScore > 0.95,
     isSentinelFidelity: explicitSentinel || physicsScore > 0.99
   };
+}
+
+/**
+ * [L1-135] Handle DER Alarms from L7
+ * Activates site-specific safety locks for CRITICAL/HIGH alarms.
+ */
+async function handleDerAlarm(message) {
+  try {
+    const payload = JSON.parse(message.value.toString());
+    const { alarmType, severity, siteId } = payload;
+    const normalizedSiteId = siteId || extractSiteId(payload);
+
+    if (severity === 'CRITICAL' || severity === 'HIGH') {
+      console.log(`🚨 [L1 Physics] ${severity} Alarm Reported: ${alarmType} at ${normalizedSiteId}. Activating Site Lock.`);
+      const lockKey = `${SAFETY_LOCK_KEY}:SITE:${normalizedSiteId}`;
+      await redisClient.setEx(lockKey, SAFETY_LOCK_TTL, 'true');
+    }
+  } catch (err) {
+    console.error('❌ [L1 Physics] DER Alarm processing error:', err.message);
+  }
 }
 
 /**
@@ -299,10 +361,10 @@ async function handlePhysicsAlert(msg) {
   }
 
   // [L1-121] Fetch Site Load Data for Confidence Scoring
-  const alertSiteId = extractSiteId(payload) || extractSiteId(payload.metadata) || SITE_ID;
-  const buildingLoadKw = parseFloat(await redisClient.get(`site:${alertSiteId}:building_load_kw`)) || 0;
+  const alertSiteId = extractSiteId(payload.metadata || payload);
+  const buildingLoadKw = safeFloat(await redisClient.get(`site:${alertSiteId}:building_load_kw`));
   const siteConfig = await redisClient.hGetAll(`site:${alertSiteId}:config`) || {};
-  const limitKw = parseFloat(siteConfig.max_capacity_kw) || 0;
+  const limitKw = safeFloat(siteConfig.max_capacity_kw);
 
   const confidenceScore = calculateConfidenceScore(
     currentStreak,
@@ -325,7 +387,7 @@ async function handlePhysicsAlert(msg) {
         localSafetyCache.regional[isoRegion] = true;
       }
 
-      // [L1-135] Site-Specific Lock: Activate granular site isolation for L7 v5.13.0
+      // [L1-134] Site-Specific Lock: Always set site-specific lock for critical violations
       if (alertSiteId) {
         await redisClient.setEx(`${SAFETY_LOCK_KEY}:site:${alertSiteId}`, SAFETY_LOCK_TTL, 'true');
         localSafetyCache.site[alertSiteId] = true;
@@ -430,17 +492,13 @@ async function updateLocalSafetyCache() {
         const values = await redisClient.mGet(reply.keys);
         reply.keys.forEach((key, index) => {
           if (key === SAFETY_LOCK_CONTEXT_KEY) return;
-          const parts = key.split(':');
-          const value = (values[index] === 'true' || values[index] === '1');
 
-          if (parts.length > 3 && parts[3] === 'site') {
-            // [L1-135] Site-specific lock: l1:safety:lock:site:<SITE_ID>
-            const siteId = parts.slice(4).join(':');
-            newSiteLocks[siteId] = value;
+          if (key.startsWith(`${SAFETY_LOCK_KEY}:site:`)) {
+            const siteId = key.replace(`${SAFETY_LOCK_KEY}:site:`, '');
+            newSiteLocks[siteId] = (values[index] === 'true' || values[index] === '1');
           } else {
-            // Regional lock: l1:safety:lock:<ISO>
-            const iso = parts.pop().toUpperCase();
-            newRegionalLocks[iso] = value;
+            const iso = key.split(':').pop().toUpperCase();
+            newRegionalLocks[iso] = (values[index] === 'true' || values[index] === '1');
           }
         });
       }
@@ -507,10 +565,10 @@ async function reconcileLogs() {
       // [L1-124] Re-calculate scores for high-fidelity reconciliation
       // Note: We use the stored scores if available (Hardened Offline Mode)
       const physicsMetadata = calculatePhysicsMetadata(payload);
-      const physicsScore = payload.physics_score ? safeFloat(payload.physics_score) : physicsMetadata.physicsScore;
-      const isPhysicsHighFidelity = parseFloat(physicsScore) > 0.95;
-      const confidenceScore = payload.confidence_score ? safeFloat(payload.confidence_score) : safeFloat(0.5);
-      const isHighFidelity = isPhysicsHighFidelity || parseFloat(confidenceScore) > 0.95;
+      const physicsScore = payload.physics_score ? safeFloat(payload.physics_score).toFixed(4) : physicsMetadata.physicsScore;
+      const isPhysicsHighFidelity = safeFloat(physicsScore) > 0.95;
+      const confidenceScore = payload.confidence_score ? safeFloat(payload.confidence_score).toFixed(4) : (0.5).toFixed(4);
+      const isHighFidelity = isPhysicsHighFidelity || safeFloat(confidenceScore) > 0.95;
       // [L1-130] Sentinel Hardening: Support boolean, string, and integer (1) formats
       const explicitSentinel = payload.is_sentinel_fidelity === true ||
                                payload.is_sentinel_fidelity === 'true' ||
@@ -636,9 +694,9 @@ async function syncDigitalTwin() {
 
       // [L1-125] Multi-Site Awareness: Cache site load data for performance
       if (!siteCache.has(vehicleSiteId)) {
-        const buildingLoadKw = parseFloat(await redisClient.get(`site:${vehicleSiteId}:building_load_kw`)) || 0;
+        const buildingLoadKw = safeFloat(await redisClient.get(`site:${vehicleSiteId}:building_load_kw`));
         const siteConfig = await redisClient.hGetAll(`site:${vehicleSiteId}:config`) || {};
-        const limitKw = parseFloat(siteConfig.max_capacity_kw) || 0;
+        const limitKw = safeFloat(siteConfig.max_capacity_kw);
         siteCache.set(vehicleSiteId, { loadKw: buildingLoadKw, limitKw });
         console.log(`📡 [L1 Physics] Cached site data for ${vehicleSiteId}: ${buildingLoadKw}kW / ${limitKw}kW`);
       }
@@ -671,10 +729,10 @@ async function syncDigitalTwin() {
         }
       }
 
-      const physicsScore = safeFloat(vehicle.physics_score || 1.0);
+      const physicsScore = safeFloat(vehicle.physics_score, 1.0).toFixed(4);
 
       // [L1-124] April 2026 High-Fidelity Standard
-      const isHighFidelity = parseFloat(physicsScore) > 0.95 || parseFloat(confidenceScore) > 0.95;
+      const isHighFidelity = safeFloat(physicsScore) > 0.95 || safeFloat(confidenceScore) > 0.95;
       // [L1-130] Sentinel Hardening: Support boolean, string, and integer (1) formats
       const explicitSentinel = vehicle.is_sentinel_fidelity === true ||
                                vehicle.is_sentinel_fidelity === 'true' ||
@@ -744,9 +802,13 @@ module.exports = {
   app,
   localSafetyCache,
   updateLocalSafetyCache,
+  handleDerAlarm,
   handlePhysicsAlert,
+  handleDerAlarm,
   calculatePhysicsMetadata,
+  safeFloat,
   producer,
+  consumer,
   connectServices,
   syncDigitalTwin,
   reconcileLogs,
@@ -759,6 +821,7 @@ module.exports = {
 process.on('SIGTERM', async () => {
   await pgClient.end();
   await producer.disconnect();
+  await consumer.disconnect();
   await redisClient.quit();
   process.exit(0);
 });
