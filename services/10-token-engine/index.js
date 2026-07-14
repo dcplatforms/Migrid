@@ -197,7 +197,7 @@ async function checkIdempotency(driverId, triggeringEventId, ruleId) {
 /**
  * [L10 v4.3.8] safeFloat: Robust isNaN protection for telemetry scoring
  * Enforces strict 4-decimal string formatting.
- * Default fallback is 0.0 to uphold "Proof of Physics equals Proof of Value".
+ * Default fallback is '0.0000' to uphold "Proof of Physics equals Proof of Value".
  */
 function safeFloat(val, fallback = 0.0) {
   const parsed = parseFloat(val);
