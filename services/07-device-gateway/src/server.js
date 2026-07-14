@@ -32,7 +32,7 @@ const localConnections = new Map();
 const localSafetyCache = {
   global: false,
   regional: {}, // Maps ISO region (e.g., CAISO) to boolean lock status
-  site: {}     // Maps siteId to boolean lock status
+  site_safety: {} // [L7-v5.13.0] Site-specific locks from L1/L2
 };
 
 async function updateLocalSafetyCache() {
@@ -40,13 +40,29 @@ async function updateLocalSafetyCache() {
     const globalLock = await redis.get('l1:safety:lock');
     localSafetyCache.global = (globalLock === 'true' || globalLock === '1');
 
-    // Scan for all regional and site grid locks (L1/L4 sync)
+    // [L7-v5.13.0] Sync site-specific safety locks
+    let siteCursor = '0';
+    const newSiteLocks = {};
+    do {
+      const [newCursor, keys] = await redis.scan(siteCursor, 'MATCH', 'l1:safety:lock:site:*', 'COUNT', 100);
+      siteCursor = newCursor;
+      if (keys.length > 0) {
+        const values = await redis.mget(keys);
+        keys.forEach((key, index) => {
+          const siteId = key.split(':').pop();
+          newSiteLocks[siteId] = (values[index] === 'true' || values[index] === '1');
+        });
+      }
+    } while (siteCursor !== '0');
+    localSafetyCache.site_safety = newSiteLocks;
+
+    // Scan for all regional grid locks (L4 sync)
     let cursor = '0';
     const newRegionalLocks = {};
     const newSiteLocks = {};
 
     do {
-      const [newCursor, keys] = await redis.scan(cursor, 'MATCH', 'l*:*lock:*', 'COUNT', 200);
+      const [newCursor, keys] = await redis.scan(cursor, 'MATCH', 'l4:grid:lock:*', 'COUNT', 100);
       cursor = newCursor;
       if (keys.length > 0) {
         const values = await redis.mget(keys);
@@ -62,6 +78,21 @@ async function updateLocalSafetyCache() {
         });
       }
     } while (cursor !== '0');
+
+    // Scan for all site-specific safety locks (L1 sync) [L7-135]
+    let siteCursor = '0';
+    const newSiteLocks = {};
+    do {
+      const [newCursor, keys] = await redis.scan(siteCursor, 'MATCH', 'l1:safety:lock:site:*', 'COUNT', 100);
+      siteCursor = newCursor;
+      if (keys.length > 0) {
+        const values = await redis.mget(keys);
+        keys.forEach((key, index) => {
+          const siteId = key.split(':').pop();
+          newSiteLocks[siteId] = (values[index] === 'true' || values[index] === '1');
+        });
+      }
+    } while (siteCursor !== '0');
 
     localSafetyCache.regional = newRegionalLocks;
     localSafetyCache.site = newSiteLocks;
@@ -281,15 +312,21 @@ async function sendSetChargingProfile(chargePointId, limitKw, mode) {
     const isoRegion = connection.isoRegion || 'CAISO';
     const siteId = connection.siteId;
 
+    // [L7-v5.13.0] Enforce site-specific safety locks
+    if (siteId && localSafetyCache.site_safety[siteId]) {
+        console.warn(`🛑 [L7] Control Signal HALTED for ${chargePointId}. Site Safety Lock for ${siteId} is ACTIVE (Cached).`);
+        return;
+    }
+
     // [L7-133] Use local cache for sub-millisecond grid lock verification
     if (localSafetyCache.regional[isoRegion]) {
         console.warn(`🛑 [L7] Control Signal HALTED for ${chargePointId}. L4 GRID LOCK in ${isoRegion} is ACTIVE (Cached).`);
         return;
     }
 
-    // [L7-135] Enforce site-specific safety isolation
+    // [L7-135] Site-specific safety isolation: Verify site-level locks from L1
     if (siteId && localSafetyCache.site[siteId]) {
-        console.warn(`🛑 [L7] Control Signal HALTED for ${chargePointId}. L1 SITE LOCK for ${siteId} is ACTIVE (Cached).`);
+        console.warn(`🛑 [L7] Control Signal HALTED for ${chargePointId}. Site-Specific Safety Lock (Site: ${siteId}) is ACTIVE.`);
         return;
     }
 

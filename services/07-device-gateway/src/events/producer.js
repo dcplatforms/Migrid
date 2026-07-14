@@ -17,13 +17,12 @@ const extractSiteId = (payload) => {
 };
 
 /**
- * [L7 v5.13.0] safeFloat: Robust isNaN protection and 4-decimal string formatting
- * Enforces MiGrid Phase 6 ML parity standard.
+ * [L7 v5.13.0] safeFloat: Robust isNaN protection for telemetry scoring
+ * Returns string formatted to 4 decimal places for ML parity.
  */
 const safeFloat = (val, fallback = 0.0) => {
     const parsed = parseFloat(val);
-    const result = isNaN(parsed) ? fallback : parsed;
-    return result.toFixed(4);
+    return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
 };
 
 async function connectProducer() {
@@ -119,7 +118,7 @@ async function publishTelemetry(chargePointId, payload, protocol = 'ocpp2.1') {
 
     // 2. Standardized Output: Broadcast a unified schema to Kafka
     // [L1-127] Standardize all energy/power values to 4 decimal places for L11 ML Engine parity
-    // safeFloat (v5.13.0) returns a string formatted to 4 decimals.
+    // Values are already string-formatted via safeFloat()
     event = {
         chargePointId,
         site_id: siteId,
@@ -162,6 +161,11 @@ async function publishSessionEvent(type, payload) {
         iso_region: isoRegion,
         site_id: siteId
     };
+
+    // [L1-127] Ensure energy telemetry is string-formatted to 4 decimal places
+    if (enrichedPayload.energyDispensedKwh !== undefined) {
+        enrichedPayload.energyDispensedKwh = safeFloat(enrichedPayload.energyDispensedKwh);
+    }
 
     // For auditing and high-fidelity verification (L11 ML readiness)
     if (type === 'SESSION_COMPLETED') {

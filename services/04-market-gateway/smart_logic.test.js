@@ -27,7 +27,10 @@ describe('BiddingOptimizer Smart Logic', () => {
 
   test('Carbon-Aware: should apply green premium when renewables are high', async () => {
     const capacityKw = 1000;
-    mockRedisClient.get.mockResolvedValue(capacityKw.toString());
+    mockRedisClient.get.mockImplementation((key) => {
+      if (key === 'vpp:capacity:available') return Promise.resolve(capacityKw.toString());
+      return Promise.resolve(null);
+    });
 
     // High renewables (> 60%)
     mockPricingService.getLatestFuelMix.mockResolvedValue([
@@ -56,7 +59,10 @@ describe('BiddingOptimizer Smart Logic', () => {
 
   test('DA/RT Arbitrage: should hold 30% capacity when volatility is high', async () => {
     const capacityKw = 1000;
-    mockRedisClient.get.mockResolvedValue(capacityKw.toString());
+    mockRedisClient.get.mockImplementation((key) => {
+      if (key === 'vpp:capacity:available') return Promise.resolve(capacityKw.toString());
+      return Promise.resolve(null);
+    });
 
     mockPricingService.getLatestFuelMix.mockResolvedValue([]);
 

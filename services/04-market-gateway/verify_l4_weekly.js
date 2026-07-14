@@ -1,86 +1,86 @@
 const redis = require('redis');
 const axios = require('axios');
+const BiddingOptimizer = require('./BiddingOptimizer');
 
 async function verify() {
   const redisClient = redis.createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
   await redisClient.connect();
 
-  console.log('--- Testing Regional Lock Reporting ---');
+  console.log('--- Testing Regional & Site Lock Reporting (v3.8.9) ---');
   await redisClient.setEx('l4:grid:lock:CAISO', 60, 'true');
-  await redisClient.setEx('l4:grid:lock:ERCOT', 60, '1');
+  await redisClient.setEx('l1:safety:lock:site:SITE-ALPHA', 60, 'true');
 
-  // Note: Since we can't easily start the server and wait, we'll mock the logic
-  // or just rely on the fact that the unit tests passed for BiddingOptimizer
-  // and we've manually verified the code.
-  // However, I can verify the Redis scanning logic works as expected.
+  const { localSafetyCache, updateLocalSafetyCache } = require('./index');
 
-  let regionalLocks = {};
-  let cursor = 0;
-  const pattern = 'l4:grid:lock:*';
-  do {
-    const result = await redisClient.scan(cursor, { MATCH: pattern, COUNT: 100 });
-    cursor = result.cursor;
-    for (const key of result.keys) {
-      const region = key.split(':').pop();
-      const value = await redisClient.get(key);
-      if (value === 'true' || value === '1') {
-        regionalLocks[region] = true;
-      }
-    }
-  } while (cursor !== 0);
+  // Need to wait for scan to complete
+  await updateLocalSafetyCache();
 
-  console.log('Detected Regional Locks:', regionalLocks);
-  if (regionalLocks.CAISO && regionalLocks.ERCOT) {
-    console.log('✅ Regional lock scanning verified.');
+  console.log('Local Safety Cache (L4 Regional):', localSafetyCache.l4_regional);
+  console.log('Local Safety Cache (Site Safety):', localSafetyCache.site_safety);
+
+  if (localSafetyCache.l4_regional.CAISO && localSafetyCache.site_safety['SITE-ALPHA']) {
+    console.log('✅ Regional and Site lock scanning verified.');
   } else {
-    console.error('❌ Regional lock scanning FAILED.');
+    console.error('❌ Regional and Site lock scanning FAILED.');
   }
 
-  console.log('\n--- Testing Bidding Auditability (v3.7.0) ---');
-  const BiddingOptimizer = require('./BiddingOptimizer');
-  const optimizer = new BiddingOptimizer(null, process.env.REDIS_URL || 'redis://localhost:6379');
+  const optimizer = new BiddingOptimizer(null, process.env.REDIS_URL || 'redis://localhost:6379', localSafetyCache);
 
-  // Mock regional capacity with high fidelity
-  const regionalCapacity = {
-    'CAISO': { capacity: 500, is_high_fidelity: true },
-    'PJM': { capacity: 200, is_high_fidelity: false }
-  };
-  await redisClient.set('vpp:capacity:regional', JSON.stringify(regionalCapacity));
+  console.log('\n--- Testing Site-Specific Bidding Halted ---');
+  const siteLockResult = await optimizer.generateDayAheadBids('PJM', 'SITE-ALPHA');
+  if (siteLockResult.audit.locks.l1 === true && siteLockResult.bids.length === 0) {
+    console.log('✅ Site-specific bidding halt verified.');
+  } else {
+    console.error('❌ Site-specific bidding halt FAILED.');
+  }
 
-  // Mock safety lock context
-  const lockContext = {
-    event_type: 'NORMAL_OPERATION',
-    physics_score: 0.98,
-    severity: 'LOW'
-  };
-  await redisClient.set('l1:safety:lock:context', JSON.stringify(lockContext));
+  const nonLockedSiteResult = await optimizer.generateDayAheadBids('PJM', 'SITE-BETA');
+  if (nonLockedSiteResult.audit.locks.l1 === false) {
+    console.log('✅ Site-specific non-interference verified.');
+  } else {
+    console.error('❌ Site-specific non-interference FAILED.');
+  }
 
-  // Mock pricing service for optimizer
+  console.log('\n--- Testing Hardware Health Penalty (v3.8.9) ---');
+  // Set 3 alarms for ERCOT -> 0.15 penalty
+  await redisClient.set('l4:regional:alarms:ERCOT', '3');
+
+  // Mock pricing for ERCOT
   optimizer.pricingService.getDayAheadForecast = async () => [
-    { location: 'NODE1', price_per_mwh: 50.00, timestamp: new Date() }
+    { location: 'TEXAS_NODE', price_per_mwh: 100.00, timestamp: new Date() }
   ];
 
-  const result = await optimizer.generateDayAheadBids('CAISO');
-  console.log('CAISO Bidding Audit:', JSON.stringify(result.audit, null, 2));
+  const ercotResult = await optimizer.generateDayAheadBids('ERCOT');
+  console.log('ERCOT Confidence Score (Expected ~0.85):', ercotResult.audit.confidence_score);
+  console.log('ERCOT Hardware Penalty (Expected 0.15):', ercotResult.audit.hardware_penalty);
+  console.log('ERCOT Alarm Count (Expected 3):', ercotResult.audit.regional_alarm_count);
 
-  if (result.audit && result.audit.physics_score === 0.98 && result.audit.capacity_fidelity === 'HIGH_FIDELITY') {
-    console.log('✅ Bidding auditability (v3.7.0) verified.');
+  if (parseFloat(ercotResult.audit.confidence_score) <= 0.85 && ercotResult.audit.hardware_penalty === '0.1500') {
+    console.log('✅ Hardware Health Penalty verified.');
   } else {
-    console.error('❌ Bidding auditability (v3.7.0) FAILED.');
+    console.error('❌ Hardware Health Penalty FAILED.');
   }
 
-  const resultPjm = await optimizer.generateDayAheadBids('PJM');
-  if (resultPjm.audit.capacity_fidelity === 'STANDARD') {
-    console.log('✅ Regional fidelity tracking verified.');
+  console.log('\n--- Testing Penalty Cap (v3.8.9) ---');
+  // Set 10 alarms -> 0.50 penalty -> Capped at 0.30
+  await redisClient.set('l4:regional:alarms:PJM', '10');
+  const pjmResult = await optimizer.generateDayAheadBids('PJM');
+  console.log('PJM Hardware Penalty (Expected 0.30):', pjmResult.audit.hardware_penalty);
+  if (pjmResult.audit.hardware_penalty === '0.3000') {
+    console.log('✅ Hardware Health Penalty cap verified.');
   } else {
-    console.error('❌ Regional fidelity tracking FAILED.');
+    console.error('❌ Hardware Health Penalty cap FAILED.');
   }
 
+  // Cleanup
   await redisClient.del('l4:grid:lock:CAISO');
-  await redisClient.del('l4:grid:lock:ERCOT');
-  await redisClient.del('vpp:capacity:regional');
-  await redisClient.del('l1:safety:lock:context');
+  await redisClient.del('l1:safety:lock:site:SITE-ALPHA');
+  await redisClient.del('l4:regional:alarms:ERCOT');
+  await redisClient.del('l4:regional:alarms:PJM');
   await redisClient.quit();
 }
 
-verify().catch(console.error);
+verify().catch(err => {
+    console.error(err);
+    process.exit(1);
+});

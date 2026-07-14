@@ -38,10 +38,13 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                 break;
 
             case 'Heartbeat':
-                // [L7-137] Optimized Heartbeat Tracking via Redis Hash
-                await redis.hset('l7:heartbeats', chargePointId, new Date().toISOString());
+                // Update Redis with the last heartbeat timestamp for availability tracking
+                // [L7-v5.13.0] Optimized Heartbeat indexing via Redis Hash for scalability
+                const timestamp = new Date().toISOString();
+                await redis.set(`charger_heartbeat:${chargePointId}`, timestamp, 'EX', 86400);
+                await redis.hset('l7:heartbeats', chargePointId, timestamp);
                 ws.send(JSON.stringify([3, messageId, {
-                    currentTime: new Date().toISOString()
+                    currentTime: timestamp
                 }]));
                 break;
 
@@ -149,18 +152,18 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
 
             case 'NotifyDERAlarm':
                 // OCPP 2.1 DER Control: Handle alarms from local solar/BESS
-                console.log(`[L7] DER Alarms received from ${chargePointId}:`, payload.alarms?.length || 0);
+                console.log(`[L7] DER Alarm received from ${chargePointId}:`, payload.alarms);
 
-                // [L7-136] Broadcast individual DER alarms to Kafka with root-level severity
+                // [L7-v5.13.0] Normalize DER alarms for L4 hardware health parity
+                // Broadcast individual alarms to Kafka for L1/L4/L8 awareness
                 if (payload.alarms && Array.isArray(payload.alarms)) {
                     for (const alarm of payload.alarms) {
                         await publishSessionEvent('DER_ALARM_REPORTED', {
                             chargePointId,
-                            alarmType: alarm.alarmType,
+                            alarmType: alarm.code,
                             severity: alarm.severity,
-                            status: alarm.status,
-                            timestamp: new Date().toISOString(),
-                            metadata: alarm
+                            message: alarm.message,
+                            timestamp: new Date().toISOString()
                         });
                     }
                 }
