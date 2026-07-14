@@ -61,6 +61,16 @@ function extractSiteId(payload) {
   return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
 }
 
+/**
+ * [L10 v4.3.8] safeFloat: Robust isNaN protection for telemetry scoring
+ * Enforces strict 4-decimal string formatting.
+ * Default fallback is 0.0 to uphold "Proof of Physics equals Proof of Value".
+ */
+function safeFloat(val, fallback = 0.0) {
+  const parsed = parseFloat(val);
+  return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
+}
+
 // --- Helper Functions for Database Interaction ---
 
 async function getRewardRule(actionType) {
@@ -521,10 +531,6 @@ async function start() {
           let multiplierReason = 'Standard Reward';
           let penaltyResult = null;
 
-          // Robust payload validation and parsing for persistence
-          const physicsScorePersist = physicsScoreVal;
-          const confidenceScorePersist = confidenceScoreVal;
-
           if (physicsScoreNum !== null && isNaN(physicsScoreNum)) {
             console.warn(`[L10 Audit] Received invalid physics_score for event ${event_id}. Skipping.`);
             return;
@@ -549,7 +555,7 @@ async function start() {
           }
           rule_id = rule ? rule.rule_id : '00000000-0000-0000-0000-000000000000';
 
-          // 2. Idempotency Check (Fixed parameter order: driver_id, event_id, rule_id)
+          // 2. Idempotency Check
           const existingReward = await checkIdempotency(driver_id, event_id, rule_id);
           if (existingReward) {
             console.log(`[L10 Idempotency] Reward already exists for ${action_type} (Event: ${event_id}). Status: ${existingReward.status}. Skipping.`);
@@ -562,7 +568,7 @@ async function start() {
             console.log(`[L10] Behavioral ${action_type} by driver ${driver_id}. Awarding ${pointsAwarded.toNumber()} tokens. [Resource: ${resourceTypeVal}]`);
           } else {
             // Proof of Physics Gate: Energy-based rewards must have verified physics
-            if (physicsScorePersist !== null) {
+            if (physicsScoreNum !== null) {
               const fidelityStatus = isHighFidelityPersist ? 'HIGH_FIDELITY' : 'STANDARD';
 
               if (parseFloat(physicsScorePersist) <= 0.0) {
@@ -607,10 +613,10 @@ async function start() {
           pointsAwarded.toNumber(),
           'queued',
           iso,
-          physicsScorePersist,
+          physicsScoreNum, // logRewardTransaction handles safeFloat internally
           isHighFidelityPersist,
           multiplierReason,
-          confidenceScorePersist,
+          confidenceScoreNum,
           resourceTypeVal,
           isSentinelFidelityPersist,
           siteIdVal,
