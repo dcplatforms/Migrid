@@ -90,7 +90,7 @@ REDIS_URL=redis://localhost:6379
 - [x] **L8 Safe Mode Integration**: Site-level exclusion from aggregation during meter offline events.
 - [x] **Contextual Safety Locks**: Respects L1 `l1:safety:lock:context` for granular physics enforcement.
 - [x] **Physics-Aware Forecasting**: Factor L1 variance data (physics_score) into capacity predictions and reporting.
-- [x] **High-Fidelity Alignment (v3.3.1)**: Integrated `confidence_score` and `(physics_score > 0.95 || confidence_score > 0.95)` audit standards.
+- [x] **High-Fidelity Alignment (v3.3.3)**: Integrated `safeFloat` utility and enforced strict `.toFixed(4)` string formatting for telemetry parity.
 - [x] **Real-Time Event Re-aggregation**: Added Kafka `charging_events` handlers for instant capacity updates on charger connect/disconnect.
 
 ## Phase 6 Backlog: AI & Optimization (Q2 2026)

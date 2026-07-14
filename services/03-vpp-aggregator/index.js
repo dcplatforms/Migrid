@@ -142,10 +142,10 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
     // Check Safe Mode sites from L8
     const safeModeSites = await getSafeModeSites();
 
-    // L1 Physics Confidence Derating & High-Fidelity Alignment (v3.3.1)
+    // L1 Physics Confidence Derating & High-Fidelity Alignment (v3.3.3)
     let physicsMultiplier = 1.0;
-    let physicsScoreVal = 1.0;
-    let confidenceScoreVal = 1.0;
+    let physicsScoreRaw = 1.0;
+    let confidenceScoreRaw = 1.0;
     let isHighFidelity = true;
     let isSentinelFidelity = false;
 
@@ -156,15 +156,21 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
         confidenceScoreVal = parseFloat(safeFloat(context.confidence_score, 1.0));
 
         // High-Fidelity Standard: (physics_score > 0.95 OR confidence_score > 0.95)
-        isHighFidelity = physicsScoreVal > 0.95 || confidenceScoreVal > 0.95;
+        isHighFidelity = physicsScoreRaw > 0.95 || confidenceScoreRaw > 0.95;
 
         // Sentinel Fidelity: (physics_score > 0.99 OR explicit flag)
-        isSentinelFidelity = context.is_sentinel_fidelity === true || context.is_sentinel_fidelity === 'true' || context.is_sentinel_fidelity === 1 || physicsScoreVal > 0.99;
+        isSentinelFidelity = context.is_sentinel_fidelity === true || context.is_sentinel_fidelity === 'true' || context.is_sentinel_fidelity === 1 || physicsScoreRaw > 0.99;
 
         // Apply the lower of the two as the capacity derating factor
-        physicsMultiplier = Math.min(physicsScoreVal, confidenceScoreVal);
+        // If either is NaN, Math.min returns NaN. We should use safe values for the multiplier.
+        const safeP = isNaN(physicsScoreRaw) ? 0.0 : physicsScoreRaw;
+        const safeC = isNaN(confidenceScoreRaw) ? 0.0 : confidenceScoreRaw;
+        physicsMultiplier = Math.min(safeP, safeC);
       } catch (e) {}
     }
+
+    const physicsScoreVal = safeFloat(physicsScoreRaw, 1.0);
+    const confidenceScoreVal = safeFloat(confidenceScoreRaw, 1.0);
 
     const result = await pool.query(`
       SELECT
@@ -190,8 +196,8 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
     const response = {
       available_capacity_kwh: totalCapacityKwh,
       available_capacity_kw: totalCapacityKwh, // Assuming 1-hour discharge for kW estimate
-      physics_score: physicsScoreVal.toFixed(4),
-      confidence_score: confidenceScoreVal.toFixed(4),
+      physics_score: physicsScoreVal,
+      confidence_score: confidenceScoreVal,
       physics_multiplier: physicsMultiplier,
       is_high_fidelity: isHighFidelity,
       is_sentinel_fidelity: isSentinelFidelity,
@@ -268,7 +274,7 @@ const updateGlobalCapacity = async () => {
     let lockedFleetId = null;
     let physicsMultiplier = 1.0;
 
-    let confidenceScore = 1.0;
+    let rawConfidenceScore = 1.0;
     let rawPhysicsScore = 1.0;
     let isSentinelFidelity = false;
 
@@ -288,11 +294,16 @@ const updateGlobalCapacity = async () => {
         isSentinelFidelity = context.is_sentinel_fidelity === true || context.is_sentinel_fidelity === 'true' || context.is_sentinel_fidelity === 1 || rawPhysicsScore > 0.99;
 
         // Apply the lower of the two as the global capacity derating factor
-        physicsMultiplier = Math.min(rawPhysicsScore, confidenceScore);
+        const safeP = isNaN(rawPhysicsScore) ? 0.0 : rawPhysicsScore;
+        const safeC = isNaN(rawConfidenceScore) ? 0.0 : rawConfidenceScore;
+        physicsMultiplier = Math.min(safeP, safeC);
       } catch (e) {
         console.error('[VPP Aggregator] Failed to parse safety context in background job:', e.message);
       }
     }
+
+    const physicsScoreVal = safeFloat(rawPhysicsScore, 1.0);
+    const confidenceScoreVal = safeFloat(rawConfidenceScore, 1.0);
 
     if (isLocked) {
         await redisClient.set('vpp:capacity:available', '0');
@@ -330,7 +341,7 @@ const updateGlobalCapacity = async () => {
     const regionalCapacity = {};
 
     // High-Fidelity Alignment Standard: (physics_score > 0.95 OR confidence_score > 0.95)
-    const isHighFidelity = (rawPhysicsScore > 0.95 || confidenceScore > 0.95);
+    const isHighFidelity = (rawPhysicsScore > 0.95 || rawConfidenceScore > 0.95);
 
     result.rows.forEach(row => {
       // ISO Normalization: Uppercase and remove hyphens (e.g., 'ENTSO-E' to 'ENTSOE')
@@ -348,8 +359,8 @@ const updateGlobalCapacity = async () => {
           bess: 0,
           is_high_fidelity: isHighFidelity,
           is_sentinel_fidelity: isSentinelFidelity,
-          physics_score: rawPhysicsScore.toFixed(4),
-          confidence_score: confidenceScore.toFixed(4)
+          physics_score: physicsScoreVal,
+          confidence_score: confidenceScoreVal
         };
       }
 

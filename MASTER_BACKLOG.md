@@ -66,6 +66,7 @@
 - [✓] **Redis Capacity Cache**: Sub-50ms reporting for L4 bidding.
 - [✓] **Fuse Rule 2.0**: 20% SoC hard floor integrated into capacity formula.
 - [✓] **Multi-Site Parity**: Implemented `extractSiteId` for standardized site identification.
+- [✓] **ML Parity**: Enforced strict .toFixed(4) string formatting via `safeFloat`.
 - [~] **BESS Integration**: Support for stationary storage assets (75%).
 
 ### Layer 4: Market Gateway (v3.8.8)
