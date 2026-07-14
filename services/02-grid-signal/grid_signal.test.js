@@ -140,7 +140,7 @@ describe('L2 Grid Signal Service', () => {
     expect(sentValue.billing_mode).toBe('V2G_OPTIMIZED');
   });
 
-  test('POST /openadr/v3/events should include physics_score and confidence_score in broadcast (v2.5.0)', async () => {
+  test('POST /openadr/v3/events should include physics_score and confidence_score in broadcast (v2.5.5)', async () => {
     redisClient.get.mockImplementation((key) => {
       if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({ physics_score: '0.9850' }));
       return Promise.resolve(null);
@@ -156,7 +156,7 @@ describe('L2 Grid Signal Service', () => {
 
     expect(response.status).toBe(202);
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
-    expect(sentValue.physics_score).toBe('0.9850'); // L2 v2.5.0: String formatting
+    expect(sentValue.physics_score).toBe('0.9850'); // L2 v2.5.5: String formatting
     expect(sentValue.confidence_score).toBe('0.9850');
     expect(sentValue.fidelity_status).toBe('HIGH_FIDELITY');
   });
@@ -177,7 +177,7 @@ describe('L2 Grid Signal Service', () => {
 
     expect(response.status).toBe(202);
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
-    expect(sentValue.physics_score).toBe('0.8500'); // L2 v2.5.0: String formatting
+    expect(sentValue.physics_score).toBe('0.8500'); // L2 v2.5.5: String formatting
     expect(sentValue.fidelity_status).toBe('STANDARD');
   });
 
@@ -880,7 +880,7 @@ describe('L2 Grid Signal Service', () => {
     expect(sentValue.der_control.set_point_kw).toBe(150.5);
   });
 
-  test('POST /openadr/v3/events should prioritize explicit confidence_score (v2.5.0)', async () => {
+  test('POST /openadr/v3/events should prioritize explicit confidence_score (v2.5.5)', async () => {
     redisClient.get.mockImplementation((key) => {
       if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({
         physics_score: '0.9850',
@@ -899,7 +899,7 @@ describe('L2 Grid Signal Service', () => {
 
     expect(response.status).toBe(202);
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
-    expect(sentValue.confidence_score).toBe('0.9999'); // L2 v2.5.0: String formatting
+    expect(sentValue.confidence_score).toBe('0.9999'); // L2 v2.5.5: String formatting
   });
 
   test('startSafetyConsumer should enforce 10% variance lock for BESS (Phase 5/6 Alignment)', async () => {
@@ -929,9 +929,9 @@ describe('L2 Grid Signal Service', () => {
     );
   });
 
-  test('POST /openadr/v3/events should use regional average confidence (v2.5.0)', async () => {
+  test('POST /openadr/v3/events should use regional average confidence (v2.5.5)', async () => {
     const mockUnifiedContext = {
-      regional_confidence: { CAISO: 0.85 },
+      regional_confidence: { CAISO: '0.8500' },
       regional_capacity: {}
     };
 
@@ -951,7 +951,36 @@ describe('L2 Grid Signal Service', () => {
 
     expect(response.status).toBe(202);
     const sentValue = JSON.parse(producer.send.mock.calls[0][0].messages[0].value);
-    expect(sentValue.confidence_score).toBe('0.8500'); // L2 v2.5.0: String formatting
+    expect(sentValue.confidence_score).toBe('0.8500'); // L2 v2.5.5: String formatting
+  });
+
+  test('POST /openadr/v3/events should reject when site-specific safety lock is active (v2.5.5)', async () => {
+    const { localSafetyCache } = require('./index');
+    localSafetyCache.site_safety['SITE-ALPHA'] = true;
+
+    redisClient.get.mockImplementation((key) => {
+      if (key === 'l1:safety:lock:site:SITE-ALPHA:context') return Promise.resolve(JSON.stringify({
+        event_type: 'PHYSICS_FRAUD',
+        severity: 'FRAUD',
+        site_id: 'SITE-ALPHA'
+      }));
+      return Promise.resolve(null);
+    });
+
+    const response = await request(app)
+      .post('/openadr/v3/events')
+      .set('Authorization', `Bearer ${mockToken}`)
+      .send({
+        id: 'evt-site-lock-99',
+        type: 'demand-response',
+        site_id: 'SITE-ALPHA'
+      });
+
+    expect(response.status).toBe(503);
+    expect(response.body.reason).toBe('SAFETY_VIOLATION_L1');
+    expect(response.body.details.alert_type).toBe('PHYSICS_FRAUD');
+
+    localSafetyCache.site_safety['SITE-ALPHA'] = false; // Reset
   });
 
   test('startSafetyConsumer should cache ADVANCE_CHARGE_SIGNAL', async () => {

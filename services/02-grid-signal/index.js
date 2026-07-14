@@ -159,7 +159,7 @@ app.get('/openadr/v3/reports', authenticateToken, async (req, res) => {
       regional_confidence: {},
       grid_health: {},
       advance_charge: {},
-      confidence_score: 1.0
+      confidence_score: '1.0000'
     };
 
     const marketContext = marketContextRaw ? JSON.parse(marketContextRaw) : null;
@@ -175,7 +175,7 @@ app.get('/openadr/v3/reports', authenticateToken, async (req, res) => {
       if (safetyContext.physics_score !== undefined) safetyContext.physics_score = safeFloat(safetyContext.physics_score, 1.0);
       if (safetyContext.confidence_score !== undefined) safetyContext.confidence_score = safeFloat(safetyContext.confidence_score, 1.0);
 
-      // Ensure sentinel flag is explicitly boolean, handling boolean, string, and integer formats (v2.5.2)
+      // Ensure sentinel flag is explicitly boolean, handling boolean, string, and integer formats (v2.5.5)
       const rawSentinel = safetyContext.is_sentinel_fidelity;
       const pScore = parseFloat(safeFloat(safetyContext.physics_score, 1.0));
       safetyContext.is_sentinel_fidelity = !!(rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || pScore > 0.99);
@@ -243,7 +243,7 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
       console.warn(`🚨 [L2] DISPATCH REJECTED: L1 Safety Lock active (Global: ${localSafetyCache.global_safety}, Regional: ${localSafetyCache.regional_safety[isoRegion]}, Site: ${isSiteLocked})`);
 
       // Fetch context if available for richer error response (Redis fallback)
-      const lockContext = await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
+      const lockContext = (siteIdVal && isSiteSafetyLocked) ? await redisClient.get(`${SAFETY_LOCK_KEY}:site:${siteIdVal.toUpperCase()}:context`) : await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
       const details = lockContext ? JSON.parse(lockContext) : null;
 
       return res.status(503).json({
@@ -440,10 +440,11 @@ const updateLocalSafetyCache = async () => {
     localSafetyCache.global_safety = (safetyGlobal === 'true' || safetyGlobal === '1');
     localSafetyCache.global_grid = (gridGlobal === 'true' || gridGlobal === '1');
 
-    // Sync regional locks
+    // Sync regional and site locks
     let cursor = '0';
     const newRegionalSafety = {};
     const newRegionalGrid = {};
+    const newSiteSafety = {};
 
     const newSiteSafety = {};
     do {
@@ -485,6 +486,7 @@ const updateLocalSafetyCache = async () => {
 
     localSafetyCache.regional_safety = newRegionalSafety;
     localSafetyCache.regional_grid = newRegionalGrid;
+    localSafetyCache.site_safety = newSiteSafety;
   } catch (err) {
     console.error('❌ [L2] Failed to update local safety cache:', err.message);
   }
@@ -531,18 +533,18 @@ const updateRegionalStats = async () => {
             const cScore = parseFloat(safeFloat(data.confidence_score, 1.0));
 
             // [L1-124] Aligned High-Fidelity Standard
-            if (data.is_high_fidelity || pScore > 0.95 || cScore > 0.95) {
+            if (data.is_high_fidelity || parseFloat(pScore) > 0.95 || parseFloat(cScore) > 0.95) {
               context.digital_twin[iso].high_fidelity_count++;
             }
             const rawSentinel = data.is_sentinel_fidelity;
-            if (rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || pScore > 0.99) {
+            if (rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || parseFloat(pScore) > 0.99) {
               context.digital_twin[iso].sentinel_fidelity_count++;
             }
             if (data.resource_type === 'EV') context.digital_twin[iso].ev_count++;
             if (data.resource_type === 'BESS') context.digital_twin[iso].bess_count++;
 
             // [L2-v2.4.6] Track confidence sum for regional average
-            confidenceSums[iso] += cScore;
+            confidenceSums[iso] += parseFloat(cScore);
           } else {
             confidenceSums[iso] += 1.0;
           }
@@ -767,14 +769,20 @@ async function startSafetyConsumer() {
           // Unified Safety Lock: Set to '1' for L4 compatibility, with 15m TTL
           await redisClient.setEx(SAFETY_LOCK_KEY, 900, '1');
 
+          // [L2-v2.5.5] Set Site-Specific Safety Lock
+          if (siteIdVal) {
+            const siteLockKey = `${SAFETY_LOCK_KEY}:site:${siteIdVal.toUpperCase()}`;
+            await redisClient.setEx(siteLockKey, 900, '1');
+          }
+
           // Store detailed alert context for UI/Diagnostics and downstream layer alignment
-          // [L2 v2.5.2] Hardened sentinel detection supporting boolean, string, and integer formats
+          // [L2 v2.5.5] Hardened sentinel detection supporting boolean, string, and integer formats
           const rawSentinel = payload.is_sentinel_fidelity;
           const physicsScore = safeFloat(payload.physics_score, 1.0);
           const pScoreNum = parseFloat(physicsScore);
           const isSentinelFidelity = !!(rawSentinel === true || rawSentinel === 'true' || rawSentinel === 1 || pScoreNum > 0.99);
 
-          await redisClient.setEx(`${SAFETY_LOCK_KEY}:context`, 900, JSON.stringify({
+          const alertContext = JSON.stringify({
             ...payload,
             reason,
             message: isHighVariance ? `Variance (${vPct}%) exceeds ${varianceThreshold}% threshold for ${payload.resource_type || 'EV'}` : undefined,
@@ -787,7 +795,15 @@ async function startSafetyConsumer() {
             confidence_score: safeFloat(payload.confidence_score, pScoreNum),
             market_price_at_session: parseFloat(safeFloat(payload.market_price_at_session, 0.0)),
             locked_at: new Date().toISOString()
-          }));
+          });
+
+          await redisClient.setEx(`${SAFETY_LOCK_KEY}:context`, 900, alertContext);
+
+          // [L2-v2.5.5] Store Site-Specific Context
+          if (siteIdVal) {
+            const siteContextKey = `${SAFETY_LOCK_KEY}:site:${siteIdVal.toUpperCase()}:context`;
+            await redisClient.setEx(siteContextKey, 900, alertContext);
+          }
         }
       } else if (topic === 'MARKET_PRICE_UPDATED') {
         const iso = payload.iso.toUpperCase().replace(/-/g, ''); // L2 v2.4.1: ISO Normalization
