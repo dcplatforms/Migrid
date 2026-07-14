@@ -234,6 +234,7 @@ describe('L1 Physics Engine Alert Handling', () => {
     await physicsEngine.handlePhysicsAlert(msg);
 
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock', 900, 'true');
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:site:SITE-001', 900, 'true');
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"event_type":"PHYSICS_FRAUD"'));
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"severity":"FRAUD"'));
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"site_id":"SITE-001"'));

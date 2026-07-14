@@ -43,7 +43,8 @@ let isOffline = false;
 // [L1-133] Sub-millisecond local safety cache
 const localSafetyCache = {
   global: false,
-  regional: {}
+  regional: {},
+  site: {}
 };
 
 // 1. Database Connection
@@ -377,6 +378,12 @@ async function handlePhysicsAlert(msg) {
         localSafetyCache.regional[isoRegion] = true;
       }
 
+      // [L1-134] Site-Specific Lock: Always set site-specific lock for critical violations
+      if (alertSiteId) {
+        await redisClient.setEx(`${SAFETY_LOCK_KEY}:site:${alertSiteId}`, SAFETY_LOCK_TTL, 'true');
+        localSafetyCache.site[alertSiteId] = true;
+      }
+
       // Phase 5 Enhancement: Detailed Safety Lock Context for L2/L4 transparency
       const context = {
         event_type: payload.event_type,
@@ -468,6 +475,7 @@ async function updateLocalSafetyCache() {
 
     let cursor = '0';
     const newRegionalLocks = {};
+    const newSiteLocks = {};
     do {
       const reply = await redisClient.scan(cursor, { MATCH: `${SAFETY_LOCK_KEY}:*`, COUNT: 100 });
       cursor = reply.cursor;
@@ -475,12 +483,19 @@ async function updateLocalSafetyCache() {
         const values = await redisClient.mGet(reply.keys);
         reply.keys.forEach((key, index) => {
           if (key === SAFETY_LOCK_CONTEXT_KEY) return;
-          const iso = key.split(':').pop().toUpperCase();
-          newRegionalLocks[iso] = (values[index] === 'true' || values[index] === '1');
+
+          if (key.startsWith(`${SAFETY_LOCK_KEY}:site:`)) {
+            const siteId = key.replace(`${SAFETY_LOCK_KEY}:site:`, '');
+            newSiteLocks[siteId] = (values[index] === 'true' || values[index] === '1');
+          } else {
+            const iso = key.split(':').pop().toUpperCase();
+            newRegionalLocks[iso] = (values[index] === 'true' || values[index] === '1');
+          }
         });
       }
     } while (cursor !== '0' && cursor !== 0);
     localSafetyCache.regional = newRegionalLocks;
+    localSafetyCache.site = newSiteLocks;
   } catch (err) {
     console.error('❌ [L1 Physics] Failed to update local safety cache:', err.message);
   }
