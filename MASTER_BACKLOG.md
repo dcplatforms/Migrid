@@ -59,7 +59,6 @@
 - [✓] **Telemetry Hardening**: implemented `isNaN` protection for physics/confidence scores.
 - [✓] **L11 Parity**: enforced strict `.toFixed(4)` string formatting for audit trails.
 - [✓] **Secure Reporting**: authenticateToken and PII masking applied to `/openadr/v3/reports`.
-- [✓] **Fleet Security**: Hardened global data endpoints to reject `fleet_id` tokens.
 
 ### Layer 3: VPP Aggregator (v3.3.3)
 - [✓] **Sentinel Fidelity Hardening**: Supports boolean, string, and integer formats for sentinel flags.
