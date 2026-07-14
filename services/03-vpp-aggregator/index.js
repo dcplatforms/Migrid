@@ -48,10 +48,9 @@ const extractSiteId = (payload) => {
 };
 
 /**
- * [L3 v3.3.3] safeFloat: Robust isNaN protection for telemetry scoring
- * Enforces strict 4-decimal string formatting for L11 ML parity.
+ * L3 v3.3.3 safeFloat: Robust isNaN protection for telemetry scoring
  */
-const safeFloat = (val, fallback = 0.0) => {
+const safeFloat = (val, fallback = 1.0) => {
   const parsed = parseFloat(val);
   return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
 };
@@ -153,11 +152,8 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
     if (safetyContext && typeof safetyContext === 'string') {
       try {
         const context = JSON.parse(safetyContext);
-        const pScore = context.physics_score !== undefined ? context.physics_score : 1.0;
-        const cScore = context.confidence_score !== undefined ? context.confidence_score : 1.0;
-
-        physicsScoreRaw = parseFloat(pScore);
-        confidenceScoreRaw = parseFloat(cScore);
+        physicsScoreVal = parseFloat(safeFloat(context.physics_score, 1.0));
+        confidenceScoreVal = parseFloat(safeFloat(context.confidence_score, 1.0));
 
         // High-Fidelity Standard: (physics_score > 0.95 OR confidence_score > 0.95)
         isHighFidelity = physicsScoreRaw > 0.95 || confidenceScoreRaw > 0.95;
@@ -291,11 +287,8 @@ const updateGlobalCapacity = async () => {
         if (context.fleet_id) {
           lockedFleetId = context.fleet_id;
         }
-        const pScore = context.physics_score !== undefined ? context.physics_score : 1.0;
-        const cScore = context.confidence_score !== undefined ? context.confidence_score : 1.0;
-
-        rawPhysicsScore = parseFloat(pScore);
-        rawConfidenceScore = parseFloat(cScore);
+        rawPhysicsScore = parseFloat(safeFloat(context.physics_score, 1.0));
+        confidenceScore = parseFloat(safeFloat(context.confidence_score, 1.0));
 
         // Sentinel Fidelity logic: Prioritize explicit flag (boolean, string, or integer)
         isSentinelFidelity = context.is_sentinel_fidelity === true || context.is_sentinel_fidelity === 'true' || context.is_sentinel_fidelity === 1 || rawPhysicsScore > 0.99;
@@ -424,8 +417,8 @@ const initKafka = async () => {
 
         if (topic === 'migrid.physics.alerts') {
           const siteId = extractSiteId(payload);
-          const physicsScore = payload.physics_score ? parseFloat(payload.physics_score) : 1.0;
-          const confidenceScore = payload.confidence_score ? parseFloat(payload.confidence_score) : 1.0;
+          const physicsScore = parseFloat(safeFloat(payload.physics_score, 1.0));
+          const confidenceScore = parseFloat(safeFloat(payload.confidence_score, 1.0));
           const isSentinelFidelity = payload.is_sentinel_fidelity === true || payload.is_sentinel_fidelity === 'true' || payload.is_sentinel_fidelity === 1 || physicsScore > 0.99;
 
           if (payload.event_type === 'CAPACITY_VIOLATION' || payload.event_type === 'PHYSICS_FRAUD') {
