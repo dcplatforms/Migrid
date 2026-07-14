@@ -797,8 +797,8 @@ done
 
 | Layer | Service | Version | Status |
 | :--- | :--- | :--- | :--- |
-| **L1** | Physics Engine | `10.1.6` | ✅ Operational |
-| **L2** | Grid Signal | `2.5.5` | ✅ Operational |
+| **L1** | Physics Engine | `10.1.5` | ✅ Operational |
+| **L2** | Grid Signal | `2.5.4` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.2` | ✅ Operational |
 | **L4** | Market Gateway | `3.8.8` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
@@ -813,12 +813,13 @@ done
 
 ## Latest Release Wins (May 2026)
 
-- **L1 Physics Engine (v10.1.6)**: Implemented **Site-Specific Safety Locks [L1-135]** via `DER_ALARM_REPORTED` Kafka consumer, enforcing edge-resilient safety.
-- **L7 Device Gateway (v5.12.0)**: Enhanced hardware availability tracking via native OCPP **Heartbeat** handling and hardened DER alarm broadcasting.
-- **L10 Token Engine (v4.3.8)**: Hardened **Sentinel Fidelity** tier logic and expanded behavioral rewards to include DER alarm responses.
-- **L4 Market Gateway (v3.8.8)**: Implemented `localSafetyCache` for sub-millisecond safety verification and hardened `isSentinel` detection.
-- **L2 Grid Signal (v2.5.5)**: Engineered **Site-Specific Safety Rejection [L2-135]** for OpenADR events, integrating L7 hardware alarms with L1 physics constraints.
-- **L6 Engagement Engine (v5.17.0)**: Standardized site identification and enforced strict string-formatting for all physics and confidence scores.
+- **L1 Physics Engine (v10.1.5)**: Implemented **localSafetyCache [L1-133]** for sub-millisecond resilience and achieved Phase 6 telemetry parity via strict `.toFixed(4)` string formatting.
+- **L7 Device Gateway (v5.12.0)**: Deployed **localSafetyCache [L7-133]** for resilient dispatch; hardened DER alarm handling via OCPP 2.1 `NotifyDERAlarm` broadcasting and Heartbeat availability tracking.
+- **L10 Token Engine (v4.3.8)**: Expanded behavioral rewards to include `der_alarm_response` and `solar_ramp_response`; hardened telemetry via `safeFloat` and `.toFixed(4)` parity.
+- **L4 Market Gateway (v3.8.8)**: Implemented **localSafetyCache [L4-133]** for sub-millisecond bidding resilience; enforced high-fidelity telemetry standards with `safeFloat` utility.
+- **L2 Grid Signal (v2.5.4)**: Implemented **localSafetyCache [L2-133]** and 5s poller for resilient event handling; hardened telemetry parsing with `isNaN` protection.
+- **L5 Driver API (v4.1.0)**: Hardened `POST /auth/register` against IDOR via `fleet_id` UUID validation and database existence checks.
+- **L6 Engagement Engine (v5.17.0)**: Standardized site identification via `extractSiteId` and enforced strict string-formatting for all physics and confidence scores.
 
 ---
 
