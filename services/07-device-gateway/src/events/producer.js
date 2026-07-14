@@ -17,13 +17,12 @@ const extractSiteId = (payload) => {
 };
 
 /**
- * [L7 v5.13.0] safeFloat: Robust isNaN protection for telemetry scoring.
- * Returns string formatted to 4 decimal places for Phase 6 ML parity.
+ * [L7 v5.13.0] safeFloat: Robust isNaN protection for telemetry scoring
+ * Returns string formatted to 4 decimal places for ML parity.
  */
 const safeFloat = (val, fallback = 0.0) => {
     const parsed = parseFloat(val);
-    const result = isNaN(parsed) ? fallback : parsed;
-    return result.toFixed(4);
+    return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
 };
 
 async function connectProducer() {
