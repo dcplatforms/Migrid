@@ -1,6 +1,6 @@
 {
   "name": "migrid-core",
-  "version": "10.0.0",
+  "version": "10.1.6",
   "description": "The Operating System for Sustainable Fleet Electrification",
   "private": true,
   "workspaces": [

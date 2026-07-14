@@ -57,16 +57,18 @@ app.get('/tariffs/:fleet_id', authenticateToken, async (req, res) => {
 app.post('/invoices/generate', authenticateToken, async (req, res) => {
   const { fleet_id, start_date, end_date } = req.body;
 
+  // Authorization: Ensure the user belongs to the fleet being billed
   if (fleet_id !== req.user.fleet_id.toString()) {
-    return res.status(403).json({ error: 'Unauthorized' });
+    return res.status(403).json({ error: 'Unauthorized to generate invoices for other fleets' });
+  }
+
+  if (!start_date || !end_date) {
+    return res.status(400).json({ error: 'start_date and end_date are required' });
   }
 
   try {
-    // Note: The following logic depends on 'session', 'rate', and 'sessionId' being defined.
-    // Preserving the original intent while fixing syntax and adding error handling.
-    const cost = session.energy_dispensed_kwh * rate;
-    await pool.query('UPDATE charging_sessions SET cost = $1 WHERE id = $2', [cost, sessionId]);
-    res.json({ success: true, cost });
+    const result = await InvoicingService.aggregateSessionsAndCreateInvoice({ fleet_id, start_date, end_date });
+    res.json({ success: true, invoice: result });
   } catch (err) {
     console.error('[Invoice Generation Error]', err);
     res.status(500).json({ error: 'An internal server error occurred' });
@@ -98,25 +100,18 @@ app.post('/drivers/assign', authenticateToken, async (req, res) => {
 app.post('/billing/calculate/:sessionId', authenticateToken, async (req, res) => {
   const { sessionId } = req.params;
   try {
-    // Security: Validate session ownership (IDOR protection)
-    const sessionCheck = await pool.query(
-      'SELECT cs.id, cs.vehicle_id, cs.energy_dispensed_kwh, cs.end_time FROM charging_sessions cs JOIN vehicles v ON cs.vehicle_id = v.id WHERE cs.id = $1 AND v.fleet_id = $2',
+    // Security: Check if session belongs to user's fleet
+    const sessionRes = await pool.query(
+      'SELECT cs.id FROM charging_sessions cs JOIN vehicles v ON cs.vehicle_id = v.id WHERE cs.id = $1 AND v.fleet_id = $2',
       [sessionId, req.user.fleet_id]
     );
 
-    if (sessionCheck.rows.length === 0) {
-      return res.status(403).json({ error: 'Unauthorized: Session does not belong to your fleet' });
+    if (sessionRes.rows.length === 0) {
+      return res.status(403).json({ error: 'Unauthorized or session not found' });
     }
 
-    const session = sessionCheck.rows[0];
-    await BillingService.processSessionCompletion({
-      sessionId: session.id,
-      vehicleId: session.vehicle_id,
-      energyDispensedKwh: session.energy_dispensed_kwh,
-      timestamp: session.end_time || new Date()
-    });
-
-    res.json({ success: true, message: 'Billing calculated' });
+    const cost = await InvoicingService.calculateSessionCost(sessionId);
+    res.json({ success: true, sessionId, cost });
   } catch (err) {
     console.error('[Billing Calculation Error]', err);
     res.status(500).json({ error: 'An internal server error occurred' });
