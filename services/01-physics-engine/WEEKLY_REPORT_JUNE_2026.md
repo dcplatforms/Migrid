@@ -1,24 +1,24 @@
-# L1 Physics Engine Weekly Steering Report - June 2026 (v10.1.6: Site-Specific Resilience)
+# L1 Physics Engine Weekly Report - June 2026
 
 ## Impact Summary
-This week, the L1 Physics Engine has been promoted to **v10.1.6** to anchor the MiGrid Platform v10.1.6 June 2026 release. The primary focus was on granularizing "The Fuse Rule" and ensuring telemetry parity for Phase 6 AI optimization.
-
-1.  **Site-Specific Safety Locks [L1-134]**: Successfully implemented granular safety locks at the site level (`l1:safety:lock:site:<SITE_ID>`). This allows L2 Grid Signal and L7 Device Gateway to reject dispatch to unstable sites without triggering regional or global halts, significantly improving VPP availability.
-2.  **Telemetry Precision Parity**: Re-verified that all `physics_score` and `confidence_score` outputs strictly adhere to the 4-decimal string standard (`.toFixed(4)`). This ensures seamless ground-truth ingestion by the L11 ML Engine and prevents drift in bidding confidence calculations (L4 v3.8.9).
-3.  **Sub-Millisecond Site Awareness**: Updated the `localSafetyCache` and background poller to scan for and cache site-specific locks. This maintains sub-millisecond safety verification for site-level orchestration during scarcity events.
+This week, Layer 1 (L1) has been hardened to v10.1.6, aligning with the platform-wide hardware-aware resilience theme. The primary focus was on integrating real-time hardware health signals from L7 via Kafka and standardizing telemetry precision to ensure L11 ML Engine parity. L1 now proactively locks sites reporting 'CRITICAL' or 'HIGH' severity alarms, preventing unsafe physics violations before they occur.
 
 ## Code Proposed
-- **index.js**: Enhanced `localSafetyCache` with `site` awareness; refactored `handlePhysicsAlert` to set site-specific Redis locks; updated `updateLocalSafetyCache` with prefix-aware Redis scanning.
-- **package.json**: Version promoted to 10.1.6.
-- **physics_engine.test.js**: Added unit tests for site-specific lock verification.
+### 1. Hardware-Aware Safety [L1-135]
+- **Kafka Consumer**: Implemented a new consumer for the `DER_ALARM_REPORTED` topic.
+- **Site-Specific Locks**: Logic added to `index.js` to activate `l1:safety:lock:SITE:<ID>` in Redis for high-severity hardware alarms.
+- **Resilience**: This ensures that even if cloud connectivity is lost, the local L1 engine will respect hardware-level safety constraints.
+
+### 2. Telemetry Hardening [L1-136]
+- **safeFloat Utility**: Introduced a standardized utility to handle `isNaN` protection and enforce strict `.toFixed(4)` string formatting for all physics and confidence scores.
+- **ML Parity**: This ensures that L11 ML models receive deterministic, high-precision data, eliminating drift during Phase 6 training.
+
+### 3. Service Versioning
+- **Bump to v10.1.6**: Updated `package.json` and `/health` endpoint to reflect current platform state.
 
 ## Backlog Updates
-- **[L1-134] COMPLETED**: Implement site-specific safety locks in Redis and local cache.
-- **[L1-135]**: Research site-specific "unstable" detection based on real-time DER alarm density feedback from L7.
-- **[L1-136]**: Optimize Redis `SCAN` performance for environments with >1,000 active site-specific locks.
+- **[L1-137] BESS Degradation Digital Twin**: Update digital twin models to incorporate real-time temperature telemetry for BESS health forecasting.
+- **[L1-138] Sub-100ms Redis Optimization**: Further optimize regional Redis lookups for high-density metropolitan fleets (10k+ vehicles).
 
 ## RFCs Needed
-- **RFC-L1-SITE-ORCHESTRATION-01**: Proposal for decentralized site-level safety decisioning (Edge Mesh) to further enhance "The Fuse Rule" during regional connectivity failures.
-
----
-*“Verify the Physics. Protect the Grid.”*
+- **RFC-024: Bidirectional V2G Safety Invariants**: Proposed RFC to define the core physics constraints for high-frequency bidirectional control (V2G) to prevent transformer thermal runaway.
