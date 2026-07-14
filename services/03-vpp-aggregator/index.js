@@ -47,6 +47,14 @@ const extractSiteId = (payload) => {
   return payload.site_id || payload.siteId || payload.location_id || payload.locationId || 'UNKNOWN_SITE';
 };
 
+/**
+ * L3 v3.3.3 safeFloat: Robust isNaN protection for telemetry scoring
+ */
+const safeFloat = (val, fallback = 1.0) => {
+  const parsed = parseFloat(val);
+  return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
+};
+
 const SAFETY_LOCK_KEY = 'l1:safety:lock';
 const SAFETY_CONTEXT_KEY = 'l1:safety:lock:context';
 const SAFE_MODE_SITES_SET = 'l3:vpp:safemode_sites';
@@ -88,7 +96,7 @@ const authenticateToken = (req, res, next) => {
 app.get('/health', (req, res) => {
   res.json({
     service: 'vpp-aggregator',
-    version: '3.3.2',
+    version: '3.3.3',
     status: 'healthy',
     layer: 'L3'
   });
@@ -144,8 +152,8 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
     if (safetyContext && typeof safetyContext === 'string') {
       try {
         const context = JSON.parse(safetyContext);
-        physicsScoreVal = context.physics_score ? parseFloat(context.physics_score) : 1.0;
-        confidenceScoreVal = context.confidence_score ? parseFloat(context.confidence_score) : 1.0;
+        physicsScoreVal = parseFloat(safeFloat(context.physics_score, 1.0));
+        confidenceScoreVal = parseFloat(safeFloat(context.confidence_score, 1.0));
 
         // High-Fidelity Standard: (physics_score > 0.95 OR confidence_score > 0.95)
         isHighFidelity = physicsScoreVal > 0.95 || confidenceScoreVal > 0.95;
@@ -273,8 +281,8 @@ const updateGlobalCapacity = async () => {
         if (context.fleet_id) {
           lockedFleetId = context.fleet_id;
         }
-        rawPhysicsScore = context.physics_score ? parseFloat(context.physics_score) : 1.0;
-        confidenceScore = context.confidence_score ? parseFloat(context.confidence_score) : 1.0;
+        rawPhysicsScore = parseFloat(safeFloat(context.physics_score, 1.0));
+        confidenceScore = parseFloat(safeFloat(context.confidence_score, 1.0));
 
         // Sentinel Fidelity logic: Prioritize explicit flag (boolean, string, or integer)
         isSentinelFidelity = context.is_sentinel_fidelity === true || context.is_sentinel_fidelity === 'true' || context.is_sentinel_fidelity === 1 || rawPhysicsScore > 0.99;
@@ -398,8 +406,8 @@ const initKafka = async () => {
 
         if (topic === 'migrid.physics.alerts') {
           const siteId = extractSiteId(payload);
-          const physicsScore = payload.physics_score ? parseFloat(payload.physics_score) : 1.0;
-          const confidenceScore = payload.confidence_score ? parseFloat(payload.confidence_score) : 1.0;
+          const physicsScore = parseFloat(safeFloat(payload.physics_score, 1.0));
+          const confidenceScore = parseFloat(safeFloat(payload.confidence_score, 1.0));
           const isSentinelFidelity = payload.is_sentinel_fidelity === true || payload.is_sentinel_fidelity === 'true' || payload.is_sentinel_fidelity === 1 || physicsScore > 0.99;
 
           if (payload.event_type === 'CAPACITY_VIOLATION' || payload.event_type === 'PHYSICS_FRAUD') {
