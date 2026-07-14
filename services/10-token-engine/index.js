@@ -100,8 +100,8 @@ async function logRewardTransaction(driverId, ruleId, triggeringEventId, sourceV
   const confidenceScoreFormatted = (confidenceScore !== null && confidenceScore !== undefined) ? safeFloat(confidenceScore) : null;
 
   const res = await pgClient.query(
-    'INSERT INTO token_reward_log(driver_id, rule_id, triggering_event_id, source_value, points_awarded, status, iso, physics_score, is_high_fidelity, multiplier_reason, confidence_score, resource_type, is_sentinel_fidelity, site_id) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *;',
-    [driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status, iso, physicsScoreFormatted, isHighFidelity, multiplierReason, confidenceScoreFormatted, resourceType, isSentinelFidelity, siteId]
+    'INSERT INTO token_reward_log(driver_id, rule_id, triggering_event_id, source_value, points_awarded, status, iso, physics_score, is_high_fidelity, multiplier_reason, confidence_score, resource_type, is_sentinel_fidelity, site_id, hardware_penalty, regional_alarm_count) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *;',
+    [driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status, iso, physicsScoreFormatted, isHighFidelity, multiplierReason, confidenceScoreFormatted, resourceType, isSentinelFidelity, siteId, hardwarePenalty, regionalAlarmCount]
   );
   return res.rows[0];
 }
@@ -433,6 +433,11 @@ async function start() {
             return;
           }
 
+          if (topic === 'DER_ALARM_REPORTED') {
+            console.log(`🚨 [L10 Safety Watch] DER Alarm reported: ${payload.alarmType} (Severity: ${payload.severity})`);
+            return;
+          }
+
           console.log(`⚡ Received message from ${topic}:`, payload);
 
           const {
@@ -485,6 +490,7 @@ async function start() {
           let pointsAwarded = new Decimal(0);
           let rule_id;
           let multiplierReason = 'Standard Reward';
+          let penaltyResult = null;
 
           // Robust payload validation and parsing for persistence
           const physicsScorePersist = physicsScoreVal;
@@ -578,7 +584,9 @@ async function start() {
           confidenceScorePersist,
           resourceTypeVal,
           isSentinelFidelityPersist,
-          siteIdVal
+          siteIdVal,
+          penaltyResult ? penaltyResult.penalty.toNumber() : 0,
+          penaltyResult ? penaltyResult.alarmCount : 0
         );
 
         console.log(`[L10 Reward Queue] Reward of ${pointsAwarded.toNumber()} points for ${action_type} (Event: ${event_id}) added to minting queue.`);
