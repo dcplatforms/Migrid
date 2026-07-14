@@ -2,7 +2,7 @@
 
 # MiGrid Platform Status Report
 
-**Version 10.1.5** • **April 2026**
+**Version 10.1.6** • **May 2026**
 
 [![Phase](https://img.shields.io/badge/Phase_6-AI_&_Optimization-orange.svg)](../docs/roadmap.md)
 [![Progress](https://img.shields.io/badge/Progress-84%25_Complete-blue.svg)](PLATFORM_STATUS.md)
@@ -36,7 +36,7 @@ Features Delivered:     █████████████████░�
 Standards Compliance:   ████████████████░░░░ 80%
 ```
 
-**82 of 98 features** delivered (Metric Audit April 2026)
+**82 of 98 features** delivered (Metric Audit May 2026)
 
 </td>
 </tr>
@@ -811,7 +811,7 @@ done
 
 ---
 
-## Latest Release Wins (April 2026)
+## Latest Release Wins (May 2026)
 
 - **L1 Physics Engine (v10.1.5)**: Implemented **localSafetyCache [L1-133]** for sub-millisecond resilience and achieved Phase 6 telemetry parity via strict `.toFixed(4)` string formatting.
 - **L7 Device Gateway (v5.12.0)**: Deployed **localSafetyCache [L7-133]** for resilient dispatch; hardened DER alarm handling via OCPP 2.1 `NotifyDERAlarm` broadcasting and Heartbeat availability tracking.
