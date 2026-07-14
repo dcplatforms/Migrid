@@ -1,4 +1,4 @@
-const { publishTelemetry, publishSessionEvent } = require('../events/producer');
+const { publishTelemetry, publishSessionEvent, safeFloat } = require('../events/producer');
 const { validateSchema } = require('./validators');
 const config = require('../config');
 const { redis } = require('../state/connectionMgr');
@@ -198,7 +198,7 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                     await redis.del(`charger_resource:${chargePointId}`);
 
                     // Extract energy dispensed from meterValue if available
-                    let energyDispensed = 0;
+                    let energyDispensed = (0.0).toFixed(4);
                     try {
                         if (payload.meterValue && payload.meterValue.length > 0) {
                             // Find the cumulative energy register across all meter values
@@ -208,18 +208,16 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                             );
 
                             if (energySample) {
-                                const parsed = parseFloat(energySample.value);
-                                energyDispensed = isNaN(parsed) ? 0.0 : parsed;
+                                energyDispensed = safeFloat(energySample.value);
                             } else {
                                 // Fallback: Find any value with 'kWh' unit or just the first sample
                                 const unitSample = lastMeterValue.sampledValue?.find(sv => sv.unit === 'kWh' || sv.unit === 'Wh');
                                 if (unitSample) {
-                                    const parsed = parseFloat(unitSample.value);
-                                    const val = isNaN(parsed) ? 0.0 : parsed;
-                                    energyDispensed = (unitSample.unit === 'Wh') ? val / 1000 : val;
+                                    const val = parseFloat(unitSample.value);
+                                    const result = isNaN(val) ? 0.0 : (unitSample.unit === 'Wh' ? val / 1000 : val);
+                                    energyDispensed = safeFloat(result);
                                 } else if (lastMeterValue.sampledValue?.[0]?.value) {
-                                    const parsed = parseFloat(lastMeterValue.sampledValue[0].value);
-                                    energyDispensed = isNaN(parsed) ? 0.0 : parsed;
+                                    energyDispensed = safeFloat(lastMeterValue.sampledValue[0].value);
                                 }
                             }
                         }

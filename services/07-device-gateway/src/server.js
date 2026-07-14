@@ -27,6 +27,7 @@ const localConnections = new Map();
 /**
  * [L7-133] Sub-millisecond local safety and grid lock cache
  * Polled from Redis every 5s to ensure edge resilience and zero-latency dispatch.
+ * [L7-135] Expanded to include site-specific locks.
  */
 const localSafetyCache = {
   global: false,
@@ -58,14 +59,22 @@ async function updateLocalSafetyCache() {
     // Scan for all regional grid locks (L4 sync)
     let cursor = '0';
     const newRegionalLocks = {};
+    const newSiteLocks = {};
+
     do {
       const [newCursor, keys] = await redis.scan(cursor, 'MATCH', 'l4:grid:lock:*', 'COUNT', 100);
       cursor = newCursor;
       if (keys.length > 0) {
         const values = await redis.mget(keys);
         keys.forEach((key, index) => {
-          const iso = key.split(':').pop().toUpperCase();
-          newRegionalLocks[iso] = (values[index] === 'true' || values[index] === '1');
+          const val = (values[index] === 'true' || values[index] === '1');
+          if (key.startsWith('l4:grid:lock:')) {
+            const iso = key.split(':').pop().toUpperCase();
+            newRegionalLocks[iso] = val;
+          } else if (key.startsWith('l1:safety:lock:site:')) {
+            const siteId = key.split(':').pop();
+            newSiteLocks[siteId] = val;
+          }
         });
       }
     } while (cursor !== '0');
@@ -255,7 +264,7 @@ const handleControlSignal = async (topic, payload) => {
     // 1. Verify the Physics: Check for L1 Safety Lock before dispatching control
     // [L7-133] Use local cache for sub-millisecond resilience
     if (localSafetyCache.global) {
-        console.warn(`🛑 [L7] Control Signal HALTED. L1 Safety Lock is ACTIVE (Cached).`);
+        console.warn(`🛑 [L7] Control Signal HALTED. Global L1 Safety Lock is ACTIVE (Cached).`);
         return;
     }
 
@@ -299,7 +308,7 @@ async function sendSetChargingProfile(chargePointId, limitKw, mode) {
         return;
     }
 
-    // [L7-133] Use local connection context for zero-latency region lookup
+    // [L7-133] Use local connection context for zero-latency region/site lookup
     const isoRegion = connection.isoRegion || 'CAISO';
     const siteId = connection.siteId;
 
