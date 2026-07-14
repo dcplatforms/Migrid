@@ -138,6 +138,8 @@ app.post('/auth/register', registrationRateLimiter, async (req, res) => {
 
   // Input Validation
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   if (!email || !emailRegex.test(email)) {
     return res.status(400).json({ error: 'Invalid email format' });
   }
@@ -145,9 +147,20 @@ app.post('/auth/register', registrationRateLimiter, async (req, res) => {
     return res.status(400).json({ error: 'Password must be at least 8 characters long' });
   }
 
+  // [Security] Validate fleet_id presence and format to prevent IDOR
+  if (!fleet_id || !uuidRegex.test(fleet_id)) {
+    return res.status(400).json({ error: 'Invalid or missing fleet_id' });
+  }
+
   const client = await pool.connect();
 
   try {
+    // [Security] Verify fleet existence before registration (IDOR Prevention)
+    const fleetCheck = await client.query('SELECT id FROM fleets WHERE id = $1', [fleet_id]);
+    if (fleetCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Target fleet not found' });
+    }
+
     await client.query('BEGIN');
     const password_hash = await bcrypt.hash(password, 10);
 
