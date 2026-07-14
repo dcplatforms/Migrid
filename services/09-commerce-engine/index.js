@@ -5,6 +5,7 @@ const MarketRateService = require('./src/services/MarketRateService');
 const SessionEventListener = require('./src/services/SessionEventListener');
 const Tariff = require('./src/models/Tariff');
 const InvoicingService = require('./src/services/InvoicingService');
+const BillingService = require('./src/services/BillingService');
 
 const app = express();
 app.use(express.json());
@@ -141,8 +142,14 @@ async function startServices() {
     console.log('[Commerce Engine] Background services started successfully');
   } catch (err) {
     console.error('Failed to start Commerce Engine services:', err);
-    process.exit(1);
+    // In production, we might want to retry or alert, but not necessarily crash the whole process
   }
 }
 
-startServices();
+if (require.main === module) {
+  startServices();
+  app.listen(port, () => {
+    console.log(`[Commerce Engine] Running on port ${port}`);
+  });
+}
+module.exports = { app };
