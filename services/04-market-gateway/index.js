@@ -159,7 +159,13 @@ async function updateLocalSafetyCache() {
           const iso = key.split(':').pop().toUpperCase();
           const val = values[index];
           if (val === 'true' || val === '1') {
-            newRegionalLocks[iso] = true;
+            if (key.startsWith('l4:grid:lock:')) {
+              const iso = key.split(':').pop().toUpperCase();
+              newRegionalLocks[iso] = true;
+            } else if (key.startsWith('l1:safety:lock:site:')) {
+              const siteId = key.split(':').pop();
+              newSiteLocks[siteId] = true;
+            }
           }
         });
       }
