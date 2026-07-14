@@ -140,20 +140,36 @@ async function updateLocalSafetyCache() {
       localSafetyCache.regional_confidence = unified.regional_confidence || {};
     }
 
-    // Regional locks discovery
+    // Regional locks and alarms discovery
     const newRegionalLocks = {};
+    const newRegionalAlarms = {};
     let cursor = '0';
     do {
-      const reply = await redisClient.scan(cursor, { MATCH: 'l4:grid:lock:*', COUNT: 100 });
-      cursor = reply.cursor;
-      if (reply.keys.length > 0) {
-        const values = await redisClient.mGet(reply.keys);
-        reply.keys.forEach((key, index) => {
+      // Scan for both regional locks and regional alarm counts
+      const [replyLocks, replyAlarms] = await Promise.all([
+        redisClient.scan(cursor, { MATCH: 'l4:grid:lock:*', COUNT: 100 }),
+        redisClient.scan(cursor, { MATCH: 'l4:regional:alarms:*', COUNT: 100 })
+      ]);
+
+      cursor = replyLocks.cursor; // Using one cursor is usually fine if they share the same key space
+
+      if (replyLocks.keys.length > 0) {
+        const values = await redisClient.mGet(replyLocks.keys);
+        replyLocks.keys.forEach((key, index) => {
           const iso = key.split(':').pop().toUpperCase();
           const val = values[index];
           if (val === 'true' || val === '1') {
             newRegionalLocks[iso] = true;
           }
+        });
+      }
+
+      if (replyAlarms.keys.length > 0) {
+        const values = await redisClient.mGet(replyAlarms.keys);
+        replyAlarms.keys.forEach((key, index) => {
+          const iso = key.split(':').pop().toUpperCase();
+          const val = parseInt(values[index]) || 0;
+          newRegionalAlarms[iso] = val;
         });
       }
     } while (cursor !== 0 && cursor !== '0');
@@ -217,6 +233,17 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
       confidenceScore = safeFloat(localSafetyCache.regional_confidence[currentIso], 1.0);
     }
 
+    // [L4-134] Hardware Health Penalty logic: -0.05 per regional alarm (capped at 0.3)
+    const alarmCount = localSafetyCache.l4_regional_alarms[currentIso] || 0;
+    const rawPenalty = new Decimal(alarmCount).times('0.05');
+    const hardwarePenalty = Decimal.min(rawPenalty, '0.30');
+
+    if (hardwarePenalty.gt(0)) {
+      const adjustedConfidence = new Decimal(confidenceScore).minus(hardwarePenalty);
+      confidenceScore = safeFloat(Decimal.max(adjustedConfidence, 0).toNumber());
+      console.log(`[Market Gateway] Applied hardware health penalty for ${currentIso}: -${hardwarePenalty.toFixed(2)} (Alarms: ${alarmCount})`);
+    }
+
     // If cache is empty or stale, or we need regional fallback, check Redis (legacy path)
     if (!localSafetyCache.last_updated) {
       try {
@@ -263,6 +290,8 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
       is_high_fidelity: isHighFidelity,
       is_sentinel_fidelity: isSentinelFidelity,
       fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD',
+      regional_alarm_count: alarmCount,
+      hardware_penalty: hardwarePenalty.toFixed(4),
       site_aware_sync: true, // L1 v10.1.3 compliance
       timestamp: new Date().toISOString()
     };

@@ -195,7 +195,7 @@ class BiddingOptimizer {
           isSentinelFidelity = isSentinel(auditContext.is_sentinel_fidelity, physicsScore);
         } else if (unifiedRaw) {
           const unified = JSON.parse(unifiedRaw);
-          confidenceScore = unified.regional_confidence?.[isoKey] || unified.confidence_score || 1.0;
+          confidenceScore = safeFloat(unified.regional_confidence?.[isoKey] || unified.confidence_score || 1.0);
           console.log(`[BiddingOptimizer] Using L2 regional confidence fallback for ${isoKey}: ${confidenceScore}`);
         }
       } catch (err) {
@@ -227,8 +227,11 @@ class BiddingOptimizer {
 
     // 3. Handle Halted Bidding
     if (locks.l1 || locks.l4) {
+      const isHighFidelity = (parseFloat(physicsScore) > 0.95 || parseFloat(confidenceScore) > 0.95);
+      const capacityFidelity = isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD';
+
       if (locks.l1) {
-        console.warn(`🚨 [L4 Market Gateway v3.8.0] Bidding halted: L1 safety lock is active for ${iso}`);
+        console.warn(`🚨 [L4 Market Gateway v3.8.9] Bidding halted: L1 safety lock is active for ${iso}`);
         if (auditContext) {
           console.warn(`[L4 Safety Context] Reason: ${auditContext.event_type}, Severity: ${auditContext.severity}, Score: ${auditContext.physics_score || 'N/A'}, Confidence: ${auditContext.confidence_score || 'N/A'}, Region: ${auditContext.iso_region || 'N/A'}`);
         }
@@ -237,7 +240,7 @@ class BiddingOptimizer {
       if (locks.l4) {
         const regionalLockActive = await this.redisClient.get(`l4:grid:lock:${iso.toUpperCase().replace(/-/g, '')}`);
         const scope = (regionalLockActive === 'true' || regionalLockActive === '1') ? `Regional (${iso})` : 'Global';
-        console.warn(`⚠️ [L4 Market Gateway v3.8.0] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
+        console.warn(`⚠️ [L4 Market Gateway v3.8.9] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
       }
 
       return {
@@ -247,7 +250,7 @@ class BiddingOptimizer {
           physics_score: physicsScore,
           confidence_score: confidenceScore,
           is_high_fidelity: isHighFidelity,
-          is_sentinel_fidelity: isSentinelFidelity,
+          is_sentinel_fidelity: isSentinel(isSentinelFidelity, physicsScore),
           capacity_fidelity: capacityFidelity,
           audit_context: auditContext,
           timestamp: new Date().toISOString()
@@ -270,6 +273,22 @@ class BiddingOptimizer {
       physicsScore = pScoreFromL3;
       confidenceScore = cScoreFromL3;
     }
+
+    // [L4-134] Hardware Health Penalty logic: -0.05 per regional alarm (capped at 0.3)
+    const alarmCount = this.localCache?.l4_regional_alarms?.[isoKey] || 0;
+    const rawPenalty = new Decimal(alarmCount).times('0.05');
+    const hardwarePenalty = Decimal.min(rawPenalty, '0.30');
+
+    if (hardwarePenalty.gt(0)) {
+      const adjustedConfidence = new Decimal(confidenceScore).minus(hardwarePenalty);
+      confidenceScore = safeFloat(Decimal.max(adjustedConfidence, 0).toNumber());
+      console.log(`[BiddingOptimizer] Applied hardware health penalty for ${isoKey}: -${hardwarePenalty.toFixed(2)} (Alarms: ${alarmCount})`);
+    }
+
+    // High-Fidelity logic: physics_score > 0.95 OR confidence_score > 0.95 (Align with L10 v4.3.5)
+    const isHighFidelity = (parseFloat(physicsScore) > 0.95 || parseFloat(confidenceScore) > 0.95);
+    // [L4 v3.8.5] Standardized Sentinel logic with fallback
+    isSentinelFidelity = isSentinel(isSentinelFidelity, physicsScore);
 
     // [L4-BESS-OPT] Resource-Aware Degradation Costs
     const evDegradationKwh = new Decimal(process.env.DEGRADATION_COST_KWH || '0.02');
@@ -355,6 +374,8 @@ class BiddingOptimizer {
         is_high_fidelity: isHighFidelity,
         is_sentinel_fidelity: isSentinelFidelity,
         capacity_fidelity: capacityFidelityFromRedis, // Already normalized in getAggregatedCapacity
+        regional_alarm_count: alarmCount,
+        hardware_penalty: hardwarePenalty.toFixed(4),
         audit_context: {
           ...auditContext,
           ev_capacity_kw: breakdown.ev,
