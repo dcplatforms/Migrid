@@ -1,7 +1,7 @@
 # L3: VPP Aggregator Service
 
-**Version:** 3.3.1
-**Status:** ✅ Complete (March 2026)
+**Version:** 3.3.3
+**Status:** ✅ Complete (May 2026)
 **Phase:** Enterprise Scale
 
 ## Overview
@@ -90,7 +90,7 @@ REDIS_URL=redis://localhost:6379
 - [x] **L8 Safe Mode Integration**: Site-level exclusion from aggregation during meter offline events.
 - [x] **Contextual Safety Locks**: Respects L1 `l1:safety:lock:context` for granular physics enforcement.
 - [x] **Physics-Aware Forecasting**: Factor L1 variance data (physics_score) into capacity predictions and reporting.
-- [x] **High-Fidelity Alignment (v3.3.1)**: Integrated `confidence_score` and `(physics_score > 0.95 || confidence_score > 0.95)` audit standards.
+- [x] **High-Fidelity Alignment (v3.3.3)**: Integrated `safeFloat` utility and enforced strict `.toFixed(4)` string formatting for telemetry parity.
 - [x] **Real-Time Event Re-aggregation**: Added Kafka `charging_events` handlers for instant capacity updates on charger connect/disconnect.
 
 ## Phase 6 Backlog: AI & Optimization (Q2 2026)
@@ -108,8 +108,8 @@ REDIS_URL=redis://localhost:6379
 ## Deployment
 
 ```bash
-docker build -t migrid/vpp-aggregator:3.3.1 .
-docker run -p 3003:3003 migrid/vpp-aggregator:3.3.1
+docker build -t migrid/vpp-aggregator:3.3.3 .
+docker run -p 3003:3003 migrid/vpp-aggregator:3.3.3
 ```
 
 ## Monitoring

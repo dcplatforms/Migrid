@@ -41,6 +41,22 @@ class InvoicingService {
     return invoice.rows[0];
   }
 
+  async calculateSessionCost(sessionId) {
+    const sessionRes = await pool.query(
+      'SELECT cs.energy_dispensed_kwh, cs.start_time, v.fleet_id FROM charging_sessions cs JOIN vehicles v ON cs.vehicle_id = v.id WHERE cs.id = $1',
+      [sessionId]
+    );
+    const session = sessionRes.rows[0];
+    if (!session) return 0;
+
+    const tariffResult = await pool.query('SELECT * FROM tariffs WHERE fleet_id = $1 AND is_active = true LIMIT 1', [session.fleet_id]);
+    const tariff = tariffResult.rows[0];
+
+    const TariffService = require('./TariffService');
+    const rate = await TariffService.calculateCurrentRate(tariff, new Date(session.start_time));
+    return new Decimal(session.energy_dispensed_kwh).times(rate).toFixed(2);
+  }
+
   async generateInvoicePDF(invoiceId, fleetId) {
     try {
       // Security Enhancement: Added fleetId filter to prevent IDOR

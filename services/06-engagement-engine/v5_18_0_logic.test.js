@@ -1,9 +1,21 @@
 /**
- * Verification Test for L6 v5.18.0 - Hardware Health & safeFloat
+ * Verification Test for L6 v5.18.0
  */
 
 const request = require('supertest');
-const { app, pool, redisClient, safeFloat, checkHardwareHealthGuardianAchievement } = require('./index');
+
+// Mock Redis
+const mockRedis = {
+  connect: jest.fn(),
+  on: jest.fn(),
+  get: jest.fn(),
+  hGet: jest.fn(),
+  hSet: jest.fn(),
+  quit: jest.fn(),
+};
+jest.mock('redis', () => ({
+  createClient: jest.fn(() => mockRedis),
+}));
 
 // Mock Kafka
 jest.mock('kafkajs', () => {
@@ -33,19 +45,9 @@ jest.mock('pg', () => {
   return { Pool: jest.fn(() => mPool) };
 });
 
-// Mock Redis
-jest.mock('redis', () => ({
-  createClient: jest.fn(() => ({
-    connect: jest.fn(),
-    on: jest.fn(),
-    get: jest.fn(),
-    hGet: jest.fn(),
-    hSet: jest.fn(),
-    quit: jest.fn(),
-  })),
-}));
+const { app, pool, handleDerAlarm, processChargingEvent } = require('./index');
 
-describe('L6 Engagement Engine v5.18.0 - Hardware Health Guardian', () => {
+describe('L6 Engagement Engine v5.18.0 - Hardware Health Guardian & ML Parity', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -56,48 +58,128 @@ describe('L6 Engagement Engine v5.18.0 - Hardware Health Guardian', () => {
     expect(res.body.status).toBe('healthy');
   });
 
-  test('safeFloat utility enforces 4-decimal string formatting', () => {
-    expect(safeFloat(1.23456)).toBe('1.2346');
-    expect(safeFloat(0.99)).toBe('0.9900');
-    expect(safeFloat(NaN)).toBe('0.0000');
-    expect(safeFloat("invalid")).toBe('0.0000');
-    expect(safeFloat(0)).toBe('0.0000');
+  test('Hardware Health Guardian Achievement awarded when alarms are zero', async () => {
+    mockRedis.get.mockImplementation((key) => {
+      if (key.includes('l4:regional:alarms:')) return Promise.resolve('0');
+      return Promise.resolve(null);
+    });
+
+    pool.query.mockImplementation((q) => {
+      if (q.includes('SELECT f.iso')) return Promise.resolve({ rows: [{ iso: 'CAISO' }] });
+      if (q.includes('SELECT is_valid')) return Promise.resolve({ rows: [{ is_valid: true }] });
+      if (q.includes('variance_percentage')) return Promise.resolve({ rows: [{ variance_percentage: 0.1 }] });
+      if (q.includes('recent_sessions')) return Promise.resolve({ rows: [{ total: 10, hf_count: 10, low_variance_count: 10, perfect_count: 10, high_fidelity_count: 10, sentinel_count: 10, site_count: 1 }] });
+      if (q.includes("name = 'Hardware Health Guardian'")) return Promise.resolve({ rows: [{ id: 'ach-hhg' }] });
+      if (q.includes('SELECT id FROM driver_achievements')) return Promise.resolve({ rows: [] });
+      if (q.includes('SELECT name, points FROM achievements WHERE id = $1')) return Promise.resolve({ rows: [{ name: 'Hardware Health Guardian', points: 500 }] });
+      if (q.includes('SELECT icon FROM achievements WHERE id = $1')) return Promise.resolve({ rows: [{ icon: 'hhg.png' }] });
+      if (q.includes('COUNT(*) FROM charging_sessions')) return Promise.resolve({ rows: [{ count: 5 }] });
+      if (q.includes('leaderboard')) return Promise.resolve({ rows: [{ streak_days: 1, last_charging_at: new Date() }] });
+      return Promise.resolve({ rows: [{ count: 0, compliant_days: 0 }] });
+    });
+
+    const event = {
+      driver_id: 'driver-123',
+      sessionId: 'sess-456',
+      type: 'SESSION_COMPLETED',
+      energyDispensedKwh: 25,
+      physics_score: 1.0,
+      confidence_score: 1.0
+    };
+
+    await processChargingEvent(event);
+
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining("INSERT INTO driver_achievements"),
+      expect.anything()
+    );
   });
 
-  test('Hardware Health Guardian achievement awarded when zero alarms and 10+ HF sessions', async () => {
-    // 1. Mock Redis to return 0 alarms
-    redisClient.get.mockResolvedValue('0');
+  test('Hardware Health Guardian NOT awarded when alarms are present', async () => {
+    mockRedis.get.mockImplementation((key) => {
+      if (key.includes('l4:regional:alarms:')) return Promise.resolve('2');
+      return Promise.resolve(null);
+    });
 
-    // 2. Mock Pool to return 10 HF sessions and achievement data
     pool.query.mockImplementation((q) => {
-      if (q.includes('SELECT COUNT(*) as hf_count')) return Promise.resolve({ rows: [{ hf_count: 10 }] });
-      if (q.includes("SELECT id FROM achievements WHERE name = 'Hardware Health Guardian'")) return Promise.resolve({ rows: [{ id: 'ach-hhg' }] });
-      if (q.includes('SELECT id FROM driver_achievements')) return Promise.resolve({ rows: [] }); // Not earned yet
-      if (q.includes('SELECT name, points FROM achievements WHERE id = $1')) return Promise.resolve({ rows: [{ name: 'Hardware Health Guardian', points: 500 }] });
       if (q.includes('SELECT f.iso')) return Promise.resolve({ rows: [{ iso: 'CAISO' }] });
-      if (q.includes('SELECT icon FROM achievements WHERE id = $1')) return Promise.resolve({ rows: [{ icon: 'guardian.png' }] });
+      if (q.includes('SELECT is_valid')) return Promise.resolve({ rows: [{ is_valid: true }] });
+      if (q.includes('variance_percentage')) return Promise.resolve({ rows: [{ variance_percentage: 0.1 }] });
+      if (q.includes('COUNT(*) FROM charging_sessions')) return Promise.resolve({ rows: [{ count: 5 }] });
+      if (q.includes('leaderboard')) return Promise.resolve({ rows: [{ streak_days: 1, last_charging_at: new Date() }] });
+      if (q.includes('recent_sessions')) return Promise.resolve({ rows: [{ total: 10, low_variance_count: 10, perfect_count: 10, high_fidelity_count: 10, sentinel_count: 10, site_count: 1 }] });
+      return Promise.resolve({ rows: [{ count: 0, compliant_days: 0 }] });
+    });
+
+    const event = {
+      driver_id: 'driver-123',
+      sessionId: 'sess-456',
+      type: 'SESSION_COMPLETED',
+      energyDispensedKwh: 25,
+      physics_score: 1.0,
+      confidence_score: 1.0
+    };
+
+    await processChargingEvent(event);
+
+    // Should NOT award achievement if alarms > 0
+    const awardCall = pool.query.mock.calls.some(call => call[0].includes("INSERT INTO driver_achievements") && call[1][1] === 'ach-hhg');
+    expect(awardCall).toBe(false);
+  });
+
+  test('processChargingEvent enriches metadata with regional alarm count', async () => {
+    mockRedis.get.mockImplementation((key) => {
+      if (key.includes('l4:regional:alarms:')) return Promise.resolve('5');
+      return Promise.resolve(null);
+    });
+
+    pool.query.mockImplementation((q) => {
+      if (q.includes('SELECT f.iso')) return Promise.resolve({ rows: [{ iso: 'CAISO' }] });
+      if (q.includes('SELECT is_valid')) return Promise.resolve({ rows: [{ is_valid: true }] });
+      if (q.includes('variance_percentage')) return Promise.resolve({ rows: [{ variance_percentage: 0.1 }] });
+      if (q.includes('COUNT(*) FROM charging_sessions')) return Promise.resolve({ rows: [{ count: 5 }] });
+      if (q.includes('leaderboard')) return Promise.resolve({ rows: [{ streak_days: 1, last_charging_at: new Date() }] });
+      if (q.includes('recent_sessions')) return Promise.resolve({ rows: [{ total: 10, low_variance_count: 10, perfect_count: 10, high_fidelity_count: 10, sentinel_count: 10, site_count: 1 }] });
+      return Promise.resolve({ rows: [{ count: 0, compliant_days: 0 }] });
+    });
+
+    const event = {
+      driver_id: 'driver-123',
+      sessionId: 'sess-456',
+      type: 'SESSION_COMPLETED',
+      energyDispensedKwh: 25,
+      physics_score: 1.0,
+      confidence_score: 0.98
+    };
+
+    await processChargingEvent(event);
+
+    const actionCall = pool.query.mock.calls.find(call => call[0].includes('INSERT INTO driver_actions') && call[1][1] === 'session_completed');
+    const metadata = JSON.parse(actionCall[1][2]);
+    expect(metadata.regional_alarm_count).toBe(5);
+    expect(metadata.physics_score).toBe("0.9933"); // 1 - (0.1/15) = 0.99333...
+    expect(metadata.confidence_score).toBe("0.9800");
+  });
+
+  test('handleDerAlarm standardizes scores and metadata', async () => {
+    pool.query.mockImplementation((q) => {
+      if (q.includes('SELECT id FROM drivers')) return Promise.resolve({ rows: [{ id: 'driver-123' }] });
       return Promise.resolve({ rows: [] });
     });
 
-    await checkHardwareHealthGuardianAchievement('driver-123', 'CAISO');
+    const payload = {
+      alarm_type: 'FrequencyViolation',
+      severity: 'Critical',
+      vehicle_id: 'veh-789',
+      iso_region: 'PJM'
+    };
 
-    // Verify achievement was awarded
-    expect(pool.query).toHaveBeenCalledWith(
-      expect.stringContaining('INSERT INTO driver_achievements'),
-      expect.arrayContaining(['driver-123', 'ach-hhg'])
-    );
-  });
+    await handleDerAlarm(payload);
 
-  test('Hardware Health Guardian achievement NOT awarded when alarms present', async () => {
-    // 1. Mock Redis to return 1 alarm
-    redisClient.get.mockResolvedValue('1');
-
-    await checkHardwareHealthGuardianAchievement('driver-123', 'CAISO');
-
-    // Verify no achievement check was performed against DB
-    expect(pool.query).not.toHaveBeenCalledWith(
-      expect.stringContaining('SELECT COUNT(*) as hf_count'),
-      expect.anything()
-    );
+    const actionCall = pool.query.mock.calls.find(call => call[0].includes('INSERT INTO driver_actions') && call[1][1] === 'der_alarm_response');
+    const metadata = JSON.parse(actionCall[1][2]);
+    expect(metadata.iso).toBe('PJM');
+    expect(metadata.physics_score).toBe("1.0000");
+    expect(metadata.confidence_score).toBe("1.0000");
   });
 });
