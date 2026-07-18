@@ -1,5 +1,5 @@
 /**
- * Verification Test for L6 v5.17.0
+ * Verification Test for L6 v5.18.0
  */
 
 const request = require('supertest');
@@ -45,7 +45,7 @@ jest.mock('redis', () => ({
   })),
 }));
 
-describe('L6 Engagement Engine v5.17.0 - DER Sentinel & Training Data', () => {
+describe('L6 Engagement Engine v5.18.0 - DER Sentinel & Training Data', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
