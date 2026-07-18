@@ -25,7 +25,7 @@ allPassed &= checkFileContains('src/events/producer.js', "source: 'L7_GATEWAY_V5
 
 allPassed &= checkFileContains('src/events/producer.js', "result.toFixed(4)", 'safeFloat returns 4-decimal string');
 allPassed &= checkFileContains('src/ocpp/handler.js', "await redis.hset('l7:heartbeats'", 'Heartbeat using Redis Hash');
-allPassed &= checkFileContains('src/ocpp/handler.js', "alarmType: alarm.alarmType,", 'DER Alarms decomposed into individual events');
+allPassed &= checkFileContains('src/ocpp/handler.js', "alarmType: alarm.code || alarm.alarmType,", 'DER Alarms decomposed into individual events');
 allPassed &= checkFileContains('src/server.js', "site: {}", 'localSafetyCache includes site');
 allPassed &= checkFileContains('src/server.js', "if (siteId && localSafetyCache.site[siteId])", 'Site lock enforced in sendSetChargingProfile');
 
