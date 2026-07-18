@@ -54,3 +54,8 @@
 **Vulnerability:** The `POST /auth/register` endpoint accepted an unvalidated `fleet_id`, allowing users to register into any fleet.
 **Learning:** Public registration endpoints in multi-tenant systems often focus on input format (email, password strength) but neglect the relational integrity of tenant associations. While a database foreign key might catch the error, it leads to a generic 500 error and doesn't prevent a user from "guessing" a valid UUID of another fleet.
 **Prevention:** Always perform a pre-transaction check to verify that the target tenant ID (e.g., `fleet_id`) not only follows the correct format but actually exists and is authorized for new registrations.
+
+## 2026-07-17 - [Cryptographic Signature Bypass in Security Mocks]
+**Vulnerability:** Over-mocking middleware (such as bypass-decoding JWTs without verifying cryptographic signatures in unit tests).
+**Learning:** Mocking the authentication middleware to directly decode the payload without verifying signatures degrades the integrity of the security test suite. If verification logic breaks in production, the tests would still pass false-positively.
+**Prevention:** Ensure that the actual middleware executes cryptographic verification in tests by setting proper secure secrets (`process.env.JWT_SECRET`) in the test environment, rather than mocking verification away.

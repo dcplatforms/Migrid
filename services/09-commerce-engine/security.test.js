@@ -1,23 +1,25 @@
+process.env.JWT_SECRET = 'secure_test_secret';
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
-const { app } = require('./index');
-const { pool } = require('./config');
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 
 // Mock DB Pool
+const mockPool = {
+  query: jest.fn(),
+  end: jest.fn()
+};
 jest.mock('./config', () => {
-  const mPool = {
-    query: jest.fn(),
-    end: jest.fn()
-  };
   return {
-    pool: mPool,
+    pool: mockPool,
     port: 3009,
-    jwtSecret: 'dev_secret_change_in_production',
+    jwtSecret: 'secure_test_secret',
     kafkaBrokers: ['localhost:9092']
   };
 });
+
+const { app } = require('./index');
+const { pool } = require('./config');
+
+const JWT_SECRET = 'secure_test_secret';
 
 // Mock services to prevent actual side effects or connection attempts
 jest.mock('./src/services/MarketRateService', () => ({
@@ -28,6 +30,10 @@ jest.mock('./src/services/SessionEventListener', () => ({
 }));
 jest.mock('./src/services/BillingService', () => ({
   processSessionCompletion: jest.fn()
+}));
+jest.mock('./src/services/InvoicingService', () => ({
+  calculateSessionCost: jest.fn().mockResolvedValue('50.00'),
+  aggregateSessionsAndCreateInvoice: jest.fn()
 }));
 
 describe('L9 Commerce Engine Security Tests', () => {
