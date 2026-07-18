@@ -66,6 +66,7 @@ describe('L3 VPP Aggregator Service', () => {
         const response = await request(app).get('/health');
         expect(response.status).toBe(200);
         expect(response.body.status).toBe('healthy');
+        expect(response.body.version).toBe('3.3.3');
         expect(response.body.layer).toBe('L3');
     });
 
@@ -88,7 +89,32 @@ describe('L3 VPP Aggregator Service', () => {
         // isHighFidelity = (0.96 > 0.95 || 0.90 > 0.95) = true
         expect(response.body.is_high_fidelity).toBe(true);
         expect(response.body.physics_score).toBe("0.9600");
+        expect(response.body.confidence_score).toBe("0.9000");
         expect(response.body.is_sentinel_fidelity).toBe(false);
+    });
+
+    test('GET /capacity/available should handle missing/NaN scores with safeFloat fallback (1.0 default)', async () => {
+        mockRedisClient.get.mockImplementation((key) => {
+            if (key === 'l1:safety:lock:context') return Promise.resolve(JSON.stringify({ physics_score: "invalid", confidence_score: "invalid" }));
+            return Promise.resolve(null);
+        });
+        mockPool.query.mockResolvedValue({
+            rows: [{ raw_capacity_kwh: 100, vehicle_count: 2 }]
+        });
+
+        const response = await request(app)
+            .get('/capacity/available')
+            .set('Authorization', `Bearer ${mockToken}`);
+
+        expect(response.status).toBe(200);
+        // Fallback for safeFloat in index.js is now 1.0 (if val was explicitly invalid/missing)
+        // because we passed 1.0 as the fallback to safeFloat(physicsScoreRaw, 1.0)
+        // BUT safeFloat function itself uses fallback.toFixed(4)
+        // Wait, if it's "invalid", safeFloat returns fallback.toFixed(4).
+        expect(response.body.physics_score).toBe("1.0000");
+        expect(response.body.confidence_score).toBe("1.0000");
+        // And physicsMultiplier would be 0.0 because of isNaN check
+        expect(response.body.available_capacity_kwh).toBe(0);
     });
 
     test('GET /capacity/available should identify sentinel fidelity (hardened logic)', async () => {

@@ -19,6 +19,12 @@ jest.mock('kafkajs', () => ({
           return Promise.resolve({});
       }),
       disconnect: jest.fn().mockResolvedValue({})
+    }),
+    consumer: jest.fn().mockReturnValue({
+      connect: jest.fn().mockResolvedValue({}),
+      subscribe: jest.fn().mockResolvedValue({}),
+      run: jest.fn().mockResolvedValue({}),
+      disconnect: jest.fn().mockResolvedValue({})
     })
   }))
 }), { virtual: true });
@@ -214,7 +220,7 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.billing_mode).toBe('PERSONAL');
   });
 
-  test('should set safety lock and context in Redis for PHYSICS_FRAUD', async () => {
+  test('should set safety lock, context, and site-specific lock in Redis for PHYSICS_FRAUD', async () => {
     const msg = {
       payload: JSON.stringify({
         event_type: 'PHYSICS_FRAUD',
@@ -228,6 +234,7 @@ describe('L1 Physics Engine Alert Handling', () => {
     await physicsEngine.handlePhysicsAlert(msg);
 
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock', 900, 'true');
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:site:SITE-001', 900, 'true');
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"event_type":"PHYSICS_FRAUD"'));
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"severity":"FRAUD"'));
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:context', 900, expect.stringContaining('"site_id":"SITE-001"'));
@@ -350,7 +357,7 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.market_price_at_session).toBe(125.5);
   });
 
-  test('should handle CAPACITY_VIOLATION from aggressive market bid and activate safety lock', async () => {
+  test('should handle CAPACITY_VIOLATION from aggressive market bid and activate safety locks', async () => {
     const msg = {
       payload: JSON.stringify({
         event_type: 'CAPACITY_VIOLATION',
@@ -359,6 +366,7 @@ describe('L1 Physics Engine Alert Handling', () => {
         current_soc: 19.9,
         threshold: 20.0,
         vpp_active: true,
+        site_id: 'SITE-TEXAS-001',
         metadata: { msg: 'BESS Discharge Rejection: SoC < 20% (Aggressive Market Bid Rejected)' }
       })
     };
@@ -367,6 +375,7 @@ describe('L1 Physics Engine Alert Handling', () => {
 
     // Verify Safety Lock activation
     expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock', 900, 'true');
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith('l1:safety:lock:site:SITE-TEXAS-001', 900, 'true');
 
     // Verify Context richness
     const contextValue = JSON.parse(global.mockRedisSetEx.mock.calls.find(call => call[0] === 'l1:safety:lock:context')[2]);
@@ -610,6 +619,15 @@ describe('L1 Physics Engine Alert Handling', () => {
 
     expect(typeof alertValue.confidence_score).toBe('string');
     expect(alertValue.confidence_score).toBe("0.6000");
+  });
+
+  test('[L1 v10.1.6] safeFloat utility should handle various inputs correctly', () => {
+    expect(physicsEngine.safeFloat(0.95)).toBe("0.9500");
+    expect(physicsEngine.safeFloat("0.98567")).toBe("0.9857");
+    expect(physicsEngine.safeFloat(NaN)).toBe("0.0000");
+    expect(physicsEngine.safeFloat(undefined)).toBe("0.0000");
+    expect(physicsEngine.safeFloat(null)).toBe("0.0000");
+    expect(physicsEngine.safeFloat("not-a-number", 1.0)).toBe("1.0000");
   });
 });
 
@@ -1002,7 +1020,7 @@ describe('L1 Physics Engine API Security & Readiness', () => {
     const res = await request(physicsEngine.app).get('/health');
     expect(res.statusCode).toBe(200);
     expect(res.body.service).toBe('physics-engine');
-    expect(res.body.version).toBe('10.1.5');
+    expect(res.body.version).toBe('10.1.6');
   });
 
   test('GET /data/training/physics should be secured by JWT', async () => {
@@ -1024,5 +1042,66 @@ describe('L1 Physics Engine API Security & Readiness', () => {
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.statusCode).toBe(200);
     expect(res.body.status).toBe('READY_FOR_L11');
+  });
+});
+
+describe('L1 Physics Engine Utility: safeFloat', () => {
+  test('should parse valid floats', () => {
+    expect(physicsEngine.safeFloat(1.23)).toBe(1.23);
+    expect(physicsEngine.safeFloat('4.56')).toBe(4.56);
+  });
+
+  test('should return fallback for NaN values', () => {
+    expect(physicsEngine.safeFloat(NaN)).toBe(0.0);
+    expect(physicsEngine.safeFloat('invalid')).toBe(0.0);
+    expect(physicsEngine.safeFloat(undefined, 1.0)).toBe(1.0);
+  });
+});
+
+describe('L1 Physics Engine: handleDerAlarm', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    global.mockRedisSetEx = jest.fn();
+  });
+
+  test('should set site safety lock for CRITICAL alarm', async () => {
+    const payload = {
+      severity: 'CRITICAL',
+      site_id: 'SITE-ALARM-1'
+    };
+
+    await physicsEngine.handleDerAlarm(payload);
+
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith(
+      'l1:safety:lock:SITE:SITE-ALARM-1',
+      900,
+      'true'
+    );
+  });
+
+  test('should set site safety lock for HIGH alarm', async () => {
+    const payload = {
+      severity: 'high',
+      locationId: 'SITE-ALARM-2'
+    };
+
+    await physicsEngine.handleDerAlarm(payload);
+
+    expect(global.mockRedisSetEx).toHaveBeenCalledWith(
+      'l1:safety:lock:SITE:SITE-ALARM-2',
+      900,
+      'true'
+    );
+  });
+
+  test('should NOT set safety lock for LOW alarm', async () => {
+    const payload = {
+      severity: 'LOW',
+      site_id: 'SITE-ALARM-3'
+    };
+
+    await physicsEngine.handleDerAlarm(payload);
+
+    expect(global.mockRedisSetEx).not.toHaveBeenCalled();
   });
 });

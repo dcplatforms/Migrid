@@ -1,4 +1,4 @@
-const { publishTelemetry, publishSessionEvent } = require('../events/producer');
+const { publishTelemetry, publishSessionEvent, safeFloat } = require('../events/producer');
 const { validateSchema } = require('./validators');
 const config = require('../config');
 const { redis } = require('../state/connectionMgr');
@@ -39,9 +39,12 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
 
             case 'Heartbeat':
                 // Update Redis with the last heartbeat timestamp for availability tracking
-                await redis.set(`charger_heartbeat:${chargePointId}`, new Date().toISOString(), 'EX', 86400);
+                // [L7-v5.13.0] Optimized Heartbeat indexing via Redis Hash for scalability
+                const timestamp = new Date().toISOString();
+                await redis.set(`charger_heartbeat:${chargePointId}`, timestamp, 'EX', 86400);
+                await redis.hset('l7:heartbeats', chargePointId, timestamp);
                 ws.send(JSON.stringify([3, messageId, {
-                    currentTime: new Date().toISOString()
+                    currentTime: timestamp
                 }]));
                 break;
 
@@ -151,12 +154,19 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                 // OCPP 2.1 DER Control: Handle alarms from local solar/BESS
                 console.log(`[L7] DER Alarm received from ${chargePointId}:`, payload.alarms);
 
-                // [L7-135] Broadcast DER alarms to Kafka for L1/L8 awareness
-                await publishSessionEvent('DER_ALARM_REPORTED', {
-                    chargePointId,
-                    alarms: payload.alarms,
-                    timestamp: new Date().toISOString()
-                });
+                // [L7-v5.13.0] Normalize DER alarms for L4 hardware health parity
+                // Broadcast individual alarms to Kafka for L1/L4/L8 awareness
+                if (payload.alarms && Array.isArray(payload.alarms)) {
+                    for (const alarm of payload.alarms) {
+                        await publishSessionEvent('DER_ALARM_REPORTED', {
+                            chargePointId,
+                            alarmType: alarm.code,
+                            severity: alarm.severity,
+                            message: alarm.message,
+                            timestamp: new Date().toISOString()
+                        });
+                    }
+                }
 
                 ws.send(JSON.stringify([3, messageId, {}]));
                 break;
@@ -188,7 +198,7 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                     await redis.del(`charger_resource:${chargePointId}`);
 
                     // Extract energy dispensed from meterValue if available
-                    let energyDispensed = 0;
+                    let energyDispensed = (0.0).toFixed(4);
                     try {
                         if (payload.meterValue && payload.meterValue.length > 0) {
                             // Find the cumulative energy register across all meter values
@@ -198,18 +208,16 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                             );
 
                             if (energySample) {
-                                const parsed = parseFloat(energySample.value);
-                                energyDispensed = isNaN(parsed) ? 0.0 : parsed;
+                                energyDispensed = safeFloat(energySample.value);
                             } else {
                                 // Fallback: Find any value with 'kWh' unit or just the first sample
                                 const unitSample = lastMeterValue.sampledValue?.find(sv => sv.unit === 'kWh' || sv.unit === 'Wh');
                                 if (unitSample) {
-                                    const parsed = parseFloat(unitSample.value);
-                                    const val = isNaN(parsed) ? 0.0 : parsed;
-                                    energyDispensed = (unitSample.unit === 'Wh') ? val / 1000 : val;
+                                    const val = parseFloat(unitSample.value);
+                                    const result = isNaN(val) ? 0.0 : (unitSample.unit === 'Wh' ? val / 1000 : val);
+                                    energyDispensed = safeFloat(result);
                                 } else if (lastMeterValue.sampledValue?.[0]?.value) {
-                                    const parsed = parseFloat(lastMeterValue.sampledValue[0].value);
-                                    energyDispensed = isNaN(parsed) ? 0.0 : parsed;
+                                    energyDispensed = safeFloat(lastMeterValue.sampledValue[0].value);
                                 }
                             }
                         }
