@@ -125,7 +125,7 @@ initKafka().catch(console.error);
  * [L6 v5.18.0] safeFloat: Robust isNaN protection for telemetry scoring
  * Enforces strict 4-decimal string formatting for Phase 6 AI parity.
  */
-function safeFloat(val, fallback = 0.0) {
+function safeFloat(val, fallback = 1.0) {
   const parsed = parseFloat(val);
   return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
 }
@@ -351,14 +351,7 @@ function extractSiteId(payload) {
   return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
 }
 
-/**
- * [L6 v5.18.0] safeFloat: Robust isNaN protection for telemetry scoring
- * Enforces strict 4-decimal string formatting for L11 ML parity.
- */
-function safeFloat(val, fallback = 1.0) {
-  const parsed = parseFloat(val);
-  return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
-}
+
 
 async function processChargingEvent(event) {
   const driverId = event.driverId || event.driver_id;
@@ -386,14 +379,12 @@ async function processChargingEvent(event) {
     let resourceType = 'EV';
 
     // Get regional alarm context from Redis
-    const driverData = await pool.query('SELECT f.iso FROM drivers d JOIN fleets f ON d.fleet_id = f.id WHERE d.id = $1', [driverId]);
-    const iso = (driverData.rows[0]?.iso || 'CAISO').toUpperCase().replace(/-/g, '');
     let regionalAlarmCount = 0;
     try {
       const alarmCountRaw = await redisClient.get(`l4:regional:alarms:${iso}`);
       regionalAlarmCount = parseInt(alarmCountRaw || '0');
     } catch (err) {
-      console.warn(`[L6] Error fetching regional alarms for ${iso}:`, err.message);
+      console.error(`[L6] Error fetching regional alarms for ${iso}:`, err.message);
     }
 
     // Calculate physics_score and isHighFidelity if not already provided
@@ -404,15 +395,6 @@ async function processChargingEvent(event) {
 
     // Standardize site_id extraction (Multi-key convention)
     const siteId = extractSiteId(event);
-
-    // [L6 v5.18.0] Hardware Health: Fetch regional alarm count for hardware-aware rewards
-    let regionalAlarmCount = 0;
-    try {
-      const alarmCountStr = await redisClient.get(`l4:regional:alarms:${iso}`);
-      regionalAlarmCount = parseInt(alarmCountStr || '0');
-    } catch (err) {
-      console.error(`[L6] Error fetching regional alarms for ${iso}:`, err.message);
-    }
 
     // Use event-provided score if available (Backward compatibility for camelCase)
     if (event.physics_score !== undefined) physics_score = parseFloat(event.physics_score);
@@ -457,14 +439,7 @@ async function processChargingEvent(event) {
       physics_score = Math.max(0, Math.min(1, 1 - (variance / varianceThreshold)));
       isHighFidelity = physics_score > 0.95 || confidence_score > 0.95;
 
-      // [L6-v5.18.0] Hardware Health Awareness: Fetch regional alarm count for L11 ML audit
-      let regionalAlarmCount = 0;
-      try {
-        const alarmCountStr = await redisClient.get(`l4:regional:alarms:${iso}`);
-        regionalAlarmCount = parseInt(alarmCountStr || '0');
-      } catch (err) {
-        console.error(`[L6] Error fetching regional alarms for ${iso}:`, err.message);
-      }
+
 
       await pool.query('INSERT INTO driver_actions (driver_id, action_type, metadata) VALUES ($1, $2, $3)',
         [driverId, 'session_completed', JSON.stringify({
@@ -472,6 +447,7 @@ async function processChargingEvent(event) {
           energyDispensedKwh: event.energyDispensedKwh,
           isLowVariance,
           physics_score: safeFloat(physics_score),
+          confidence_score: safeFloat(confidence_score),
           isHighFidelity,
           resource_type: resourceType,
           variance_percentage: variance,
@@ -1231,37 +1207,7 @@ async function checkDerSentinelAchievement(driver_id) {
   }
 }
 
-async function checkHardwareHealthGuardianAchievement(driver_id) {
-  // Requirement: 10 high-fidelity sessions in regions with zero regional alarms
-  // Rewards drivers for participating in sites with perfect hardware health.
-  try {
-    const result = await pool.query(`
-      WITH healthy_sessions AS (
-        SELECT (metadata->>'regional_alarm_count')::int as alarm_count
-        FROM driver_actions
-        WHERE driver_id = $1 AND action_type = 'session_completed'
-          AND (metadata->>'isHighFidelity')::boolean = true
-        ORDER BY created_at DESC
-        LIMIT 10
-      )
-      SELECT COUNT(*) as total,
-             COUNT(*) FILTER (WHERE alarm_count = 0) as healthy_count
-      FROM healthy_sessions
-    `, [driver_id]);
 
-    if (!result.rows || result.rows.length === 0) return;
-    const { total, healthy_count } = result.rows[0];
-
-    if (parseInt(total) >= 10 && parseInt(healthy_count) === 10) {
-      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Hardware Health Guardian'");
-      if (achievement.rows.length > 0) {
-        await awardAchievement(driver_id, achievement.rows[0].id);
-      }
-    }
-  } catch (error) {
-    console.error('[Engagement] Error checking Hardware Health Guardian achievement:', error);
-  }
-}
 
 async function checkAIModelMasterAchievement(driver_id) {
   // Requirement: 100 cumulative high-fidelity sessions
@@ -1768,39 +1714,7 @@ async function checkSolarFlareAchievement(driver_id) {
   }
 }
 
-async function checkHardwareHealthGuardianAchievement(driver_id, iso) {
-  // [L6 v5.18.0] Hardware Health Guardian Achievement
-  // Requirement: 10 cumulative high-fidelity sessions at sites with ZERO regional alarms.
-  try {
-    // 1. Fetch regional alarm count from Redis (Synchronized with L4)
-    const alarmCountStr = await redisClient.get(`l4:regional:alarms:${iso}`);
-    const regionalAlarmCount = parseInt(alarmCountStr || '0');
 
-    // 2. Only proceed if the region currently has zero alarms
-    if (regionalAlarmCount > 0) return;
-
-    // 3. Count total high-fidelity sessions for this driver in zero-alarm conditions
-    const result = await pool.query(`
-      SELECT COUNT(*) as perfect_health_count
-      FROM driver_actions
-      WHERE driver_id = $1 AND action_type = 'session_completed'
-        AND (metadata->>'isHighFidelity')::boolean = true
-        AND (metadata->>'regional_alarm_count')::int = 0
-    `, [driver_id]);
-
-    if (!result.rows || result.rows.length === 0) return;
-    const count = parseInt(result.rows[0]?.perfect_health_count || '0');
-
-    if (count >= 10) {
-      const achievement = await pool.query("SELECT id FROM achievements WHERE name = 'Hardware Health Guardian'");
-      if (achievement.rows.length > 0) {
-        await awardAchievement(driver_id, achievement.rows[0].id);
-      }
-    }
-  } catch (error) {
-    console.error('[Engagement] Error checking Hardware Health Guardian achievement:', error);
-  }
-}
 
 async function checkPhase6DataPioneerAchievement(driver_id) {
   // Requirement: 5 consecutive sessions with physics_score > 0.99
@@ -2083,9 +1997,7 @@ module.exports = {
   checkHardwareHealthGuardianAchievement,
   updateChallengeProgress,
   handleAdvanceChargeSignal,
-  safeFloat,
   checkSolarSurgeAchievement,
   checkPhase6DataPioneerAchievement,
-  checkHardwareHealthGuardianAchievement,
   producer
 };
