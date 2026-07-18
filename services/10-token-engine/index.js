@@ -64,11 +64,12 @@ function extractSiteId(payload) {
 /**
  * [L10 v4.3.8] safeFloat: Robust isNaN protection for telemetry scoring
  * Enforces strict 4-decimal string formatting.
- * Default fallback is 0.0 to uphold "Proof of Physics equals Proof of Value".
+ * Default fallback is '0.0000' to uphold "Proof of Physics equals Proof of Value".
  */
 function safeFloat(val, fallback = 0.0) {
   const parsed = parseFloat(val);
-  return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
+  const result = isNaN(parsed) ? parseFloat(fallback) : parsed;
+  return (isNaN(result) ? 0.0 : result).toFixed(4);
 }
 
 // --- Helper Functions for Database Interaction ---
@@ -104,7 +105,24 @@ async function getOrCreateDriverWallet(driverId) {
   return res.rows[0];
 }
 
-async function logRewardTransaction(driverId, ruleId, triggeringEventId, sourceValue, pointsAwarded, status = 'pending', iso = 'CAISO', physicsScore = null, isHighFidelity = false, multiplierReason = 'Standard Reward', confidenceScore = null, resourceType = 'EV', isSentinelFidelity = false, siteId = null) {
+async function logRewardTransaction(
+  driverId,
+  ruleId,
+  triggeringEventId,
+  sourceValue,
+  pointsAwarded,
+  status = 'pending',
+  iso = 'CAISO',
+  physicsScore = null,
+  isHighFidelity = false,
+  multiplierReason = 'Standard Reward',
+  confidenceScore = null,
+  resourceType = 'EV',
+  isSentinelFidelity = false,
+  siteId = null,
+  hardwarePenalty = 0,
+  regionalAlarmCount = 0
+) {
   // L10 v4.3.8: Standardize physics and confidence scores as 4-decimal strings for L11 ML parity using hardened safeFloat
   const physicsScoreFormatted = (physicsScore !== null && physicsScore !== undefined) ? safeFloat(physicsScore) : null;
   const confidenceScoreFormatted = (confidenceScore !== null && confidenceScore !== undefined) ? safeFloat(confidenceScore) : null;
@@ -195,74 +213,55 @@ async function checkIdempotency(driverId, triggeringEventId, ruleId) {
 }
 
 /**
- * [L10 v4.3.8] safeFloat: Robust isNaN protection for telemetry scoring
- * Enforces strict 4-decimal string formatting.
- * Default fallback is '0.0000' to uphold "Proof of Physics equals Proof of Value".
- */
-function safeFloat(val, fallback = 0.0) {
-  const parsed = parseFloat(val);
-  const result = isNaN(parsed) ? fallback : parsed;
-  return result.toFixed(4);
-}
-
-/**
  * [L10 v4.3.8] Hardware Health Penalty
- * Reduces reward multiplier by 0.05 per regional alarm (capped at 0.3).
- * Syncs with L4 Market Gateway v3.8.9 logic.
+ * Reduces reward multipliers by 0.05 per active regional alarm (capped at 0.3).
+ * Uses ISO normalization (uppercase, no hyphens) for Redis key lookups.
+ * Conforms to both hardware_penalty.test.js and v4_3_8_hardware_penalty.test.js requirements.
  */
 async function applyHardwarePenalty(isoRaw, totalMultiplier, multiplierReason) {
   const iso = isoRaw.toUpperCase().replace(/-/g, '');
+  const alarmKey = `l4:regional:alarms:${iso}`;
   let alarmCount = 0;
 
   try {
-    const alarmCountStr = await redisClient.get(`l4:regional:alarms:${iso}`);
+    const alarmCountStr = await redisClient.get(alarmKey);
     if (alarmCountStr) {
       alarmCount = parseInt(alarmCountStr) || 0;
     }
   } catch (err) {
-    console.error(`[L10] Error fetching hardware alarms for ${iso}:`, err.message);
+    console.error(`[L10] Error applying hardware penalty for ${iso}:`, err.message);
   }
+
+  // Ensure totalMultiplier is always treated as a Decimal
+  const totalMultDec = new Decimal(totalMultiplier);
 
   if (alarmCount > 0) {
-    const penalty = Decimal.min(new Decimal(alarmCount).times('0.05'), '0.30');
-    const newMultiplier = Decimal.max(totalMultiplier.minus(penalty), '0.01');
-    const updatedReason = `${multiplierReason} [Hardware Penalty: -${penalty.toNumber()} (${alarmCount} alarms)]`;
-    console.log(`[L10 Strategy] Applied hardware health penalty for ${iso}: -${penalty.toNumber()}x (Remaining: ${newMultiplier.toNumber()}x)`);
-    return { multiplier: newMultiplier, reason: updatedReason };
+    const penaltyPerAlarm = new Decimal('0.05');
+    const maxPenalty = new Decimal('0.30');
+    const penalty = Decimal.min(maxPenalty, new Decimal(alarmCount).times(penaltyPerAlarm));
+    const newMultiplier = Decimal.max(0, totalMultDec.minus(penalty));
+
+    const formattedPenalty = penalty.toFixed(2);
+    const newReason = `${multiplierReason} - Hardware Health Penalty (-${formattedPenalty})`;
+
+    console.warn(`[L10 Health Audit] Regional Alarms detected for ${iso}: ${alarmCount}. Applying hardware penalty: -${formattedPenalty}`);
+
+    return {
+      multiplier: newMultiplier,
+      reason: newReason,
+      applied: true,
+      penalty,
+      alarmCount
+    };
   }
 
-  return { multiplier: totalMultiplier, reason: multiplierReason };
-}
-
-// --- Reward Multiplier Logic ---
-
-/**
- * [L10 v4.3.8] Hardware Health Penalty
- * Reduces the total multiplier based on active regional hardware alarms.
- * Penalty: -0.05 per alarm, capped at -0.30.
- * Standardized with L4 v3.8.9.
- */
-async function applyHardwarePenalty(isoRaw, totalMultiplier, multiplierReason) {
-  try {
-    const iso = isoRaw.toUpperCase().replace(/-/g, '');
-    const alarmCountKey = `l4:regional:alarms:${iso}`;
-    const regionalAlarmCountStr = await redisClient.get(alarmCountKey);
-    const regionalAlarmCount = parseInt(regionalAlarmCountStr || '0');
-
-    if (regionalAlarmCount > 0) {
-      const alarmPenaltyFactor = new Decimal('0.05');
-      const maxPenalty = new Decimal('0.3');
-      const penalty = Decimal.min(maxPenalty, new Decimal(regionalAlarmCount).times(alarmPenaltyFactor));
-
-      const newMultiplier = Decimal.max(0, totalMultiplier.minus(penalty));
-      const newReason = multiplierReason + ` - Hardware Health Penalty (${penalty.toFixed(2)})`;
-      console.log(`[L10 Strategy] Applied Hardware Health Penalty for ${iso}: -${penalty.toFixed(2)} (Alarms: ${regionalAlarmCount})`);
-      return { multiplier: newMultiplier, reason: newReason, applied: true };
-    }
-  } catch (err) {
-    console.error(`[L10] Error applying hardware health penalty for ${iso}:`, err.message);
-  }
-  return { multiplier: totalMultiplier, reason: multiplierReason, applied: false };
+  return {
+    multiplier: totalMultDec,
+    reason: multiplierReason,
+    applied: false,
+    penalty: new Decimal(0),
+    alarmCount: 0
+  };
 }
 
 async function getSiteMultiplier(siteId) {
@@ -278,45 +277,6 @@ async function getSiteMultiplier(siteId) {
     console.error(`[L10] Error fetching site multiplier from Redis for ${siteId}:`, err.message);
   }
   return { multiplier: new Decimal(1.0), reason: 'Standard Site Rate' };
-}
-
-/**
- * [L10 v4.3.8] Hardware Health Penalty
- * Reduces reward multipliers by 0.05 per active regional alarm (capped at 0.3).
- * Uses ISO normalization (uppercase, no hyphens) for Redis key lookups.
- */
-async function applyHardwarePenalty(isoRaw, totalMultiplier, multiplierReason) {
-  const iso = isoRaw.toUpperCase().replace(/-/g, '');
-  const alarmKey = `l4:regional:alarms:${iso}`;
-
-  try {
-    const alarmCountStr = await redisClient.get(alarmKey);
-    const alarmCount = parseInt(alarmCountStr || '0');
-
-    if (alarmCount > 0) {
-      const penaltyPerAlarm = new Decimal('0.05');
-      let totalPenalty = penaltyPerAlarm.times(alarmCount);
-      const maxPenalty = new Decimal('0.30');
-
-      if (totalPenalty.gt(maxPenalty)) {
-        totalPenalty = maxPenalty;
-      }
-
-      const newMultiplier = totalMultiplier.minus(totalPenalty);
-      const updatedMultiplier = newMultiplier.lt(0) ? new Decimal(0) : newMultiplier;
-
-      console.warn(`[L10 Health Audit] Regional Alarms detected for ${iso}: ${alarmCount}. Applying hardware penalty: -${totalPenalty.toNumber()}`);
-
-      return {
-        multiplier: updatedMultiplier,
-        reason: `${multiplierReason} | Hardware Health Penalty (-${totalPenalty.toNumber()})`
-      };
-    }
-  } catch (err) {
-    console.error(`[L10] Error applying hardware penalty for ${iso}:`, err.message);
-  }
-
-  return { multiplier: totalMultiplier, reason: multiplierReason };
 }
 
 async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
@@ -429,6 +389,7 @@ async function start() {
 
     await consumer.run({
       eachMessage: async ({ topic, partition, message }) => {
+        let penaltyResult = null;
         try {
           const payload = JSON.parse(message.value.toString());
 
@@ -461,19 +422,6 @@ async function start() {
 
           // Only process driver_actions topic for rewards
           if (topic !== 'driver_actions') {
-            return;
-          }
-
-          if (topic === 'DER_ALARM_REPORTED') {
-            const alarmRegion = (payload.iso_region || 'SYSTEM_WIDE').toUpperCase().replace(/-/g, '');
-            console.log(`[L10 Health Audit] DER Alarm intercepted for ${alarmRegion}: ${payload.alarmType} (${payload.severity})`);
-            // The L4 Market Gateway/L7 Device Gateway already manages the Redis counters,
-            // L10 intercepts this for audit logging and real-time multiplier adjustment readiness.
-            return;
-          }
-
-          if (topic === 'DER_ALARM_REPORTED') {
-            console.log(`🚨 [L10 Safety Watch] DER Alarm reported: ${payload.alarmType} (Severity: ${payload.severity})`);
             return;
           }
 
@@ -529,7 +477,6 @@ async function start() {
           let pointsAwarded = new Decimal(0);
           let rule_id;
           let multiplierReason = 'Standard Reward';
-          let penaltyResult = null;
 
           if (physicsScoreNum !== null && isNaN(physicsScoreNum)) {
             console.warn(`[L10 Audit] Received invalid physics_score for event ${event_id}. Skipping.`);
@@ -571,8 +518,8 @@ async function start() {
             if (physicsScoreNum !== null) {
               const fidelityStatus = isHighFidelityPersist ? 'HIGH_FIDELITY' : 'STANDARD';
 
-              if (parseFloat(physicsScorePersist) <= 0.0) {
-                console.warn(`[L10 Audit] [${fidelityStatus}] Rejected reward for event ${event_id}: Physics Score too low (${physicsScorePersist}). Driver: ${driver_id} [Resource: ${resourceTypeVal}]`);
+              if (parseFloat(physicsScoreVal) <= 0.0) {
+                console.warn(`[L10 Audit] [${fidelityStatus}] Rejected reward for event ${event_id}: Physics Score too low (${physicsScoreVal}). Driver: ${driver_id} [Resource: ${resourceTypeVal}]`);
                 return;
               }
             } else {
@@ -581,7 +528,7 @@ async function start() {
             }
 
             // 2. Calculate Reward with Dynamic Boosting (Energy-based)
-            const dynamicMultiplierResult = await getDynamicMultiplier(iso, action_type, vppAligned);
+            const marketMultiplier = await getDynamicMultiplier(iso, action_type, vppAligned);
             const siteMultiplier = await getSiteMultiplier(siteIdVal);
 
             // Compound Multipliers
@@ -589,7 +536,7 @@ async function start() {
             multiplierReason = marketMultiplier.multiplier.eq(1.0) ? siteMultiplier.reason : `${marketMultiplier.reason} + ${siteMultiplier.reason}`;
 
             // [L10 v4.3.8] Hardware Health Penalty
-            const penaltyResult = await applyHardwarePenalty(iso, totalMultiplier, multiplierReason);
+            penaltyResult = await applyHardwarePenalty(iso, totalMultiplier, multiplierReason);
             totalMultiplier = penaltyResult.multiplier;
             multiplierReason = penaltyResult.reason;
 
@@ -604,31 +551,31 @@ async function start() {
             return;
           }
 
-        // 4. Log the Reward (queued for batch minting)
-        await logRewardTransaction(
-          driver_id,
-          rule_id,
-          event_id,
-          source_value || 0,
-          pointsAwarded.toNumber(),
-          'queued',
-          iso,
-          physicsScoreNum, // logRewardTransaction handles safeFloat internally
-          isHighFidelityPersist,
-          multiplierReason,
-          confidenceScoreNum,
-          resourceTypeVal,
-          isSentinelFidelityPersist,
-          siteIdVal,
-          penaltyResult ? penaltyResult.penalty.toNumber() : 0,
-          penaltyResult ? penaltyResult.alarmCount : 0
-        );
+          // 4. Log the Reward (queued for batch minting)
+          await logRewardTransaction(
+            driver_id,
+            rule_id,
+            event_id,
+            source_value || 0,
+            pointsAwarded.toNumber(),
+            'queued',
+            iso,
+            physicsScoreNum, // logRewardTransaction handles safeFloat internally
+            isHighFidelityPersist,
+            multiplierReason,
+            confidenceScoreNum,
+            resourceTypeVal,
+            isSentinelFidelityPersist,
+            siteIdVal,
+            penaltyResult ? penaltyResult.penalty.toNumber() : 0,
+            penaltyResult ? penaltyResult.alarmCount : 0
+          );
 
-        console.log(`[L10 Reward Queue] Reward of ${pointsAwarded.toNumber()} points for ${action_type} (Event: ${event_id}) added to minting queue.`);
-      } catch (error) {
-        console.error(`[L10] Error processing Kafka message on topic ${topic}:`, error.message);
-      }
-    },
+          console.log(`[L10 Reward Queue] Reward of ${pointsAwarded.toNumber()} points for ${action_type} (Event: ${event_id}) added to minting queue.`);
+        } catch (error) {
+          console.error(`[L10] Error processing Kafka message on topic ${topic}:`, error.message);
+        }
+      },
     });
 
   } catch (error) {

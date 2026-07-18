@@ -25,7 +25,7 @@ describe('L10 v4.3.8 Hardware Health Penalty', () => {
     const result = await applyHardwarePenalty('CAISO', initialMultiplier, initialReason);
 
     expect(result.multiplier.toNumber()).toBe(1.45); // 1.5 - 0.05
-    expect(result.reason).toContain('Hardware Health Penalty (0.05)');
+    expect(result.reason).toContain('Hardware Health Penalty (-0.05)');
     expect(result.applied).toBe(true);
   });
 
@@ -51,7 +51,7 @@ describe('L10 v4.3.8 Hardware Health Penalty', () => {
     const result = await applyHardwarePenalty('PJM', initialMultiplier, initialReason);
 
     expect(result.multiplier.toNumber()).toBe(0.70); // 1.0 - 0.30
-    expect(result.reason).toContain('Hardware Health Penalty (0.30)');
+    expect(result.reason).toContain('Hardware Health Penalty (-0.30)');
     expect(result.applied).toBe(true);
   });
 
