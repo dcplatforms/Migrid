@@ -155,12 +155,12 @@ async function handleOcppMessage(chargePointId, data, ws, protocol = 'ocpp2.0.1'
                 console.log(`[L7] DER Alarm received from ${chargePointId}:`, payload.alarms);
 
                 // [L7-v5.13.0] Normalize DER alarms for L4 hardware health parity
-                // Broadcast individual alarms to Kafka for L1/L4/L8 awareness
+                // Broadcast individual alarms to Kafka for L1/L4/L10 awareness
                 if (payload.alarms && Array.isArray(payload.alarms)) {
                     for (const alarm of payload.alarms) {
                         await publishSessionEvent('DER_ALARM_REPORTED', {
                             chargePointId,
-                            alarmType: alarm.code,
+                            alarmType: alarm.code || alarm.alarmType,
                             severity: alarm.severity,
                             message: alarm.message,
                             timestamp: new Date().toISOString()
