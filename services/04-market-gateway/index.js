@@ -35,6 +35,7 @@ const localSafetyCache = {
   l1_physics: false,
   l4_grid: false,
   l4_regional: {},
+  site_safety: {},
   l4_regional_alarms: {}, // [L4 v3.8.9] Track hardware alarm density
   physics_score: "1.0000",
   confidence_score: "1.0000",
@@ -142,12 +143,13 @@ async function updateLocalSafetyCache() {
 
     // Regional locks and alarms discovery
     const newRegionalLocks = {};
-    const newRegionalAlarms = {};
+    const newSiteLocks = {};
+    const scannedAlarms = {};
     let cursor = '0';
     do {
-      // Scan for both regional locks and regional alarm counts
+      // Scan for regional/site locks and regional alarm counts
       const [replyLocks, replyAlarms] = await Promise.all([
-        redisClient.scan(cursor, { MATCH: 'l4:grid:lock:*', COUNT: 100 }),
+        redisClient.scan(cursor, { MATCH: 'l*:*lock:*', COUNT: 100 }),
         redisClient.scan(cursor, { MATCH: 'l4:regional:alarms:*', COUNT: 100 })
       ]);
 
@@ -156,7 +158,6 @@ async function updateLocalSafetyCache() {
       if (replyLocks.keys.length > 0) {
         const values = await redisClient.mGet(replyLocks.keys);
         replyLocks.keys.forEach((key, index) => {
-          const iso = key.split(':').pop().toUpperCase();
           const val = values[index];
           if (val === 'true' || val === '1') {
             if (key.startsWith('l4:grid:lock:')) {
@@ -175,28 +176,14 @@ async function updateLocalSafetyCache() {
         replyAlarms.keys.forEach((key, index) => {
           const iso = key.split(':').pop().toUpperCase();
           const val = parseInt(values[index]) || 0;
-          newRegionalAlarms[iso] = val;
+          scannedAlarms[iso] = val;
         });
       }
     } while (cursor !== 0 && cursor !== '0');
 
     localSafetyCache.l4_regional = newRegionalLocks;
-
-    // [L4 v3.8.9] Hardware Alarm Density Discovery
-    const newRegionalAlarms = {};
-    let alarmCursor = '0';
-    do {
-      const reply = await redisClient.scan(alarmCursor, { MATCH: 'l4:regional:alarms:*', COUNT: 100 });
-      alarmCursor = reply.cursor;
-      if (reply.keys.length > 0) {
-        const values = await redisClient.mGet(reply.keys);
-        reply.keys.forEach((key, index) => {
-          const iso = key.split(':').pop().toUpperCase();
-          newRegionalAlarms[iso] = parseInt(values[index] || '0');
-        });
-      }
-    } while (alarmCursor !== 0 && alarmCursor !== '0');
-    localSafetyCache.l4_regional_alarms = newRegionalAlarms;
+    localSafetyCache.site_safety = newSiteLocks;
+    localSafetyCache.l4_regional_alarms = scannedAlarms;
 
     localSafetyCache.last_updated = new Date().toISOString();
   } catch (err) {
