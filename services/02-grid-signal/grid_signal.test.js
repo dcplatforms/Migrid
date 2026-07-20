@@ -490,7 +490,7 @@ describe('L2 Grid Signal Service', () => {
 
     expect(response.status).toBe(503);
     expect(response.body.status).toBe('REJECTED');
-    expect(response.body.reason).toBe('SAFETY_VIOLATION_L1');
+    expect(response.body.reason).toBe('SITE_SAFETY_LOCK_ACTIVE');
 
     localSafetyCache.site_safety['SITE-LOCKED-99'] = false; // Reset
   });
@@ -620,10 +620,10 @@ describe('L2 Grid Signal Service', () => {
       message: { value: Buffer.from(JSON.stringify(criticalAlarm)) }
     });
 
-    expect(redisClient.setEx).toHaveBeenCalledWith('l1:safety:lock:site:SITE-ALARM-1', 1800, '1');
+    expect(redisClient.setEx).toHaveBeenCalledWith('l1:safety:lock:site:SITE-ALARM-1', 900, '1');
     expect(redisClient.setEx).toHaveBeenCalledWith(
       'l1:safety:lock:site:SITE-ALARM-1:context',
-      1800,
+      900,
       expect.stringContaining('"reason":"CRITICAL_DER_ALARM"')
     );
   });
@@ -977,7 +977,7 @@ describe('L2 Grid Signal Service', () => {
       });
 
     expect(response.status).toBe(503);
-    expect(response.body.reason).toBe('SAFETY_VIOLATION_L1');
+    expect(response.body.reason).toBe('SITE_SAFETY_LOCK_ACTIVE');
     expect(response.body.details.alert_type).toBe('PHYSICS_FRAUD');
 
     localSafetyCache.site_safety['SITE-ALPHA'] = false; // Reset
