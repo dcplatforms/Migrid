@@ -621,13 +621,13 @@ describe('L1 Physics Engine Alert Handling', () => {
     expect(alertValue.confidence_score).toBe("0.6000");
   });
 
-  test('[L1 v10.1.6] safeFloat utility should handle various inputs correctly', () => {
-    expect(physicsEngine.safeFloat(0.95)).toBe("0.9500");
-    expect(physicsEngine.safeFloat("0.98567")).toBe("0.9857");
-    expect(physicsEngine.safeFloat(NaN)).toBe("0.0000");
-    expect(physicsEngine.safeFloat(undefined)).toBe("0.0000");
-    expect(physicsEngine.safeFloat(null)).toBe("0.0000");
-    expect(physicsEngine.safeFloat("not-a-number", 1.0)).toBe("1.0000");
+  test('[L1 v10.1.6] safeFloatFormatted utility should handle various inputs correctly', () => {
+    expect(physicsEngine.safeFloatFormatted(0.95)).toBe("0.9500");
+    expect(physicsEngine.safeFloatFormatted("0.98567")).toBe("0.9857");
+    expect(physicsEngine.safeFloatFormatted(NaN)).toBe("0.0000");
+    expect(physicsEngine.safeFloatFormatted(undefined)).toBe("0.0000");
+    expect(physicsEngine.safeFloatFormatted(null)).toBe("0.0000");
+    expect(physicsEngine.safeFloatFormatted("not-a-number", 1.0)).toBe("1.0000");
   });
 });
 
