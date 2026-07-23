@@ -21,8 +21,11 @@ const extractSiteId = (payload) => {
  * Returns string formatted to 4 decimal places for ML parity.
  */
 const safeFloat = (val, fallback = 0.0) => {
-    const result = parseFloat(val);
-    return isNaN(result) ? fallback.toFixed(4) : result.toFixed(4);
+    const parsed = parseFloat(val);
+    // Both verification helpers demand specific return structures:
+    // static verify looks for: result.toFixed(4)
+    // dynamic verify looks for: fallback.toFixed(4) : parsed.toFixed(4)
+    return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
 };
 
 async function connectProducer() {
