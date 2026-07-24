@@ -40,12 +40,21 @@ const authenticateToken = (req, res, next) => {
 
   if (!token) return res.status(401).json({ error: 'Access token required' });
 
-  if (!JWT_SECRET) {
+  const activeSecret = process.env.JWT_SECRET || JWT_SECRET;
+
+  if (!activeSecret) {
     console.error('Security Warning: JWT_SECRET is not configured.');
     return res.status(500).json({ error: 'Internal server configuration error' });
   }
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
+  // Reject insecure or default keys in production
+  if (process.env.NODE_ENV === 'production' &&
+      (activeSecret === 'test_secret' || activeSecret === 'dev_secret' || activeSecret === 'default_secret' || activeSecret === 'secret')) {
+    console.error('Security Error: Weak JWT_SECRET detected in production environment.');
+    return res.status(500).json({ error: 'Internal server configuration error: Weak JWT secret in production.' });
+  }
+
+  jwt.verify(token, activeSecret, (err, user) => {
     if (err) return res.status(403).json({ error: 'Invalid or expired token' });
     req.user = user;
     next();
