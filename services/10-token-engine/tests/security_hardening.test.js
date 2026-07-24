@@ -75,4 +75,28 @@ describe('L10 Token Engine Security Hardening', () => {
     expect(response.headers['strict-transport-security']).toBeDefined();
     expect(response.headers['x-content-type-options']).toBeDefined();
   });
+
+  test('authenticateToken should reject weak secrets in production', async () => {
+    // Save original env values
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalJwtSecret = process.env.JWT_SECRET;
+
+    try {
+      // Configure for production mode with weak secret
+      process.env.NODE_ENV = 'production';
+      process.env.JWT_SECRET = 'test_secret';
+
+      const token = jwt.sign({ driver_id: 'driver-1' }, 'test_secret');
+      const response = await request(app)
+        .get('/data/training/rewards')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toContain('Weak secret rejected');
+    } finally {
+      // Restore original environment
+      process.env.NODE_ENV = originalNodeEnv;
+      process.env.JWT_SECRET = originalJwtSecret;
+    }
+  });
 });
