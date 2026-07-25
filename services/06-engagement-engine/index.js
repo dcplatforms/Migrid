@@ -36,11 +36,25 @@ app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 
+// [Security] Weak secret definitions
+const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
+
+const isWeakSecret = (secret) => {
+  if (!secret) return true;
+  return WEAK_SECRETS.includes(secret.toLowerCase().trim());
+};
+
 io.on('connection', (socket) => {
   const token = socket.handshake.auth.token || socket.handshake.query.token;
 
   if (!token) {
     console.warn('[L6 WebSockets] Connection attempt without token.');
+    return socket.disconnect();
+  }
+
+  // [Security Hardening] Reject weak secrets in production environment
+  if (process.env.NODE_ENV === 'production' && isWeakSecret(JWT_SECRET)) {
+    console.error('[Security] JWT_SECRET is weak, insecure, or default. Blocking WebSocket connection in production.');
     return socket.disconnect();
   }
 
@@ -58,6 +72,12 @@ io.on('connection', (socket) => {
 
 // Middleware: Verify JWT token
 const authenticateToken = (req, res, next) => {
+  // [Security Hardening] Reject weak secrets in production environment
+  if (process.env.NODE_ENV === 'production' && isWeakSecret(JWT_SECRET)) {
+    console.error('[Security] JWT_SECRET is weak, insecure, or default. Blocking authenticated endpoint access in production.');
+    return res.status(500).json({ error: 'Internal server configuration error: Insecure JWT secret.' });
+  }
+
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
