@@ -166,12 +166,21 @@ async function connectServices() {
 }
 
 /**
- * [L1 v10.1.6] safeFloat: Robust isNaN protection for telemetry scoring
+ * [L1 v10.1.6] safeFloatFormatted: Robust isNaN protection for telemetry scoring
  * Enforces strict 4-decimal string formatting (.toFixed(4)).
+ */
+function safeFloatFormatted(val, fallback = 0.0) {
+  const parsed = parseFloat(val);
+  return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
+}
+
+/**
+ * Helper: robust isNaN protection with fallback.
+ * Dynamic dispatch for test compatibility.
  */
 function safeFloat(val, fallback = 0.0) {
   const parsed = parseFloat(val);
-  return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
+  return isNaN(parsed) ? fallback : parsed;
 }
 
 /**
@@ -210,25 +219,7 @@ function calculateConfidenceScore(streak, lastSync, siteLoadData) {
     }
   }
 
-  return safeFloat(Math.max(0, Math.min(1.0, score)));
-}
-
-/**
- * Handle DER_ALARM_REPORTED events from Kafka (L7)
- * Activates site-specific safety lock for CRITICAL/HIGH alarms.
- */
-async function handleDerAlarm(payload) {
-  const severity = (payload.severity || 'LOW').toUpperCase();
-  if (severity === 'CRITICAL' || severity === 'HIGH') {
-    const alarmSiteId = extractSiteId(payload);
-    console.log(`🚨 [L1 Physics] Received ${severity} DER Alarm for site ${alarmSiteId}. Activating Safety Lock.`);
-
-    try {
-      await redisClient.setEx(`${SAFETY_LOCK_KEY}:SITE:${alarmSiteId}`, SAFETY_LOCK_TTL, 'true');
-    } catch (err) {
-      console.error('❌ [L1 Physics] Failed to set site safety lock:', err.message);
-    }
-  }
+  return safeFloatFormatted(Math.max(0, Math.min(1.0, score)));
 }
 
 /**
@@ -236,14 +227,6 @@ async function handleDerAlarm(payload) {
  */
 function normalizeIso(iso) {
   return (iso || 'CAISO').toUpperCase().replace(/-/g, '');
-}
-
-/**
- * Helper: robust isNaN protection with fallback
- */
-function safeFloat(val, fallback = 0.0) {
-  const parsed = parseFloat(val);
-  return isNaN(parsed) ? fallback : parsed;
 }
 
 /**
@@ -272,7 +255,7 @@ function calculatePhysicsMetadata(payload) {
     physicsScore = Math.max(0, Math.min(1, payload.efficiency_pct / 100.0));
   }
 
-  const scoreStr = safeFloat(physicsScore);
+  const scoreStr = safeFloatFormatted(physicsScore);
   // [L1-130] Sentinel Hardening: Support boolean, string, and integer (1) formats
   const explicitSentinel = payload.is_sentinel_fidelity === true ||
                            payload.is_sentinel_fidelity === 'true' ||
@@ -286,19 +269,28 @@ function calculatePhysicsMetadata(payload) {
 }
 
 /**
- * [L1-135] Handle DER Alarms from L7
- * Activates site-specific safety locks for CRITICAL/HIGH alarms.
+ * [L1-135] Unified handleDerAlarm
+ * Handles both direct JSON payloads (from unit tests) and raw Kafka message payloads.
  */
-async function handleDerAlarm(message) {
+async function handleDerAlarm(input) {
   try {
-    const payload = JSON.parse(message.value.toString());
-    const { alarmType, severity, siteId } = payload;
-    const normalizedSiteId = siteId || extractSiteId(payload);
+    let payload = input;
+    if (input && input.value !== undefined) {
+      payload = JSON.parse(input.value.toString());
+    }
+
+    if (!payload) return;
+
+    const severity = (payload.severity || 'LOW').toUpperCase();
+    const alarmType = payload.alarmType || payload.event_type || 'DER_ALARM';
+    const normalizedSiteId = payload.siteId || extractSiteId(payload);
 
     if (severity === 'CRITICAL' || severity === 'HIGH') {
       console.log(`🚨 [L1 Physics] ${severity} Alarm Reported: ${alarmType} at ${normalizedSiteId}. Activating Site Lock.`);
-      const lockKey = `${SAFETY_LOCK_KEY}:SITE:${normalizedSiteId}`;
-      await redisClient.setEx(lockKey, SAFETY_LOCK_TTL, 'true');
+      const lockKeyUpper = `${SAFETY_LOCK_KEY}:SITE:${normalizedSiteId}`;
+      const lockKeyLower = `${SAFETY_LOCK_KEY}:site:${normalizedSiteId}`;
+      await redisClient.setEx(lockKeyUpper, SAFETY_LOCK_TTL, 'true');
+      await redisClient.setEx(lockKeyLower, SAFETY_LOCK_TTL, 'true');
     }
   } catch (err) {
     console.error('❌ [L1 Physics] DER Alarm processing error:', err.message);
@@ -361,7 +353,7 @@ async function handlePhysicsAlert(msg) {
   }
 
   // [L1-121] Fetch Site Load Data for Confidence Scoring
-  const alertSiteId = extractSiteId(payload.metadata || payload);
+  const alertSiteId = extractSiteId(payload) || extractSiteId(payload.metadata);
   const buildingLoadKw = safeFloat(await redisClient.get(`site:${alertSiteId}:building_load_kw`));
   const siteConfig = await redisClient.hGetAll(`site:${alertSiteId}:config`) || {};
   const limitKw = safeFloat(siteConfig.max_capacity_kw);
@@ -804,9 +796,9 @@ module.exports = {
   updateLocalSafetyCache,
   handleDerAlarm,
   handlePhysicsAlert,
-  handleDerAlarm,
   calculatePhysicsMetadata,
   safeFloat,
+  safeFloatFormatted,
   producer,
   consumer,
   connectServices,
@@ -814,8 +806,7 @@ module.exports = {
   reconcileLogs,
   start,
   getSyncIntervalId: () => syncIntervalId,
-  getLastMarketPrice: () => lastMarketPrice,
-  safeFloat
+  getLastMarketPrice: () => lastMarketPrice
 };
 
 process.on('SIGTERM', async () => {
