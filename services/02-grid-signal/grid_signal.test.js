@@ -308,10 +308,10 @@ describe('L2 Grid Signal Service', () => {
     expect(response.body).toHaveProperty('timestamp');
   });
 
-  test('GET /health should return correct version (v2.5.5)', async () => {
+  test('GET /health should return correct version (v2.5.6)', async () => {
     const response = await request(app).get('/health');
     expect(response.status).toBe(200);
-    expect(response.body.version).toBe('2.5.5');
+    expect(response.body.version).toBe('2.5.6');
   });
 
   test('GET /openadr/v3/reports should return regional market contexts', async () => {
@@ -490,7 +490,7 @@ describe('L2 Grid Signal Service', () => {
 
     expect(response.status).toBe(503);
     expect(response.body.status).toBe('REJECTED');
-    expect(response.body.reason).toBe('SAFETY_VIOLATION_L1');
+    expect(response.body.reason).toBe('SITE_SAFETY_LOCK_ACTIVE');
 
     localSafetyCache.site_safety['SITE-LOCKED-99'] = false; // Reset
   });
@@ -977,7 +977,7 @@ describe('L2 Grid Signal Service', () => {
       });
 
     expect(response.status).toBe(503);
-    expect(response.body.reason).toBe('SAFETY_VIOLATION_L1');
+    expect(response.body.reason).toBe('SITE_SAFETY_LOCK_ACTIVE');
     expect(response.body.details.alert_type).toBe('PHYSICS_FRAUD');
 
     localSafetyCache.site_safety['SITE-ALPHA'] = false; // Reset

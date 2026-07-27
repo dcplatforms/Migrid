@@ -49,7 +49,7 @@ const { app, redisClient, localSafetyCache, updateLocalSafetyCache, startSafetyC
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 const systemToken = jwt.sign({ sub: 'admin' }, JWT_SECRET);
 
-describe('L2 v2.5.5 Site-Specific Safety Verification', () => {
+describe('L2 v2.5.6 Site-Specific Safety Verification', () => {
   let kafkaConsumerEachMessage;
 
   beforeAll(async () => {

@@ -1,5 +1,5 @@
 /**
- * L2: Grid Signal Service (v2.5.5)
+ * L2: Grid Signal Service (v2.5.6)
  * OpenADR 3.0 VEN implementation for demand response and price signals
  * Enhanced with L1 Physics Safety Guards and Redis Caching
  */
@@ -123,7 +123,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.5.5',
+    version: '2.5.6',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -238,7 +238,6 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
 
     // 1. Check Safety Lock from L1 Physics Engine (Utilize sub-millisecond local cache)
     // [L2-135] Expanded to check site-specific locks
-    const siteIdVal = extractSiteId(event);
     const isSiteLocked = siteIdVal && localSafetyCache.site_safety[siteIdVal];
     const isSafetyLocked = localSafetyCache.global_safety || (isoRegion && localSafetyCache.regional_safety[isoRegion]) || isSiteLocked;
 
@@ -246,7 +245,7 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
       console.warn(`🚨 [L2] DISPATCH REJECTED: L1 Safety Lock active (Global: ${localSafetyCache.global_safety}, Regional: ${localSafetyCache.regional_safety[isoRegion]}, Site: ${isSiteLocked})`);
 
       // Fetch context if available for richer error response (Redis fallback)
-      const lockContext = (siteIdVal && isSiteSafetyLocked) ? await redisClient.get(`${SAFETY_LOCK_KEY}:site:${siteIdVal.toUpperCase()}:context`) : await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
+      const lockContext = (siteIdVal && isSiteLocked) ? await redisClient.get(`${SAFETY_LOCK_KEY}:site:${siteIdVal.toUpperCase()}:context`) : await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
       const details = lockContext ? JSON.parse(lockContext) : null;
 
       return res.status(503).json({
@@ -450,7 +449,6 @@ const updateLocalSafetyCache = async () => {
     const newRegionalGrid = {};
     const newSiteSafety = {};
 
-    const newSiteSafety = {};
     do {
       const safetyReply = await redisClient.scan(cursor, { MATCH: `${SAFETY_LOCK_KEY}:*`, COUNT: 100 });
       cursor = safetyReply.cursor;
