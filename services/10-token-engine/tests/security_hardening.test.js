@@ -75,4 +75,48 @@ describe('L10 Token Engine Security Hardening', () => {
     expect(response.headers['strict-transport-security']).toBeDefined();
     expect(response.headers['x-content-type-options']).toBeDefined();
   });
+
+  test('GET /data/training/rewards should return 500 in production if JWT_SECRET is weak', async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalJwtSecret = process.env.JWT_SECRET;
+
+    process.env.NODE_ENV = 'production';
+    process.env.JWT_SECRET = 'test_secret';
+
+    const token = jwt.sign({ driver_id: 'admin-1' }, 'test_secret');
+    const response = await request(app)
+      .get('/data/training/rewards')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(500);
+    expect(response.body.error).toContain('Internal server configuration error');
+
+    // Restore env
+    process.env.NODE_ENV = originalNodeEnv;
+    process.env.JWT_SECRET = originalJwtSecret;
+  });
+
+  test('GET /data/training/rewards should return 200 in production if JWT_SECRET is secure', async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalJwtSecret = process.env.JWT_SECRET;
+
+    process.env.NODE_ENV = 'production';
+    process.env.JWT_SECRET = 'secure_production_secret_key_12345';
+
+    const token = jwt.sign({ driver_id: 'admin-1' }, 'secure_production_secret_key_12345');
+
+    const { Client } = require('pg');
+    const mClient = new Client();
+    mClient.query.mockResolvedValueOnce({ rows: [] });
+
+    const response = await request(app)
+      .get('/data/training/rewards')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+
+    // Restore env
+    process.env.NODE_ENV = originalNodeEnv;
+    process.env.JWT_SECRET = originalJwtSecret;
+  });
 });
