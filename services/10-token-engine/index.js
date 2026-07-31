@@ -32,7 +32,7 @@ const LMP_THRESHOLD_SCARCITY = new Decimal(process.env.LMP_THRESHOLD_SCARCITY ||
 
 /**
  * Middleware: Verify JWT token (Zero-Trust Security)
- * Hardened to return 500 error if JWT_SECRET is missing.
+ * Hardened to return 500 error if JWT_SECRET is missing or weak/default in production.
  */
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -40,12 +40,22 @@ const authenticateToken = (req, res, next) => {
 
   if (!token) return res.status(401).json({ error: 'Access token required' });
 
-  if (!JWT_SECRET) {
+  const currentSecret = process.env.JWT_SECRET || JWT_SECRET;
+
+  if (!currentSecret) {
     console.error('Security Warning: JWT_SECRET is not configured.');
     return res.status(500).json({ error: 'Internal server configuration error' });
   }
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
+  if (process.env.NODE_ENV === 'production') {
+    const weakSecrets = ['test_secret', 'dev_secret', 'default_secret', 'secret'];
+    if (weakSecrets.includes(currentSecret)) {
+      console.error(`Security Warning: Weak or insecure JWT_SECRET used in production environment: ${currentSecret}`);
+      return res.status(500).json({ error: 'Internal server configuration error' });
+    }
+  }
+
+  jwt.verify(token, currentSecret, (err, user) => {
     if (err) return res.status(403).json({ error: 'Invalid or expired token' });
     req.user = user;
     next();
