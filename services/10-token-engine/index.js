@@ -49,7 +49,7 @@ const authenticateToken = (req, res, next) => {
 
   // Reject insecure or default keys in production
   if (process.env.NODE_ENV === 'production' &&
-      (activeSecret === 'test_secret' || activeSecret === 'dev_secret' || activeSecret === 'default_secret' || activeSecret === 'secret')) {
+      (activeSecret === 'test_secret' || activeSecret === 'dev_secret' || activeSecret === 'default_secret' || activeSecret === 'secret' || activeSecret === 'dev_secret_change_in_production')) {
     console.error('Security Error: Weak JWT_SECRET detected in production environment.');
     return res.status(500).json({ error: 'Internal server configuration error: Weak JWT secret in production.' });
   }
@@ -328,7 +328,7 @@ async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '4.3.8',
+    version: '4.3.9',
     status: 'healthy',
     layer: 'L10',
     platform: 'v10.1.6'
@@ -366,7 +366,7 @@ app.get('/data/training/rewards', authenticateToken, async (req, res) => {
     res.json({
       count: result.rows.length,
       data: result.rows,
-      source: 'L10_TOKEN_ENGINE_V4.3.8',
+      source: 'L10_TOKEN_ENGINE_V4.3.9',
       fidelity_tier: 'SENTINEL'
     });
   } catch (error) {
