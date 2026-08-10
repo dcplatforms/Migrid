@@ -277,7 +277,7 @@ Sell: LMP > $100/MWh (grid services revenue)
 Strategic alignment on Hardware-Aware Resilience and High-Fidelity telemetry:
 
 - [✓] **L6 Engagement Engine (v5.18.0)**: Deployed **Hardware Health Guardian** achievement; hardened site-specific multiplier logic.
-- [✓] **L2 Grid Signal (v2.5.5)**: Implemented site-specific safety lock enforcement on `CRITICAL` alarms.
+- [✓] **L2 Grid Signal (v2.5.6)**: Implemented site-specific safety lock enforcement on `CRITICAL` alarms.
 - [✓] **L10 Token Engine (v4.3.8)**: Implemented **Hardware Health Penalty** (-0.05 per alarm); hardened `safeFloat` telemetry.
 - [✓] **L4 Market Gateway (v3.8.9)**: Hardened bidding confidence logic and site-specific health tracking via DER Alarms.
 - [✓] **L7 Device Gateway (v5.13.0)**: Optimized heartbeat hash indexing and normalized individual DER alarms.
@@ -798,7 +798,7 @@ done
 | Layer | Service | Version | Status |
 | :--- | :--- | :--- | :--- |
 | **L1** | Physics Engine | `10.1.6` | ✅ Operational |
-| **L2** | Grid Signal | `2.5.5` | ✅ Operational |
+| **L2** | Grid Signal | `2.5.6` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.3` | ✅ Operational |
 | **L4** | Market Gateway | `3.8.9` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
@@ -817,7 +817,7 @@ done
 - **L7 Device Gateway (v5.13.0)**: Optimized heartbeat hash indexing, normalized OCPP 2.1 NotifyDERAlarm broadcasting, and synchronized site-safety cache locks.
 - **L10 Token Engine (v4.3.8)**: Implemented hardware health penalties, resolved shadow declarations/SyntaxErrors, and consolidated `extractSiteId` site awareness.
 - **L4 Market Gateway (v3.8.9)**: Implemented bidding optimizer health penalties with `Decimal.js` (-0.05 per active alarm, max -0.30) and hardened regional grid lock scanning.
-- **L2 Grid Signal (v2.5.5)**: Implemented site-specific safety lock dispatch rejection [L2-135] and `DER_ALARM_REPORTED` Kafka bridge to translate alarms into immediate site locks.
+- **L2 Grid Signal (v2.5.6)**: Implemented site-specific safety lock dispatch rejection [L2-135] and `DER_ALARM_REPORTED` Kafka bridge to translate alarms into immediate site locks.
 - **L5 Driver API (v4.1.0)**: Hardened `POST /auth/register` against IDOR via `fleet_id` UUID validation and database existence checks.
 - **L6 Engagement Engine (v5.18.0)**: Implemented 'Hardware Health Guardian' achievement, resolved double-declarations, and consolidated helpers to ensure Phase 6 alignment.
 - **L3 VPP Aggregator (v3.3.3)**: Standardized site extraction and 4-decimal precision, with stationary storage SoC floor.
