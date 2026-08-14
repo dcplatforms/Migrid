@@ -382,6 +382,66 @@ describe('L3 VPP Aggregator Service', () => {
         });
     });
 
+    describe('Security Hardening: Zero-Trust JWT Secret Verification', () => {
+        let originalEnv;
+
+        beforeEach(() => {
+            originalEnv = { ...process.env };
+        });
+
+        afterEach(() => {
+            process.env = originalEnv;
+        });
+
+        test('Authenticated endpoint should fail securely with 500 when NODE_ENV is production and JWT_SECRET is default', async () => {
+            process.env.NODE_ENV = 'production';
+            delete process.env.JWT_SECRET;
+
+            const token = jwt.sign({ fleet_id: 'FLEET-001' }, 'dev_secret_change_in_production');
+
+            const response = await request(app)
+                .get('/capacity/available')
+                .set('Authorization', `Bearer ${token}`);
+
+            expect(response.status).toBe(500);
+            expect(response.body.error).toContain('Internal server configuration error');
+        });
+
+        test('Authenticated endpoint should fail securely with 500 when NODE_ENV is production and JWT_SECRET is weak', async () => {
+            process.env.NODE_ENV = 'production';
+            process.env.JWT_SECRET = 'secret';
+
+            const token = jwt.sign({ fleet_id: 'FLEET-001' }, 'secret');
+
+            const response = await request(app)
+                .get('/capacity/available')
+                .set('Authorization', `Bearer ${token}`);
+
+            expect(response.status).toBe(500);
+            expect(response.body.error).toContain('Internal server configuration error');
+        });
+
+        test('Authenticated endpoint should succeed when NODE_ENV is production and JWT_SECRET is strong', async () => {
+            process.env.NODE_ENV = 'production';
+            const strongSecret = 'super_strong_unpredictable_production_secret_key_987654321';
+            process.env.JWT_SECRET = strongSecret;
+
+            mockRedisClient.get.mockResolvedValue(null);
+            mockPool.query.mockResolvedValue({
+                rows: [{ raw_capacity_kwh: 100, vehicle_count: 2 }]
+            });
+
+            const token = jwt.sign({ fleet_id: 'FLEET-001' }, strongSecret);
+
+            const response = await request(app)
+                .get('/capacity/available')
+                .set('Authorization', `Bearer ${token}`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.available_capacity_kwh).toBe(100);
+        });
+    });
+
     describe('GET /data/training/capacity', () => {
         test('should return 403 if token contains a fleet_id (driver token)', async () => {
             const response = await request(app)
