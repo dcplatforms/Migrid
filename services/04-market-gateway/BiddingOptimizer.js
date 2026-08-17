@@ -260,7 +260,7 @@ class BiddingOptimizer {
     // Handle Halted Bidding
     if (locks.l1 || locks.l4) {
       if (locks.l1) {
-        console.warn(`🚨 [L4 Market Gateway v3.8.9] Bidding halted: L1 safety lock is active for ${iso}`);
+        console.warn(`🚨 [L4 Market Gateway v3.9.0] Bidding halted: L1 safety lock is active for ${iso}`);
         if (auditContext) {
           console.warn(`[L4 Safety Context] Reason: ${auditContext.event_type}, Severity: ${auditContext.severity}, Score: ${auditContext.physics_score || 'N/A'}, Confidence: ${auditContext.confidence_score || 'N/A'}, Region: ${auditContext.iso_region || 'N/A'}`);
         }
@@ -269,7 +269,7 @@ class BiddingOptimizer {
       if (locks.l4) {
         const regionalLockActive = await this.redisClient.get(`l4:grid:lock:${isoKey}`);
         const scope = (regionalLockActive === 'true' || regionalLockActive === '1') ? `Regional (${iso})` : 'Global';
-        console.warn(`⚠️ [L4 Market Gateway v3.8.9] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
+        console.warn(`⚠️ [L4 Market Gateway v3.9.0] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
       }
 
       return {
