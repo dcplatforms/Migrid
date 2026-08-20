@@ -68,6 +68,13 @@ app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 
+const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
+
+const isWeakSecret = (secret) => {
+  if (!secret) return true;
+  return WEAK_SECRETS.includes(secret.toLowerCase().trim());
+};
+
 /**
  * Helper: Standardized site ID extraction for multi-key parity (L2/L3/L10)
  */
@@ -93,14 +100,6 @@ const isSentinel = (flag, score) => {
 
 // Middleware: Verify JWT token
 const authenticateToken = (req, res, next) => {
-  const currentSecret = process.env.JWT_SECRET || 'dev_secret_change_in_production';
-  if (process.env.NODE_ENV === 'production') {
-    const weakSecrets = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
-    if (!process.env.JWT_SECRET || weakSecrets.includes(currentSecret)) {
-      return res.status(500).json({ error: 'Internal server configuration error' });
-    }
-  }
-
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
@@ -108,7 +107,20 @@ const authenticateToken = (req, res, next) => {
     return res.status(401).json({ error: 'Access token required' });
   }
 
-  jwt.verify(token, currentSecret, (err, user) => {
+  const activeSecret = process.env.JWT_SECRET || JWT_SECRET;
+
+  if (!activeSecret) {
+    console.error('Security Warning: JWT_SECRET is not configured.');
+    return res.status(500).json({ error: 'Internal server configuration error' });
+  }
+
+  // Reject weak or default keys in production
+  if (process.env.NODE_ENV === 'production' && isWeakSecret(activeSecret)) {
+    console.error('Security Error: Weak JWT_SECRET detected in production environment.');
+    return res.status(500).json({ error: 'Internal server configuration error' });
+  }
+
+  jwt.verify(token, activeSecret, (err, user) => {
     if (err) {
       return res.status(403).json({ error: 'Invalid or expired token' });
     }
