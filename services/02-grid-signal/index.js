@@ -16,7 +16,6 @@ const Ajv = require('ajv');
 const app = express();
 const port = process.env.PORT || 3002;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
-
 // [Security] Weak secret definitions
 const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
 
