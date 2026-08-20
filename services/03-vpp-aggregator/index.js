@@ -152,8 +152,8 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
     if (safetyContext && typeof safetyContext === 'string') {
       try {
         const context = JSON.parse(safetyContext);
-        physicsScoreVal = parseFloat(safeFloat(context.physics_score, 1.0));
-        confidenceScoreVal = parseFloat(safeFloat(context.confidence_score, 1.0));
+        physicsScoreRaw = parseFloat(context.physics_score);
+        confidenceScoreRaw = parseFloat(context.confidence_score);
 
         // High-Fidelity Standard: (physics_score > 0.95 OR confidence_score > 0.95)
         isHighFidelity = physicsScoreRaw > 0.95 || confidenceScoreRaw > 0.95;
@@ -287,8 +287,8 @@ const updateGlobalCapacity = async () => {
         if (context.fleet_id) {
           lockedFleetId = context.fleet_id;
         }
-        rawPhysicsScore = parseFloat(safeFloat(context.physics_score, 1.0));
-        confidenceScore = parseFloat(safeFloat(context.confidence_score, 1.0));
+        rawPhysicsScore = parseFloat(context.physics_score);
+        rawConfidenceScore = parseFloat(context.confidence_score);
 
         // Sentinel Fidelity logic: Prioritize explicit flag (boolean, string, or integer)
         isSentinelFidelity = context.is_sentinel_fidelity === true || context.is_sentinel_fidelity === 'true' || context.is_sentinel_fidelity === 1 || rawPhysicsScore > 0.99;

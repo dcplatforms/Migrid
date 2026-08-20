@@ -35,7 +35,7 @@ const localSafetyCache = {
   l1_physics: false,
   l4_grid: false,
   l4_regional: {},
-  site_safety: {}, // Site-specific locks
+  site_safety: {},
   l4_regional_alarms: {}, // [L4 v3.8.9] Track hardware alarm density
   physics_score: "1.0000",
   confidence_score: "1.0000",
@@ -144,12 +144,17 @@ async function updateLocalSafetyCache() {
     // Regional locks and alarms discovery
     const newRegionalLocks = {};
     const newSiteLocks = {};
-    const newRegionalAlarms = {};
-
+    const scannedAlarms = {};
     let cursor = '0';
     do {
-      const replyLocks = await redisClient.scan(cursor, { MATCH: 'l*:*lock:*', COUNT: 100 });
-      cursor = replyLocks.cursor;
+      // Scan for regional/site locks and regional alarm counts
+      const [replyLocks, replyAlarms] = await Promise.all([
+        redisClient.scan(cursor, { MATCH: 'l*:*lock:*', COUNT: 100 }),
+        redisClient.scan(cursor, { MATCH: 'l4:regional:alarms:*', COUNT: 100 })
+      ]);
+
+      cursor = replyLocks.cursor; // Using one cursor is usually fine if they share the same key space
+
       if (replyLocks.keys.length > 0) {
         const values = await redisClient.mGet(replyLocks.keys);
         replyLocks.keys.forEach((key, index) => {
@@ -165,24 +170,20 @@ async function updateLocalSafetyCache() {
           }
         });
       }
-    } while (cursor !== 0 && cursor !== '0');
 
-    let alarmCursor = '0';
-    do {
-      const replyAlarms = await redisClient.scan(alarmCursor, { MATCH: 'l4:regional:alarms:*', COUNT: 100 });
-      alarmCursor = replyAlarms.cursor;
       if (replyAlarms.keys.length > 0) {
         const values = await redisClient.mGet(replyAlarms.keys);
         replyAlarms.keys.forEach((key, index) => {
           const iso = key.split(':').pop().toUpperCase();
-          newRegionalAlarms[iso] = parseInt(values[index] || '0');
+          const val = parseInt(values[index]) || 0;
+          scannedAlarms[iso] = val;
         });
       }
-    } while (alarmCursor !== 0 && alarmCursor !== '0');
+    } while (cursor !== 0 && cursor !== '0');
 
     localSafetyCache.l4_regional = newRegionalLocks;
     localSafetyCache.site_safety = newSiteLocks;
-    localSafetyCache.l4_regional_alarms = newRegionalAlarms;
+    localSafetyCache.l4_regional_alarms = scannedAlarms;
 
     localSafetyCache.last_updated = new Date().toISOString();
   } catch (err) {

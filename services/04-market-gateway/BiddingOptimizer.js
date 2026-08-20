@@ -183,7 +183,7 @@ class BiddingOptimizer {
     await this.connect();
     const isoKey = iso.toUpperCase().replace(/-/g, '');
 
-    // 1. Fetch Capacity Data first to ensure we have complete context even when locks halt bidding
+    // 1. Fetch Capacity Data first (includes breakdown, scores, fidelity)
     const {
       capacity: pVppKw,
       fidelity: capacityFidelityFromRedis,
@@ -194,8 +194,9 @@ class BiddingOptimizer {
     const pVppMw = pVppKw.dividedBy(1000);
 
     // 2. Fetch safety lock context for audit (L11 ML Engine readiness)
-    let physicsScore = this.localCache?.physics_score || "1.0000";
-    let confidenceScore = this.localCache?.confidence_score || "1.0000";
+    // [L4-133] Optimized: Use localCache for zero-latency audit metadata
+    let physicsScore = safeFloat(this.localCache?.physics_score, 1.0);
+    let confidenceScore = safeFloat(this.localCache?.confidence_score, 1.0);
     let isSentinelFidelity = !!this.localCache?.is_sentinel_fidelity;
     let auditContext = null;
 
@@ -225,49 +226,40 @@ class BiddingOptimizer {
       }
     }
 
-    // Synchronize scores with L3 High-Fidelity context if available
+    // [L4 v3.8.6] Synchronize scores with L3 High-Fidelity context if available
     if (capacityFidelityFromRedis === 'HIGH_FIDELITY') {
-      physicsScore = pScoreFromL3;
-      confidenceScore = cScoreFromL3;
+      physicsScore = safeFloat(pScoreFromL3 || physicsScore, 1.0);
+      confidenceScore = safeFloat(cScoreFromL3 || confidenceScore, 1.0);
     }
 
-    // 3. Hardware Health Penalty: Fetch regional alarm count and compute penalty
-    let alarmCount;
-    if (this.localCache && this.localCache.last_updated) {
-      alarmCount = this.localCache.l4_regional_alarms?.[isoKey] || 0;
+    // [L4 v3.8.9] Hardware Health Penalty: Fetch regional alarm count using Decimal.js
+    let regionalAlarmCountDecimal = new Decimal(0);
+    if (this.localCache && this.localCache.last_updated && this.localCache.l4_regional_alarms?.[isoKey] !== undefined) {
+      regionalAlarmCountDecimal = new Decimal(this.localCache.l4_regional_alarms[isoKey] || 0);
     } else {
       const alarmCountRaw = await this.redisClient.get(`l4:regional:alarms:${isoKey}`);
-      alarmCount = parseInt(alarmCountRaw || '0');
+      regionalAlarmCountDecimal = new Decimal(alarmCountRaw || '0');
     }
-    const regionalAlarmCount = new Decimal(alarmCount);
-    const hardwarePenalty = Decimal.min('0.30', regionalAlarmCount.times('0.05'));
+    const hardwarePenalty = Decimal.min('0.30', regionalAlarmCountDecimal.times('0.05'));
 
+    // Apply hardware health penalty to confidence score
+    let adjustedConfidence = new Decimal(confidenceScore);
     if (hardwarePenalty.gt(0)) {
-      const adjustedConfidence = new Decimal(confidenceScore).minus(hardwarePenalty);
-      confidenceScore = safeFloat(Decimal.max(adjustedConfidence, 0).toNumber());
-      console.log(`[BiddingOptimizer] Applied Hardware Health Penalty for ${isoKey}: -${hardwarePenalty.toFixed(2)} (Alarms: ${alarmCount})`);
+      adjustedConfidence = Decimal.max(0, adjustedConfidence.minus(hardwarePenalty));
+      console.log(`[BiddingOptimizer] Applied hardware health penalty for ${isoKey}: -${hardwarePenalty.toFixed(2)} (Alarms: ${regionalAlarmCountDecimal.toString()})`);
     }
+    const finalConfidenceScore = safeFloat(adjustedConfidence.toNumber());
 
-    // High-Fidelity logic: physics_score > 0.95 OR confidence_score > 0.95
-    const isHighFidelity = (parseFloat(physicsScore) > 0.95 || parseFloat(confidenceScore) > 0.95);
+    // High-Fidelity logic: physics_score > 0.95 OR confidence_score > 0.95 (Align with L10 v4.3.5)
+    const isHighFidelity = (parseFloat(physicsScore) > 0.95 || parseFloat(finalConfidenceScore) > 0.95);
+    // [L4 v3.8.5] Standardized Sentinel logic with fallback
     isSentinelFidelity = isSentinel(isSentinelFidelity, physicsScore);
     const capacityFidelity = isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD';
 
-    // 4. Resource-Aware Degradation Costs
-    const evDegradationKwh = new Decimal(process.env.DEGRADATION_COST_KWH || '0.02');
-    const bessDegradationKwh = new Decimal(process.env.BESS_DEGRADATION_COST_KWH || '0.01');
-
-    let weightedDegradationKwh = evDegradationKwh;
-    if (pVppKw.gt(0)) {
-      const evWeight = new Decimal(breakdown.ev).dividedBy(pVppKw);
-      const bessWeight = new Decimal(breakdown.bess).dividedBy(pVppKw);
-      weightedDegradationKwh = evDegradationKwh.times(evWeight).plus(bessDegradationKwh.times(bessWeight));
-    }
-    const degradationCostMwh = weightedDegradationKwh.times(1000);
-
-    // 5. Check Safety Lock Status and handle early-return (Bidding Halted)
+    // Verify the Physics & Grid signals: Check for safety locks before bidding
     const locks = await this.getSafetyLockStatus(iso, siteId);
 
+    // Handle Halted Bidding
     if (locks.l1 || locks.l4) {
       if (locks.l1) {
         console.warn(`🚨 [L4 Market Gateway v3.8.9] Bidding halted: L1 safety lock is active for ${iso}`);
@@ -287,12 +279,12 @@ class BiddingOptimizer {
         audit: {
           locks,
           physics_score: physicsScore,
-          confidence_score: confidenceScore,
+          confidence_score: finalConfidenceScore,
           is_high_fidelity: isHighFidelity,
           is_sentinel_fidelity: isSentinelFidelity,
           capacity_fidelity: capacityFidelity,
           hardware_penalty: hardwarePenalty.toFixed(4),
-          regional_alarm_count: alarmCount,
+          regional_alarm_count: regionalAlarmCountDecimal.toNumber(),
           audit_context: {
             ...auditContext,
             ev_capacity_kw: breakdown.ev,
@@ -300,15 +292,28 @@ class BiddingOptimizer {
             v3_capacity_fidelity: capacityFidelityFromRedis === 'HIGH_FIDELITY',
             is_sentinel_fidelity: isSentinelFidelity,
             hardware_penalty: hardwarePenalty.toFixed(4),
-            regional_alarm_count: alarmCount,
-            site_aware_sync: true
+            regional_alarm_count: regionalAlarmCountDecimal.toNumber()
           },
           timestamp: new Date().toISOString()
         }
       };
     }
 
-    // 6. Fetch Fuel Mix and Load Forecast for active bidding
+    // [L4-BESS-OPT] Resource-Aware Degradation Costs
+    const evDegradationKwh = new Decimal(process.env.DEGRADATION_COST_KWH || '0.02');
+    const bessDegradationKwh = new Decimal(process.env.BESS_DEGRADATION_COST_KWH || '0.01');
+
+    // Calculate weighted degradation cost based on resource breakdown
+    let weightedDegradationKwh = evDegradationKwh;
+    if (pVppKw.gt(0)) {
+      const evWeight = new Decimal(breakdown.ev).dividedBy(pVppKw);
+      const bessWeight = new Decimal(breakdown.bess).dividedBy(pVppKw);
+      weightedDegradationKwh = evDegradationKwh.times(evWeight).plus(bessDegradationKwh.times(bessWeight));
+    }
+    const degradationCostMwh = weightedDegradationKwh.times(1000);
+
+    // 5. Generate Bids
+    // 5. Fetch Additional Smart Data (Fuel Mix and Load Forecast)
     const fuelMix = await this.pricingService.getLatestFuelMix(iso);
     let renewablePct = 0;
     if (fuelMix.length > 0) {
@@ -373,21 +378,21 @@ class BiddingOptimizer {
       audit: {
         locks,
         physics_score: physicsScore,
-        confidence_score: confidenceScore,
+        confidence_score: finalConfidenceScore,
         is_high_fidelity: isHighFidelity,
         is_sentinel_fidelity: isSentinelFidelity,
         capacity_fidelity: capacityFidelityFromRedis,
-        regional_alarm_count: alarmCount,
+        regional_alarm_count: regionalAlarmCountDecimal.toNumber(),
         hardware_penalty: hardwarePenalty.toFixed(4),
         audit_context: {
           ...auditContext,
           ev_capacity_kw: breakdown.ev,
           bess_capacity_kw: breakdown.bess,
+          regional_alarm_count: regionalAlarmCountDecimal.toNumber(), // [L4 v3.8.9] L11 ML readiness
           v3_capacity_fidelity: capacityFidelityFromRedis === 'HIGH_FIDELITY',
           is_sentinel_fidelity: isSentinelFidelity,
           hardware_penalty: hardwarePenalty.toFixed(4),
-          regional_alarm_count: alarmCount,
-          site_aware_sync: true
+          site_aware_sync: true // L1 v10.1.3 requirement
         },
         pVppKw: pVppKw.toNumber(),
         timestamp: new Date().toISOString()
