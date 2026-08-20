@@ -103,7 +103,9 @@ class BiddingOptimizer {
             return {
               capacity: new Decimal(capacityValue || '0'),
               fidelity: fidelity,
-              breakdown: { ev: capacityValue || 0, bess: 0 } // Assume EV if breakdown missing
+              breakdown: { ev: capacityValue || 0, bess: 0 }, // Assume EV if breakdown missing
+              physics_score: "1.0000",
+              confidence_score: "1.0000"
             };
           }
         }
@@ -260,7 +262,7 @@ class BiddingOptimizer {
     // Handle Halted Bidding
     if (locks.l1 || locks.l4) {
       if (locks.l1) {
-        console.warn(`🚨 [L4 Market Gateway v3.8.9] Bidding halted: L1 safety lock is active for ${iso}`);
+        console.warn(`🚨 [L4 Market Gateway v3.9.0] Bidding halted: L1 safety lock is active for ${iso}`);
         if (auditContext) {
           console.warn(`[L4 Safety Context] Reason: ${auditContext.event_type}, Severity: ${auditContext.severity}, Score: ${auditContext.physics_score || 'N/A'}, Confidence: ${auditContext.confidence_score || 'N/A'}, Region: ${auditContext.iso_region || 'N/A'}`);
         }
@@ -269,7 +271,7 @@ class BiddingOptimizer {
       if (locks.l4) {
         const regionalLockActive = await this.redisClient.get(`l4:grid:lock:${isoKey}`);
         const scope = (regionalLockActive === 'true' || regionalLockActive === '1') ? `Regional (${iso})` : 'Global';
-        console.warn(`⚠️ [L4 Market Gateway v3.8.9] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
+        console.warn(`⚠️ [L4 Market Gateway v3.9.0] Bidding halted: ${scope} L4 grid signal lock is active for ${iso}`);
       }
 
       return {
@@ -338,18 +340,17 @@ class BiddingOptimizer {
       dartAnalysisMap[loc] = await this.pricingService.getDARTSpreadAnalysis(iso, loc);
     }
 
-    // 6. Generate Bids with Carbon-Aware and DA/RT Arbitrage Logic
+    // 7. Generate Bids with Carbon-Aware and DA/RT Arbitrage Logic
     for (const forecast of forecasts) {
       const lmpMwh = new Decimal(forecast.price_per_mwh);
       let pBidMw = new Decimal(0);
 
       // SMARTER LOGIC:
-      // A) Carbon-Aware: If renewablePct is high (> 60%), we prefer to hold capacity for charging
-      // (charging happens when LMP is low, but we might also avoid discharging to keep "green" electrons)
+      // A) Carbon-Aware
       const greenThreshold = parseFloat(process.env.CARBON_GREEN_THRESHOLD || '0.6');
       const isGreenHour = renewablePct > greenThreshold;
 
-      // B) DA vs RT Spread: Simple heuristic - if volatility is high, we hold 30% of capacity for RT spikes
+      // B) DA vs RT Spread Heuristics
       const volatilityThreshold = parseFloat(process.env.RT_VOLATILITY_THRESHOLD || '20');
       const rtReservePct = parseFloat(process.env.RT_RESERVE_PERCENTAGE || '0.3');
 
@@ -359,12 +360,11 @@ class BiddingOptimizer {
 
       // Optimization Invariant: maximize (Pbid * LMP - Cdeg(Pbid))
       if (lmpMwh.gt(degradationCostMwh)) {
-        // If it's a green hour, we might require a higher price to discharge (preserving green credentials)
         const greenPremiumValue = parseFloat(process.env.CARBON_GREEN_PREMIUM || '10');
         const greenPremium = isGreenHour ? new Decimal(greenPremiumValue) : new Decimal(0);
 
         if (lmpMwh.gt(degradationCostMwh.plus(greenPremium))) {
-          // [L4 v3.8.9] Apply Hardware Health Penalty to bid quantity
+          // Apply Hardware Health Penalty to bid quantity
           pBidMw = pVppMw.times(capacityMultiplier).times(new Decimal(1.0).minus(hardwarePenalty));
         }
       }

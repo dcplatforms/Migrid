@@ -33,6 +33,7 @@ const LMP_THRESHOLD_SCARCITY = new Decimal(process.env.LMP_THRESHOLD_SCARCITY ||
 /**
  * Middleware: Verify JWT token (Zero-Trust Security)
  * Hardened to return 500 error if JWT_SECRET is missing.
+ * Also hardened to reject weak, insecure, or default secrets in production environments.
  */
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -366,7 +367,7 @@ app.get('/data/training/rewards', authenticateToken, async (req, res) => {
     res.json({
       count: result.rows.length,
       data: result.rows,
-      source: 'L10_TOKEN_ENGINE_V4.3.8',
+      source: 'L10_TOKEN_ENGINE_V4.3.9',
       fidelity_tier: 'SENTINEL'
     });
   } catch (error) {

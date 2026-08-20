@@ -1,11 +1,12 @@
 /**
  * Verification Script for L10 Token Engine v4.3.9
- * Verifies versioning, health status, and core utility logic.
+ * Verifies versioning, health status, security hardening, and core utility logic.
  */
 
 const { app } = require('./index');
 const request = require('supertest');
 const fs = require('fs');
+
 const path = require('path');
 
 async function verify() {
@@ -26,8 +27,7 @@ async function verify() {
   }
 
   // 2. Duplicate Function Check
-  const indexPath = path.join(__dirname, 'index.js');
-  const indexSource = fs.readFileSync(indexPath, 'utf8');
+  const indexSource = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
   const occurrences = (indexSource.match(/function extractSiteId/g) || []).length;
 
   if (occurrences === 1) {
@@ -37,11 +37,35 @@ async function verify() {
     process.exit(1);
   }
 
-  // 3. Weak Secret Check
-  if (indexSource.includes('dev_secret_change_in_production')) {
-    console.log('✅ Weak Secret Reject Parity Check: PASSED (dev_secret_change_in_production included)');
+  // 3. AI Export Standard Check
+  if (indexSource.includes("source: 'L10_TOKEN_ENGINE_V4.3.9'")) {
+    console.log('✅ AI Export Standard: PASSED (Version string updated)');
   } else {
-    console.error('❌ Weak Secret Reject Parity Check: FAILED');
+    console.error('❌ AI Export Standard: FAILED (Version string not updated)');
+    process.exit(1);
+  }
+
+  // 4. Verification of behavioral types expansion
+  if (indexSource.includes("action_type === 'der_alarm_response'") && indexSource.includes("action_type === 'solar_ramp_response'")) {
+    console.log('✅ Behavioral Types Expansion: PASSED');
+  } else {
+    console.error('❌ Behavioral Types Expansion: FAILED');
+    process.exit(1);
+  }
+
+  // 5. Sentinel Fidelity Hardening Check
+  if (indexSource.includes("isSentinelFidelityVal === '1'")) {
+    console.log("✅ Sentinel Fidelity Hardening: PASSED ('1' string supported)");
+  } else {
+    console.error('❌ Sentinel Fidelity Hardening: FAILED');
+    process.exit(1);
+  }
+
+  // 6. Production Weak Secret Hardening Check for dev_secret_change_in_production
+  if (indexSource.includes("activeSecret === 'dev_secret_change_in_production'")) {
+    console.log("✅ Weak Secret Hardening: PASSED ('dev_secret_change_in_production' is rejected in production)");
+  } else {
+    console.error('❌ Weak Secret Hardening: FAILED');
     process.exit(1);
   }
 

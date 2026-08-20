@@ -101,7 +101,7 @@ describe('L10 Token Engine Security Hardening', () => {
     process.env.JWT_SECRET = originalJwtSecret;
   });
 
-  test('GET /data/training/rewards should return 500 in production if dev_secret_change_in_production is used', async () => {
+  test('GET /data/training/rewards should return 500 in production if dev_secret_change_in_production weak secret is used', async () => {
     const originalNodeEnv = process.env.NODE_ENV;
     const originalJwtSecret = process.env.JWT_SECRET;
 
