@@ -1,4 +1,4 @@
-# Sentinel's Journal 🛡️
+# Sentinel's Journal 🛡 invaders and guardians of MiGrid
 
 ## 2025-05-16 - [IDOR in Multi-tenant Microservices]
 **Vulnerability:** Insecure Direct Object Reference (IDOR) and cross-fleet data enumeration.
@@ -59,3 +59,8 @@
 **Vulnerability:** Over-mocking middleware (such as bypass-decoding JWTs without verifying cryptographic signatures in unit tests).
 **Learning:** Mocking the authentication middleware to directly decode the payload without verifying signatures degrades the integrity of the security test suite. If verification logic breaks in production, the tests would still pass false-positively.
 **Prevention:** Ensure that the actual middleware executes cryptographic verification in tests by setting proper secure secrets (`process.env.JWT_SECRET`) in the test environment, rather than mocking verification away.
+
+## 2026-07-24 - [Insecure Default and Weak JWT Secrets in Production]
+**Vulnerability:** Authentication mechanisms could default to or accept known weak secrets (`dev_secret_change_in_production`, `secret`, `test_secret`) in production mode.
+**Learning:** Relying on developers to correctly set high-entropy secrets in production leaves applications vulnerable to offline token fabrication attacks if default values are deployed.
+**Prevention:** Always enforce a dynamic configuration gate at application startup and middleware run-time to automatically reject default or weak secrets when `NODE_ENV` is set to `production`.

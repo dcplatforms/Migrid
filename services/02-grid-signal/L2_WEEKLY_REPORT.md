@@ -1,5 +1,6 @@
 ### 🌐 L2 Grid Signal: Weekly Engineering Reports
 
+- [L2 Weekly Report v2.5.6](./L2_WEEKLY_REPORT_V256.md)
 - [L2 Weekly Report v2.5.5](./L2_WEEKLY_REPORT_V255.md)
 - [L2 Weekly Report v2.5.4](./L2_WEEKLY_REPORT_V254.md)
 - [L2 Weekly Report v2.5.3](./L2_WEEKLY_REPORT_V253.md)

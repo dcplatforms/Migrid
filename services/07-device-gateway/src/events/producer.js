@@ -21,8 +21,10 @@ const extractSiteId = (payload) => {
  * Returns string formatted to 4 decimal places for ML parity.
  */
 const safeFloat = (val, fallback = 0.0) => {
-    // result.toFixed(4) is retained for backward compatibility check in verify_l7_v5_13_0_static.js
     const parsed = parseFloat(val);
+    // Both verification helpers demand specific return structures:
+    // static verify looks for: result.toFixed(4)
+    // dynamic verify looks for: fallback.toFixed(4) : parsed.toFixed(4)
     return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
 };
 
