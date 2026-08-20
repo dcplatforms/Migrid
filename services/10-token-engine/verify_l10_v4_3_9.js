@@ -7,6 +7,8 @@ const { app } = require('./index');
 const request = require('supertest');
 const fs = require('fs');
 
+const path = require('path');
+
 async function verify() {
   console.log('🚀 Starting L10 v4.3.9 Verification...');
 
@@ -25,7 +27,7 @@ async function verify() {
   }
 
   // 2. Duplicate Function Check
-  const indexSource = fs.readFileSync('./index.js', 'utf8');
+  const indexSource = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
   const occurrences = (indexSource.match(/function extractSiteId/g) || []).length;
 
   if (occurrences === 1) {
