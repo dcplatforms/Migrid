@@ -398,7 +398,7 @@ async function startGridSignalConsumer() {
  * Proactive background loop to poll market prices and notify other layers (L9)
  */
 async function startPriceBroadcaster() {
-  console.log(`[Market Gateway v3.8.0] Initializing proactive price broadcaster for: ${SUPPORTED_ISOS.join(', ')}`);
+  console.log(`[Market Gateway v3.9.0] Initializing proactive price broadcaster for: ${SUPPORTED_ISOS.join(', ')}`);
 
   const simulationEnabled = process.env.ENABLE_MARKET_SIMULATION === 'true' || process.env.NODE_ENV === 'test';
 
@@ -841,7 +841,7 @@ if (require.main === module) {
   start();
 }
 
-module.exports = { app, localSafetyCache, updateLocalSafetyCache };
+module.exports = { app, localSafetyCache, updateLocalSafetyCache, start };
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
