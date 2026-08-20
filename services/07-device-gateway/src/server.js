@@ -81,15 +81,6 @@ async function updateLocalSafetyCache() {
   }
 }
 
-const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
-
-const isJwtSecretSafe = () => {
-  const secret = config.jwtSecret || process.env.JWT_SECRET;
-  if (process.env.NODE_ENV === 'production' && (!secret || WEAK_SECRETS.includes(secret))) {
-    return false;
-  }
-  return true;
-};
 
 // Middleware for auth
 const authenticateInternal = (req, res, next) => {
