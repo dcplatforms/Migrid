@@ -1,5 +1,5 @@
 /**
- * L2: Grid Signal Service (v2.5.5)
+ * L2: Grid Signal Service (v2.5.6)
  * OpenADR 3.0 VEN implementation for demand response and price signals
  * Enhanced with L1 Physics Safety Guards and Redis Caching
  */
@@ -123,7 +123,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.5.5',
+    version: '2.5.6',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
