@@ -238,7 +238,6 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
 
     // 1. Check Safety Lock from L1 Physics Engine (Utilize sub-millisecond local cache)
     // [L2-135] Expanded to check site-specific locks
-    const siteIdVal = extractSiteId(event);
     const isSiteLocked = siteIdVal && localSafetyCache.site_safety[siteIdVal];
     const isSafetyLocked = localSafetyCache.global_safety || (isoRegion && localSafetyCache.regional_safety[isoRegion]) || isSiteLocked;
 
@@ -246,7 +245,7 @@ app.post('/openadr/v3/events', authenticateToken, async (req, res) => {
       console.warn(`🚨 [L2] DISPATCH REJECTED: L1 Safety Lock active (Global: ${localSafetyCache.global_safety}, Regional: ${localSafetyCache.regional_safety[isoRegion]}, Site: ${isSiteLocked})`);
 
       // Fetch context if available for richer error response (Redis fallback)
-      const lockContext = (siteIdVal && isSiteSafetyLocked) ? await redisClient.get(`${SAFETY_LOCK_KEY}:site:${siteIdVal.toUpperCase()}:context`) : await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
+      const lockContext = (siteIdVal && isSiteLocked) ? await redisClient.get(`${SAFETY_LOCK_KEY}:site:${siteIdVal.toUpperCase()}:context`) : await redisClient.get(`${SAFETY_LOCK_KEY}:context`);
       const details = lockContext ? JSON.parse(lockContext) : null;
 
       return res.status(503).json({
@@ -450,7 +449,6 @@ const updateLocalSafetyCache = async () => {
     const newRegionalGrid = {};
     const newSiteSafety = {};
 
-    const newSiteSafety = {};
     do {
       const safetyReply = await redisClient.scan(cursor, { MATCH: `${SAFETY_LOCK_KEY}:*`, COUNT: 100 });
       cursor = safetyReply.cursor;
@@ -706,8 +704,8 @@ async function startSafetyConsumer() {
           if (severity === 'CRITICAL' || severity === 'HIGH') {
             console.warn(`🚨 [L2] ${severity} DER ALARM at Site ${siteIdVal}. Locking site-specific grid dispatch.`);
             const siteLockKey = `${SAFETY_LOCK_KEY}:site:${siteIdVal}`;
-            await redisClient.setEx(siteLockKey, 1800, '1'); // 30-minute lock for hardware alarms
-            await redisClient.setEx(`${siteLockKey}:context`, 1800, JSON.stringify({
+            await redisClient.setEx(siteLockKey, 900, '1'); // 15-minute lock for hardware alarms
+            await redisClient.setEx(`${siteLockKey}:context`, 900, JSON.stringify({
               reason: 'CRITICAL_DER_ALARM',
               alarm_type: alarmType,
               severity: severity,

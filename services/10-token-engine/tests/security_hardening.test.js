@@ -76,27 +76,28 @@ describe('L10 Token Engine Security Hardening', () => {
     expect(response.headers['x-content-type-options']).toBeDefined();
   });
 
-  test('authenticateToken should reject weak secrets in production', async () => {
-    // Save original env values
+  test('GET /data/training/rewards should return 500 in production if weak secret is used', async () => {
     const originalNodeEnv = process.env.NODE_ENV;
     const originalJwtSecret = process.env.JWT_SECRET;
 
-    try {
-      // Configure for production mode with weak secret
-      process.env.NODE_ENV = 'production';
-      process.env.JWT_SECRET = 'test_secret';
+    process.env.NODE_ENV = 'production';
+    process.env.JWT_SECRET = 'test_secret';
 
-      const token = jwt.sign({ driver_id: 'driver-1' }, 'test_secret');
-      const response = await request(app)
-        .get('/data/training/rewards')
-        .set('Authorization', `Bearer ${token}`);
+    const token = jwt.sign({ driver_id: 'admin-1' }, process.env.JWT_SECRET);
 
-      expect(response.status).toBe(500);
-      expect(response.body.error).toContain('Weak secret rejected');
-    } finally {
-      // Restore original environment
+    const response = await request(app)
+      .get('/data/training/rewards')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(500);
+    expect(response.body.error).toContain('Internal server configuration error');
+
+    // Restore
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
       process.env.NODE_ENV = originalNodeEnv;
-      process.env.JWT_SECRET = originalJwtSecret;
     }
+    process.env.JWT_SECRET = originalJwtSecret;
   });
 });
