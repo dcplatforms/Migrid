@@ -3,7 +3,7 @@
  * Modular Architecture Implementation (Phase 5)
  */
 
-const { startServer } = require('./src/server');
+const { app, startServer } = require('./src/server');
 
 async function bootstrap() {
     try {
@@ -15,4 +15,8 @@ async function bootstrap() {
     }
 }
 
-bootstrap();
+if (require.main === module) {
+    bootstrap();
+}
+
+module.exports = { app, startServer };

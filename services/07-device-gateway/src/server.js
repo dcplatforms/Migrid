@@ -71,8 +71,23 @@ async function updateLocalSafetyCache() {
   }
 }
 
+const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
+
+const isJwtSecretSafe = () => {
+  const secret = config.jwtSecret || process.env.JWT_SECRET;
+  if (process.env.NODE_ENV === 'production' && (!secret || WEAK_SECRETS.includes(secret))) {
+    return false;
+  }
+  return true;
+};
+
 // Middleware for auth
 const authenticateInternal = (req, res, next) => {
+  if (!isJwtSecretSafe()) {
+    console.error('❌ [L7 Security Alert] Weak or default JWT secret detected in production environment.');
+    return res.status(500).json({ error: 'Internal server configuration error' });
+  }
+
   const token = req.headers['authorization']?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Token required' });
   jwt.verify(token, config.jwtSecret, (err, decoded) => {
@@ -95,6 +110,11 @@ app.get('/health', (req, res) => {
 });
 
 app.post('/iso15118/authenticate', async (req, res) => {
+  if (!isJwtSecretSafe()) {
+    console.error('❌ [L7 Security Alert] Weak or default JWT secret detected in production environment.');
+    return res.status(500).json({ error: 'Internal server configuration error' });
+  }
+
   const { contract_id, certificate_chain } = req.body;
 
   // [L7-SEC-001] Hardened Certificate Chain Validation
@@ -430,4 +450,4 @@ async function startServer() {
     });
 }
 
-module.exports = { startServer };
+module.exports = { app, startServer };
