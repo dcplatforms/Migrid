@@ -1,5 +1,5 @@
 /**
- * L2: Grid Signal Service (v2.5.5)
+ * L2: Grid Signal Service (v2.5.6)
  * OpenADR 3.0 VEN implementation for demand response and price signals
  * Enhanced with L1 Physics Safety Guards and Redis Caching
  */
@@ -16,6 +16,13 @@ const Ajv = require('ajv');
 const app = express();
 const port = process.env.PORT || 3002;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
+// [Security] Weak secret definitions
+const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
+
+const isWeakSecret = (secret) => {
+  if (!secret) return true;
+  return WEAK_SECRETS.includes(secret.toLowerCase().trim());
+};
 
 const ajv = new Ajv({ allowUnionTypes: true });
 const eventSchema = {
@@ -105,6 +112,12 @@ const authenticateToken = (req, res, next) => {
     return res.status(401).json({ error: 'UNAUTHORIZED', message: 'Access token required' });
   }
 
+  // [Security Hardening] Reject weak secrets in production environment
+  if (process.env.NODE_ENV === 'production' && isWeakSecret(JWT_SECRET)) {
+    console.error('[Security] JWT_SECRET is weak, insecure, or default. Blocking authenticated endpoint access in production.');
+    return res.status(500).json({ error: 'Internal server configuration error' });
+  }
+
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
       return res.status(403).json({ error: 'FORBIDDEN', message: 'Invalid or expired token' });
@@ -123,7 +136,7 @@ const SAFETY_LOCK_KEY = 'l1:safety:lock';
 app.get('/health', (req, res) => {
   res.json({
     service: 'grid-signal',
-    version: '2.5.5',
+    version: '2.5.6',
     status: 'healthy',
     layer: 'L2',
     openadr_version: '3.0.0'
@@ -704,8 +717,8 @@ async function startSafetyConsumer() {
           if (severity === 'CRITICAL' || severity === 'HIGH') {
             console.warn(`🚨 [L2] ${severity} DER ALARM at Site ${siteIdVal}. Locking site-specific grid dispatch.`);
             const siteLockKey = `${SAFETY_LOCK_KEY}:site:${siteIdVal}`;
-            await redisClient.setEx(siteLockKey, 900, '1'); // 15-minute lock for hardware alarms
-            await redisClient.setEx(`${siteLockKey}:context`, 900, JSON.stringify({
+            await redisClient.setEx(siteLockKey, 1800, '1'); // 30-minute lock for hardware alarms
+            await redisClient.setEx(`${siteLockKey}:context`, 1800, JSON.stringify({
               reason: 'CRITICAL_DER_ALARM',
               alarm_type: alarmType,
               severity: severity,

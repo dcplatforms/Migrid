@@ -19,6 +19,14 @@ const port = process.env.PORT || 3003;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 const CAPACITY_UPDATE_INTERVAL = parseInt(process.env.CAPACITY_UPDATE_INTERVAL) || 10000;
 
+// [Security] Weak secret definitions
+const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
+
+const isWeakSecret = (secret) => {
+  if (!secret) return true;
+  return WEAK_SECRETS.includes(secret.toLowerCase().trim());
+};
+
 // PostgreSQL connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://localhost/migrid'
@@ -83,7 +91,15 @@ const authenticateToken = (req, res, next) => {
     return res.status(401).json({ error: 'Access token required' });
   }
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
+  const activeSecret = process.env.JWT_SECRET || JWT_SECRET;
+
+  // [Security Hardening] Reject weak secrets in production environment
+  if (process.env.NODE_ENV === 'production' && isWeakSecret(activeSecret)) {
+    console.error('[Security] JWT_SECRET is weak, insecure, or default. Blocking authenticated endpoint access in production.');
+    return res.status(500).json({ error: 'Internal server configuration error: Insecure JWT secret.' });
+  }
+
+  jwt.verify(token, activeSecret, (err, user) => {
     if (err) {
       return res.status(403).json({ error: 'Invalid or expired token' });
     }
@@ -162,11 +178,15 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
         isSentinelFidelity = context.is_sentinel_fidelity === true || context.is_sentinel_fidelity === 'true' || context.is_sentinel_fidelity === 1 || physicsScoreRaw > 0.99;
 
         // Apply the lower of the two as the capacity derating factor
-        // If either is NaN, Math.min returns NaN. We should use safe values for the multiplier.
-        const safeP = isNaN(physicsScoreRaw) ? 0.0 : physicsScoreRaw;
-        const safeC = isNaN(confidenceScoreRaw) ? 0.0 : confidenceScoreRaw;
-        physicsMultiplier = Math.min(safeP, safeC);
-      } catch (e) {}
+        // If either is NaN, we set multiplier to 0.0 to prevent invalid capacity
+        if (isNaN(physicsScoreRaw) || isNaN(confidenceScoreRaw)) {
+          physicsMultiplier = 0.0;
+        } else {
+          physicsMultiplier = Math.min(physicsScoreRaw, confidenceScoreRaw);
+        }
+      } catch (e) {
+        console.error('[VPP Aggregator] Error parsing safety context in GET /capacity/available:', e.message);
+      }
     }
 
     const physicsScoreVal = safeFloat(physicsScoreRaw, 1.0);
