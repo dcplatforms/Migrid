@@ -152,8 +152,8 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
     if (safetyContext && typeof safetyContext === 'string') {
       try {
         const context = JSON.parse(safetyContext);
-        physicsScoreVal = parseFloat(safeFloat(context.physics_score, 1.0));
-        confidenceScoreVal = parseFloat(safeFloat(context.confidence_score, 1.0));
+        physicsScoreRaw = parseFloat(context.physics_score);
+        confidenceScoreRaw = parseFloat(context.confidence_score);
 
         // High-Fidelity Standard: (physics_score > 0.95 OR confidence_score > 0.95)
         isHighFidelity = physicsScoreRaw > 0.95 || confidenceScoreRaw > 0.95;
@@ -162,11 +162,15 @@ app.get('/capacity/available', authenticateToken, async (req, res) => {
         isSentinelFidelity = context.is_sentinel_fidelity === true || context.is_sentinel_fidelity === 'true' || context.is_sentinel_fidelity === 1 || physicsScoreRaw > 0.99;
 
         // Apply the lower of the two as the capacity derating factor
-        // If either is NaN, Math.min returns NaN. We should use safe values for the multiplier.
-        const safeP = isNaN(physicsScoreRaw) ? 0.0 : physicsScoreRaw;
-        const safeC = isNaN(confidenceScoreRaw) ? 0.0 : confidenceScoreRaw;
-        physicsMultiplier = Math.min(safeP, safeC);
-      } catch (e) {}
+        // If either is NaN, we set multiplier to 0.0 to prevent invalid capacity
+        if (isNaN(physicsScoreRaw) || isNaN(confidenceScoreRaw)) {
+          physicsMultiplier = 0.0;
+        } else {
+          physicsMultiplier = Math.min(physicsScoreRaw, confidenceScoreRaw);
+        }
+      } catch (e) {
+        console.error('[VPP Aggregator] Error parsing safety context in GET /capacity/available:', e.message);
+      }
     }
 
     const physicsScoreVal = safeFloat(physicsScoreRaw, 1.0);
@@ -287,8 +291,8 @@ const updateGlobalCapacity = async () => {
         if (context.fleet_id) {
           lockedFleetId = context.fleet_id;
         }
-        rawPhysicsScore = parseFloat(safeFloat(context.physics_score, 1.0));
-        confidenceScore = parseFloat(safeFloat(context.confidence_score, 1.0));
+        rawPhysicsScore = parseFloat(context.physics_score);
+        rawConfidenceScore = parseFloat(context.confidence_score);
 
         // Sentinel Fidelity logic: Prioritize explicit flag (boolean, string, or integer)
         isSentinelFidelity = context.is_sentinel_fidelity === true || context.is_sentinel_fidelity === 'true' || context.is_sentinel_fidelity === 1 || rawPhysicsScore > 0.99;

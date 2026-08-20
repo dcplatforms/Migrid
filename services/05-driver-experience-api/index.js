@@ -24,6 +24,14 @@ notifications.init(pool);
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 
+// [Security] Weak secret definitions
+const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
+
+const isWeakSecret = (secret) => {
+  if (!secret) return true;
+  return WEAK_SECRETS.includes(secret.toLowerCase().trim());
+};
+
 // Kafka Setup for broadcasting VPP opt-out events
 const kafka = new Kafka({
   clientId: 'driver-experience-api',
@@ -109,6 +117,12 @@ const authenticateToken = (req, res, next) => {
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) return res.status(401).json({ error: 'Access token required' });
+
+  // [Security Hardening] Reject weak secrets in production environment
+  if (process.env.NODE_ENV === 'production' && isWeakSecret(JWT_SECRET)) {
+    console.error('[Security] JWT_SECRET is weak, insecure, or default. Blocking authenticated endpoint access in production.');
+    return res.status(500).json({ error: 'Internal server configuration error' });
+  }
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) return res.status(403).json({ error: 'Invalid or expired token' });
@@ -204,6 +218,12 @@ app.post('/auth/register', registrationRateLimiter, async (req, res) => {
 
 // Login (With Security Sanitization)
 app.post('/auth/login', loginRateLimiter, async (req, res) => {
+  // [Security Hardening] Reject weak secrets in production environment
+  if (process.env.NODE_ENV === 'production' && isWeakSecret(JWT_SECRET)) {
+    console.error('[Security] JWT_SECRET is weak, insecure, or default. Blocking login in production.');
+    return res.status(500).json({ error: 'Internal server configuration error' });
+  }
+
   const { email, password } = req.body;
   try {
     const result = await pool.query(`
@@ -496,14 +516,18 @@ app.post('/voice/command', authenticateToken, async (req, res) => {
   }
 });
 
-// Start server
-app.listen(port, () => {
-    console.log(`[Driver Experience API] Running on port ${port}`);
-    console.log('[Phase 5 Updates] Version 4.1.0 Synchronization Active');
-});
+// Start server if run directly
+if (require.main === module) {
+  app.listen(port, () => {
+      console.log(`[Driver Experience API] Running on port ${port}`);
+      console.log('[Phase 5 Updates] Version 4.1.0 Synchronization Active');
+  });
+}
 
 process.on('SIGTERM', async () => {
   if (kafkaConnected) await producer.disconnect();
   pool.end();
   process.exit(0);
 });
+
+module.exports = { app };
