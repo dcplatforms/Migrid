@@ -70,7 +70,7 @@ The system is decoupled into eleven distinct functional planes to separate conce
 | Layer | Service | Description | Standards |
 | :--- | :--- | :--- | :--- |
 | **L1** | `physics-engine` | The "Green Audit" — verifies kWh dispensed vs received. | PL/pgSQL | v10.1.6 |
-| **L2** | `grid-signal` | Virtual End Node (VEN) for utility communication. | OpenADR 3.0 | v2.5.5 |
+| **L2** | `grid-signal` | Virtual End Node (VEN) for utility communication. | OpenADR 3.0 | v2.5.6 |
 | **L3** | `vpp-aggregator` | Aggregates EVs & BESS for wholesale markets. | IEEE 2030.5 | v3.3.2 |
 | **L4** | `market-gateway` | Arbitrage engine for CAISO, PJM, and Nord Pool. | FIX / OASIS | v3.8.8 |
 | **L5** | `driver-dx` | Smart routing, voice commands, and availability. | GraphQL | v4.1.0 |
@@ -210,7 +210,7 @@ graph TB
 | Layer | Service | Description | Port | Status |
 |:-----:|---------|-------------|:----:|:------:|
 | **L1** | **Physics Engine** | Energy variance validation (<15% threshold) | `3001` | v10.1.6 |
-| **L2** | **Grid Signal** | OpenADR 3.0 VEN for demand response | `3002` | v2.5.5 |
+| **L2** | **Grid Signal** | OpenADR 3.0 VEN for demand response | `3002` | v2.5.6 |
 | **L3** | **VPP Aggregator** | Fleet capacity aggregation for markets | `3003` | v3.3.2 |
 | **L4** | **Market Gateway** | CAISO/PJM/ERCOT wholesale integration | `3004` | v3.8.8 |
 | **L5** | **Driver Experience API** | Mobile backend, auth, smart routing | `3005` | v4.1.0 |
