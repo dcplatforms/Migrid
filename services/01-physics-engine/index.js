@@ -166,12 +166,25 @@ async function connectServices() {
 }
 
 /**
- * [L1 v10.1.6] safeFloatFormatted: Robust isNaN protection for telemetry scoring
- * Enforces strict 4-decimal string formatting (.toFixed(4)).
+ * [L1 v10.1.6] safeFloat: Robust isNaN protection with float fallback.
+ * Returns a primitive JavaScript Number (float).
  */
 function safeFloatFormatted(val, fallback = 0.0) {
   const parsed = parseFloat(val);
-  return isNaN(parsed) ? fallback.toFixed(4) : parsed.toFixed(4);
+  return isNaN(parsed) ? parseFloat(fallback) : parsed;
+}
+
+/**
+ * [L1 v10.1.6] safeFloatFormatted: Robust isNaN protection with 4-decimal string formatting.
+ * Returns a string formatted with .toFixed(4).
+ */
+function safeFloatFormatted(val, fallback = 0.0) {
+  const parsed = parseFloat(val);
+  if (isNaN(parsed)) {
+    const fallbackNum = parseFloat(fallback);
+    return (isNaN(fallbackNum) ? 0.0 : fallbackNum).toFixed(4);
+  }
+  return parsed.toFixed(4);
 }
 
 /**
@@ -223,11 +236,38 @@ function calculateConfidenceScore(streak, lastSync, siteLoadData) {
 }
 
 /**
+ * Handle DER_ALARM_REPORTED events from Kafka (L7) or parsed payload calls.
+ * Activates site-specific safety lock for CRITICAL/HIGH alarms.
+ */
+async function handleDerAlarm(input) {
+  try {
+    let payload = input;
+    if (input && input.value !== undefined) {
+      payload = JSON.parse(input.value.toString());
+    }
+    if (!payload) return;
+
+    const severity = (payload.severity || 'LOW').toUpperCase();
+    const alarmType = payload.alarmType || payload.alarm_type || 'Unknown';
+    const normalizedSiteId = payload.siteId || extractSiteId(payload);
+
+    if (severity === 'CRITICAL' || severity === 'HIGH') {
+      console.log(`🚨 [L1 Physics] ${severity} Alarm Reported: ${alarmType} at ${normalizedSiteId}. Activating Site Lock.`);
+      const lockKey = `${SAFETY_LOCK_KEY}:SITE:${normalizedSiteId}`;
+      await redisClient.setEx(lockKey, SAFETY_LOCK_TTL, 'true');
+    }
+  } catch (err) {
+    console.error('❌ [L1 Physics] DER Alarm processing error:', err.message);
+  }
+}
+
+/**
  * Helper: Standardize ISO region naming for cross-layer consistency
  */
 function normalizeIso(iso) {
   return (iso || 'CAISO').toUpperCase().replace(/-/g, '');
 }
+
 
 /**
  * Helper: Extract site ID from multi-key payload
@@ -268,34 +308,6 @@ function calculatePhysicsMetadata(payload) {
   };
 }
 
-/**
- * [L1-135] Unified handleDerAlarm
- * Handles both direct JSON payloads (from unit tests) and raw Kafka message payloads.
- */
-async function handleDerAlarm(input) {
-  try {
-    let payload = input;
-    if (input && input.value !== undefined) {
-      payload = JSON.parse(input.value.toString());
-    }
-
-    if (!payload) return;
-
-    const severity = (payload.severity || 'LOW').toUpperCase();
-    const alarmType = payload.alarmType || payload.event_type || 'DER_ALARM';
-    const normalizedSiteId = payload.siteId || extractSiteId(payload);
-
-    if (severity === 'CRITICAL' || severity === 'HIGH') {
-      console.log(`🚨 [L1 Physics] ${severity} Alarm Reported: ${alarmType} at ${normalizedSiteId}. Activating Site Lock.`);
-      const lockKeyUpper = `${SAFETY_LOCK_KEY}:SITE:${normalizedSiteId}`;
-      const lockKeyLower = `${SAFETY_LOCK_KEY}:site:${normalizedSiteId}`;
-      await redisClient.setEx(lockKeyUpper, SAFETY_LOCK_TTL, 'true');
-      await redisClient.setEx(lockKeyLower, SAFETY_LOCK_TTL, 'true');
-    }
-  } catch (err) {
-    console.error('❌ [L1 Physics] DER Alarm processing error:', err.message);
-  }
-}
 
 /**
  * Handle EFFICIENCY_ALERT notifications from PostgreSQL

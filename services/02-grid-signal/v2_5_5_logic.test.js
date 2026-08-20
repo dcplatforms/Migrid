@@ -102,16 +102,15 @@ describe('L2 v2.5.5 Site-Specific Safety Verification', () => {
 
     expect(response.status).toBe(503);
     expect(response.body.status).toBe('REJECTED');
-    expect(response.body.reason).toBe('SAFETY_VIOLATION_L1');
+    expect(response.body.reason).toBe('SITE_SAFETY_LOCK_ACTIVE');
     expect(response.body.site_id).toBe(siteId);
   });
 
   test('updateLocalSafetyCache should populate site_safety from Redis', async () => {
     redisClient.get.mockResolvedValue(null);
     redisClient.scan
-      .mockResolvedValueOnce({ cursor: '0', keys: [] }) // regional safety
-      .mockResolvedValueOnce({ cursor: '0', keys: [] }) // regional grid
-      .mockResolvedValueOnce({ cursor: '0', keys: ['l1:safety:lock:site:SITE-X'] }); // site safety
+      .mockResolvedValueOnce({ cursor: '0', keys: ['l1:safety:lock:site:SITE-X'] }) // safety scan (regional and site locks)
+      .mockResolvedValueOnce({ cursor: '0', keys: [] }); // regional grid scan
     redisClient.mGet.mockResolvedValueOnce(['1']);
 
     await updateLocalSafetyCache();
