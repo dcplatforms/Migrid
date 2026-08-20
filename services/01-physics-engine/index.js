@@ -178,15 +178,6 @@ async function connectServices() {
 }
 
 /**
- * [L1 v10.1.6] safeFloat: Robust isNaN protection with float fallback.
- * Returns a primitive JavaScript Number (float).
- */
-function safeFloatFormatted(val, fallback = 0.0) {
-  const parsed = parseFloat(val);
-  return isNaN(parsed) ? parseFloat(fallback) : parsed;
-}
-
-/**
  * [L1 v10.1.6] safeFloatFormatted: Robust isNaN protection with 4-decimal string formatting.
  * Returns a string formatted with .toFixed(4).
  */
