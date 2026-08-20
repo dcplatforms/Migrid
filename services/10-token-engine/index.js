@@ -32,7 +32,8 @@ const LMP_THRESHOLD_SCARCITY = new Decimal(process.env.LMP_THRESHOLD_SCARCITY ||
 
 /**
  * Middleware: Verify JWT token (Zero-Trust Security)
- * Hardened to return 500 error if JWT_SECRET is missing or weak/default in production.
+ * Hardened to return 500 error if JWT_SECRET is missing.
+ * Also hardened to reject weak, insecure, or default secrets in production environments.
  */
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -40,22 +41,21 @@ const authenticateToken = (req, res, next) => {
 
   if (!token) return res.status(401).json({ error: 'Access token required' });
 
-  const currentSecret = process.env.JWT_SECRET || JWT_SECRET;
+  const activeSecret = process.env.JWT_SECRET || JWT_SECRET;
 
-  if (!currentSecret) {
+  if (!activeSecret) {
     console.error('Security Warning: JWT_SECRET is not configured.');
     return res.status(500).json({ error: 'Internal server configuration error' });
   }
 
-  if (process.env.NODE_ENV === 'production') {
-    const weakSecrets = ['test_secret', 'dev_secret', 'default_secret', 'secret', 'dev_secret_change_in_production'];
-    if (weakSecrets.includes(currentSecret)) {
-      console.error(`Security Warning: Weak or insecure JWT_SECRET used in production environment: ${currentSecret}`);
-      return res.status(500).json({ error: 'Internal server configuration error' });
-    }
+  // Reject insecure or default keys in production
+  if (process.env.NODE_ENV === 'production' &&
+      (activeSecret === 'test_secret' || activeSecret === 'dev_secret' || activeSecret === 'default_secret' || activeSecret === 'secret')) {
+    console.error('Security Error: Weak JWT_SECRET detected in production environment.');
+    return res.status(500).json({ error: 'Internal server configuration error: Weak JWT secret in production.' });
   }
 
-  jwt.verify(token, currentSecret, (err, user) => {
+  jwt.verify(token, activeSecret, (err, user) => {
     if (err) return res.status(403).json({ error: 'Invalid or expired token' });
     req.user = user;
     next();

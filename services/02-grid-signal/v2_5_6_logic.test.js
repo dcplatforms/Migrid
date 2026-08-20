@@ -49,7 +49,7 @@ const { app, redisClient, localSafetyCache, updateLocalSafetyCache, startSafetyC
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 const systemToken = jwt.sign({ sub: 'admin' }, JWT_SECRET);
 
-describe('L2 v2.5.5 Site-Specific Safety Verification', () => {
+describe('L2 v2.5.6 Site-Specific Safety Verification', () => {
   let kafkaConsumerEachMessage;
 
   beforeAll(async () => {
@@ -109,8 +109,8 @@ describe('L2 v2.5.5 Site-Specific Safety Verification', () => {
   test('updateLocalSafetyCache should populate site_safety from Redis', async () => {
     redisClient.get.mockResolvedValue(null);
     redisClient.scan
-      .mockResolvedValueOnce({ cursor: '0', keys: ['l1:safety:lock:site:SITE-X'] }) // safety scan (regional and site locks)
-      .mockResolvedValueOnce({ cursor: '0', keys: [] }); // regional grid scan
+      .mockResolvedValueOnce({ cursor: '0', keys: ['l1:safety:lock:site:SITE-X'] }) // safety locks (including site locks)
+      .mockResolvedValueOnce({ cursor: '0', keys: [] }); // regional grid locks
     redisClient.mGet.mockResolvedValueOnce(['1']);
 
     await updateLocalSafetyCache();
