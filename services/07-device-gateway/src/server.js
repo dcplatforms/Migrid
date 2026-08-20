@@ -24,6 +24,16 @@ const podId = process.env.POD_ID || 'gateway-instance-1';
 // Local memory map for active WebSocket connections on this instance
 const localConnections = new Map();
 
+const WEAK_SECRETS = ['secret', 'test_secret', 'dev_secret', 'default_secret', 'dev_secret_change_in_production'];
+
+function checkJwtSecretSafety() {
+  if (process.env.NODE_ENV === 'production' && WEAK_SECRETS.includes(config.jwtSecret)) {
+    console.error('❌ [Security Alert] Insecure JWT_SECRET is configured in a production environment.');
+    return false;
+  }
+  return true;
+}
+
 /**
  * [L7-133] Sub-millisecond local safety and grid lock cache
  * Polled from Redis every 5s to ensure edge resilience and zero-latency dispatch.
@@ -73,6 +83,9 @@ async function updateLocalSafetyCache() {
 
 // Middleware for auth
 const authenticateInternal = (req, res, next) => {
+  if (!checkJwtSecretSafety()) {
+    return res.status(500).json({ error: 'Internal server configuration error: insecure secret in production' });
+  }
   const token = req.headers['authorization']?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Token required' });
   jwt.verify(token, config.jwtSecret, (err, decoded) => {
@@ -95,6 +108,9 @@ app.get('/health', (req, res) => {
 });
 
 app.post('/iso15118/authenticate', async (req, res) => {
+  if (!checkJwtSecretSafety()) {
+    return res.status(500).json({ error: 'Internal server configuration error: insecure secret in production' });
+  }
   const { contract_id, certificate_chain } = req.body;
 
   // [L7-SEC-001] Hardened Certificate Chain Validation
@@ -430,4 +446,4 @@ async function startServer() {
     });
 }
 
-module.exports = { startServer };
+module.exports = { startServer, app };

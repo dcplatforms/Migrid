@@ -23,7 +23,7 @@
 | 3 | **OCPI-2.2-ROAM** | OCPI 2.2 Roaming Integration for cross-network orchestration | L7, L9 | ✅ 100% | Phase 5: Global Expansion |
 | 4 | **REGIONAL-CHALLENGE** | Implementation of L6 Regional Team Challenges & Live Grid Events | L6, L2 | ✅ 100%| Phase 5: Grid-Aware Gamification |
 | 5 | **ML-FORECASTING** | L11 ML Engine: Demand Forecasting and Predictive Analytics Foundation | L11, L3 | 60% | Phase 6: AI & Optimization |
-| 6 | **L2-NAN-HARDEN** | Hardened telemetry parsing with `isNaN` protection and `.toFixed(4)` parity. | L2 | ✅ 100% (v2.5.5) | Phase 5: Enterprise Scale |
+| 6 | **L2-NAN-HARDEN** | Hardened telemetry parsing with `isNaN` protection and `.toFixed(4)` parity. | L2 | ✅ 100% (v2.5.6) | Phase 5: Enterprise Scale |
 
 ---
 
@@ -35,7 +35,7 @@
 | **L5 Driver DX** | PnC Auth Status | **L7 Device Gateway (v5.13.0)** | Driver cannot use Plug & Charge sessions | ✅ Active |
 | **L9 Commerce** | Billing Reconciliation | **L1 Physics / L4 Market** | Inaccurate split-billing or tariff logic | ✅ Active |
 | **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.3 Active |
-| **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal (v2.5.5)** | Missing high-fidelity metadata for L11 | ✅ Active |
+| **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal (v2.5.6)** | Missing high-fidelity metadata for L11 | ✅ Active |
 | **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine (v5.18.0)** | Rewards fail for 'ISO Explorer' challenges | ✅ Sync |
 | **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway (v3.8.9)** | VTN cannot see market-aware grid signals | ✅ Sync |
 | **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.3.8)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
