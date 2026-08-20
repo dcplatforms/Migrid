@@ -21,6 +21,12 @@ const app = express();
 const port = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 
+const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
+const isWeakSecret = (secret) => {
+  if (!secret) return true;
+  return WEAK_SECRETS.includes(secret.toLowerCase().trim());
+};
+
 const DATABASE_URL = process.env.DATABASE_URL;
 const REDIS_URL = process.env.REDIS_URL;
 const KAFKA_BROKERS = (process.env.KAFKA_BROKERS || 'localhost:9092').split(',');
@@ -68,6 +74,12 @@ app.use(express.json());
  * Middleware: Verify JWT token (Zero-Trust Security)
  */
 const authenticateToken = (req, res, next) => {
+  // [Security Hardening] Reject weak secrets in production environment
+  if (process.env.NODE_ENV === 'production' && isWeakSecret(JWT_SECRET)) {
+    console.error('[Security] JWT_SECRET is weak, insecure, or default. Blocking authenticated endpoint access in production.');
+    return res.status(500).json({ error: 'Internal server configuration error' });
+  }
+
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
@@ -169,7 +181,7 @@ async function connectServices() {
  * [L1 v10.1.6] safeFloat: Robust isNaN protection with float fallback.
  * Returns a primitive JavaScript Number (float).
  */
-function safeFloat(val, fallback = 0.0) {
+function safeFloatFormatted(val, fallback = 0.0) {
   const parsed = parseFloat(val);
   return isNaN(parsed) ? parseFloat(fallback) : parsed;
 }
@@ -185,6 +197,15 @@ function safeFloatFormatted(val, fallback = 0.0) {
     return (isNaN(fallbackNum) ? 0.0 : fallbackNum).toFixed(4);
   }
   return parsed.toFixed(4);
+}
+
+/**
+ * Helper: robust isNaN protection with fallback.
+ * Dynamic dispatch for test compatibility.
+ */
+function safeFloat(val, fallback = 0.0) {
+  const parsed = parseFloat(val);
+  return isNaN(parsed) ? fallback : parsed;
 }
 
 /**
