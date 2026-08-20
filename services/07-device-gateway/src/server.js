@@ -81,6 +81,7 @@ async function updateLocalSafetyCache() {
   }
 }
 
+
 // Middleware for auth
 const authenticateInternal = (req, res, next) => {
   if (!checkJwtSecretSafety()) {
