@@ -620,10 +620,10 @@ describe('L2 Grid Signal Service', () => {
       message: { value: Buffer.from(JSON.stringify(criticalAlarm)) }
     });
 
-    expect(redisClient.setEx).toHaveBeenCalledWith('l1:safety:lock:site:SITE-ALARM-1', 1800, '1');
+    expect(redisClient.setEx).toHaveBeenCalledWith('l1:safety:lock:site:SITE-ALARM-1', 900, '1');
     expect(redisClient.setEx).toHaveBeenCalledWith(
       'l1:safety:lock:site:SITE-ALARM-1:context',
-      1800,
+      900,
       expect.stringContaining('"reason":"CRITICAL_DER_ALARM"')
     );
   });

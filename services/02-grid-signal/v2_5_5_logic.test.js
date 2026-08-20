@@ -109,8 +109,8 @@ describe('L2 v2.5.5 Site-Specific Safety Verification', () => {
   test('updateLocalSafetyCache should populate site_safety from Redis', async () => {
     redisClient.get.mockResolvedValue(null);
     redisClient.scan
-      .mockResolvedValueOnce({ cursor: '0', keys: ['l1:safety:lock:site:SITE-X'] }) // safety locks (including site locks)
-      .mockResolvedValueOnce({ cursor: '0', keys: [] }); // regional grid locks
+      .mockResolvedValueOnce({ cursor: '0', keys: ['l1:safety:lock:site:SITE-X'] }) // safety scan (regional and site locks)
+      .mockResolvedValueOnce({ cursor: '0', keys: [] }); // regional grid scan
     redisClient.mGet.mockResolvedValueOnce(['1']);
 
     await updateLocalSafetyCache();
