@@ -93,4 +93,38 @@ describe('L9 Commerce Engine Security Tests', () => {
       );
     });
   });
+
+  describe('JWT Weak Secret Production Rejection', () => {
+    const originalEnv = process.env.NODE_ENV;
+    const originalJwtSecret = process.env.JWT_SECRET;
+
+    afterEach(() => {
+      process.env.NODE_ENV = originalEnv;
+      process.env.JWT_SECRET = originalJwtSecret;
+    });
+
+    test('should return 500 in production when weak secret is used in auth middleware', async () => {
+      process.env.NODE_ENV = 'production';
+      process.env.JWT_SECRET = 'dev_secret_change_in_production';
+
+      const { authenticateToken } = require('./src/utils/auth');
+
+      const req = {
+        headers: {
+          authorization: `Bearer ${fleetAToken}`
+        }
+      };
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn()
+      };
+      const next = jest.fn();
+
+      authenticateToken(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Internal server configuration error' });
+      expect(next).not.toHaveBeenCalled();
+    });
+  });
 });
