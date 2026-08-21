@@ -125,4 +125,29 @@ describe('L10 Token Engine Security Hardening', () => {
     }
     process.env.JWT_SECRET = originalJwtSecret;
   });
+
+  test('GET /data/training/rewards should return 500 in production if development_secret weak secret is used', async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalJwtSecret = process.env.JWT_SECRET;
+
+    process.env.NODE_ENV = 'production';
+    process.env.JWT_SECRET = 'development_secret';
+
+    const token = jwt.sign({ driver_id: 'admin-1' }, process.env.JWT_SECRET);
+
+    const response = await request(app)
+      .get('/data/training/rewards')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(500);
+    expect(response.body.error).toContain('Internal server configuration error');
+
+    // Restore
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
+    process.env.JWT_SECRET = originalJwtSecret;
+  });
 });
