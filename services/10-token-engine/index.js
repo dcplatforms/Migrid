@@ -50,7 +50,7 @@ const authenticateToken = (req, res, next) => {
 
   // Reject insecure or default keys in production
   if (process.env.NODE_ENV === 'production' &&
-      (activeSecret === 'test_secret' || activeSecret === 'dev_secret' || activeSecret === 'default_secret' || activeSecret === 'secret' || activeSecret === 'dev_secret_change_in_production')) {
+      (activeSecret === 'test_secret' || activeSecret === 'dev_secret' || activeSecret === 'default_secret' || activeSecret === 'secret' || activeSecret === 'dev_secret_change_in_production' || activeSecret === 'change_in_production' || activeSecret === 'development_secret')) {
     console.error('Security Error: Weak JWT_SECRET detected in production environment.');
     return res.status(500).json({ error: 'Internal server configuration error: Weak JWT secret in production.' });
   }
@@ -68,7 +68,7 @@ const authenticateToken = (req, res, next) => {
  */
 function extractSiteId(payload) {
   if (!payload) return null;
-  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
+  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || (payload.metadata ? extractSiteId(payload.metadata) : null) || null;
 }
 
 /**
@@ -329,7 +329,7 @@ async function getDynamicMultiplier(isoRaw, actionType, isVppEvent = false) {
 app.get('/health', (req, res) => {
   res.json({
     service: 'token-engine',
-    version: '4.3.9',
+    version: '4.4.0',
     status: 'healthy',
     layer: 'L10',
     platform: 'v10.1.6'
@@ -367,7 +367,7 @@ app.get('/data/training/rewards', authenticateToken, async (req, res) => {
     res.json({
       count: result.rows.length,
       data: result.rows,
-      source: 'L10_TOKEN_ENGINE_V4.3.9',
+      source: 'L10_TOKEN_ENGINE_V4.4.0',
       fidelity_tier: 'SENTINEL'
     });
   } catch (error) {
@@ -413,7 +413,7 @@ async function start() {
           }
 
           if (topic === 'DER_ALARM_REPORTED') {
-            const alarmRegion = (payload.iso_region || 'SYSTEM_WIDE').toUpperCase().replace(/-/g, '');
+            const alarmRegion = (payload.iso_region || payload.isoRegion || payload.iso || payload.region || 'SYSTEM_WIDE').toUpperCase().replace(/-/g, '');
             const alarms = payload.alarms || [];
             console.log(`🚨 [L10 Alarm Tracker] DER Alarm reported from ${payload.chargePointId} in ${alarmRegion}. Count: ${alarms.length}`);
 
