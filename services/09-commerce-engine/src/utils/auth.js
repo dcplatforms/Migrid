@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
 const { jwtSecret } = require('../../config');
 
+const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
+
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -9,8 +11,9 @@ const authenticateToken = (req, res, next) => {
     return res.status(401).json({ error: 'Access token required' });
   }
 
-  if (!jwtSecret || jwtSecret === 'dev_secret_change_in_production') {
-    console.error('[Security] JWT_SECRET is not properly configured.');
+  // Reject missing or weak/default JWT secrets in production environments
+  if (!jwtSecret || (process.env.NODE_ENV === 'production' && WEAK_SECRETS.includes(jwtSecret.toLowerCase().trim())) || jwtSecret === 'dev_secret_change_in_production') {
+    console.error('[Security] JWT_SECRET is weak or not properly configured.');
     return res.status(500).json({ error: 'Internal server configuration error' });
   }
 
