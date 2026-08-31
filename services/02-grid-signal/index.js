@@ -16,8 +16,16 @@ const Ajv = require('ajv');
 const app = express();
 const port = process.env.PORT || 3002;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
-// [Security] Weak secret definitions
-const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
+// [Security] Weak secret definitions (Expanded September 2026 for cross-layer parity)
+const WEAK_SECRETS = [
+  'dev_secret_change_in_production',
+  'change_in_production',
+  'development_secret',
+  'test_secret',
+  'dev_secret',
+  'default_secret',
+  'secret'
+];
 
 const isWeakSecret = (secret) => {
   if (!secret) return true;
@@ -84,11 +92,26 @@ app.use(express.json());
 
 /**
  * Helper: Extract site ID from multi-key payload
- * [L2 v2.5.2] Standardized extraction for L3/L4/L6/L10 parity
+ * [L2 v2.5.6] Standardized extraction with nested metadata fallback for L3/L4/L6/L10 parity
  */
 const extractSiteId = (payload) => {
   if (!payload) return null;
-  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
+  const directId = payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
+  if (directId) return directId;
+  if (payload.metadata) {
+    return extractSiteId(payload.metadata);
+  }
+  return null;
+};
+
+/**
+ * Helper: Extract ISO Region from multi-key payload
+ * [L2 v2.5.6] Standardized region extraction for multi-layer Kafka compatibility
+ */
+const extractIsoRegion = (payload) => {
+  if (!payload) return 'SYSTEM_WIDE';
+  const rawIso = payload.iso_region || payload.isoRegion || payload.iso || payload.region || 'SYSTEM_WIDE';
+  return String(rawIso).toUpperCase().replace(/-/g, '');
 };
 
 /**
@@ -727,11 +750,11 @@ async function startSafetyConsumer() {
           }
         }
       } else if (topic === 'ADVANCE_CHARGE_SIGNAL') {
-        const iso = payload.iso.toUpperCase().replace(/-/g, '');
+        const iso = extractIsoRegion(payload);
         console.log(`[L2] Received Advance Charge Signal for ${iso}: ${payload.reason}`);
         await redisClient.setEx(`l2:advance_charge:${iso}`, 600, JSON.stringify(payload));
       } else if (topic === 'GRID_HEALTH_UPDATED') {
-        const iso = payload.iso.toUpperCase().replace(/-/g, '');
+        const iso = extractIsoRegion(payload);
         console.log(`[L2] Received Grid Health Update for ${iso}: ${(payload.renewable_percentage * 100).toFixed(1)}% renewable`);
         await redisClient.setEx(`l2:grid_health:${iso}`, 600, JSON.stringify(payload));
       } else if (topic === 'migrid.l8.status') {
@@ -821,7 +844,7 @@ async function startSafetyConsumer() {
           }
         }
       } else if (topic === 'MARKET_PRICE_UPDATED') {
-        const iso = payload.iso.toUpperCase().replace(/-/g, ''); // L2 v2.4.1: ISO Normalization
+        const iso = extractIsoRegion(payload); // L2 v2.5.6: Robust multi-key ISO Normalization
         console.log(`[L2] Received market update for ${iso}: $${payload.price_per_mwh}/MWh`);
 
         const marketContext = JSON.stringify({
@@ -836,7 +859,7 @@ async function startSafetyConsumer() {
         await redisClient.setEx('market:latest:context', 600, marketContext);
 
         // Phase 5 Enhancement: Store ISO-specific context for regional visibility
-        await redisClient.setEx(`market:context:${payload.iso.toUpperCase().replace(/-/g, '')}`, 600, marketContext);
+        await redisClient.setEx(`market:context:${iso}`, 600, marketContext);
       }
     }
   });
