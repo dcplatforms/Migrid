@@ -8,7 +8,7 @@
 
 [![Version](https://img.shields.io/badge/version-10.1.6-blue.svg)](https://github.com/dcplatforms/Migrid/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-84%25%20complete-orange.svg)](docs/roadmap.md)
+[![Platform](https://img.shields.io/badge/platform-85%25%20complete-orange.svg)](docs/roadmap.md)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com)
 
@@ -72,13 +72,13 @@ The system is decoupled into eleven distinct functional planes to separate conce
 | **L1** | `physics-engine` | The "Green Audit" — verifies kWh dispensed vs received. | PL/pgSQL | v10.1.6 |
 | **L2** | `grid-signal` | Virtual End Node (VEN) for utility communication. | OpenADR 3.0 | v2.5.6 |
 | **L3** | `vpp-aggregator` | Aggregates EVs & BESS for wholesale markets. | IEEE 2030.5 | v3.3.2 |
-| **L4** | `market-gateway` | Arbitrage engine for CAISO, PJM, and Nord Pool. | FIX / OASIS | v3.8.8 |
+| **L4** | `market-gateway` | Arbitrage engine for CAISO, PJM, and Nord Pool. | FIX / OASIS | v3.9.0 |
 | **L5** | `driver-dx` | Smart routing, voice commands, and availability. | GraphQL | v4.1.0 |
 | **L6** | `engagement` | Achievement-based driver behavior shaping. | WebSocket | v5.17.0 |
 | **L7** | `device-gateway` | Hardware abstraction for chargers. | OCPP 2.1 / 2.0.1 / ISO 15118 | v5.12.0 |
 | **L8** | `energy-manager` | Edge-ready dynamic load management (DLM). | Modbus TCP | v2.1.0 |
 | **L9** | `commerce-engine`| Flexible billing, tariffs, and split-billing. | Stripe / OCPI | v5.1.0 |
-| **L10**| `token-bridge` | Rewards and staking via Open-Wallet. | ERC-20 / Polygon | v4.3.8 |
+| **L10**| `token-bridge` | Rewards and staking via Open-Wallet. | ERC-20 / Polygon | v4.3.9 |
 
 ---
 
@@ -212,13 +212,13 @@ graph TB
 | **L1** | **Physics Engine** | Energy variance validation (<15% threshold) | `3001` | v10.1.6 |
 | **L2** | **Grid Signal** | OpenADR 3.0 VEN for demand response | `3002` | v2.5.6 |
 | **L3** | **VPP Aggregator** | Fleet capacity aggregation for markets | `3003` | v3.3.2 |
-| **L4** | **Market Gateway** | CAISO/PJM/ERCOT wholesale integration | `3004` | v3.8.8 |
+| **L4** | **Market Gateway** | CAISO/PJM/ERCOT wholesale integration | `3004` | v3.9.0 |
 | **L5** | **Driver Experience API** | Mobile backend, auth, smart routing | `3005` | v4.1.0 |
 | **L6** | **Engagement Engine** | Gamification, leaderboards, achievements | `3006` | v5.17.0 |
 | **L7** | **Device Gateway** | OCPP 2.1, ISO 15118, V2X control | `3007` | v5.12.0 |
 | **L8** | **Energy Manager** | Dynamic Load Management (DLM) | `3008` | v2.1.0 |
 | **L9** | **Commerce Engine** | Billing, tariffs, split-billing | `3009` | v5.1.0 |
-| **L10** | **Token Engine** | Web3 rewards via Open-Wallet | `3010` | v4.3.8 |
+| **L10** | **Token Engine** | Web3 rewards via Open-Wallet | `3010` | v4.3.9 |
 | **L11** | **ML Engine** | AI forecasting, predictive maintenance | `3011` | v0.5.0 |
 
 </details>
@@ -447,10 +447,10 @@ Password: demo123
 
 <div align="center">
 
-**Version 10.1.6** • **May 2026** • **84% Complete**
+**Version 10.1.6** • **June 2026** • **85% Complete**
 
 [![Phase](https://img.shields.io/badge/Phase_6-In_Progress-orange.svg)](docs/roadmap.md)
-[![Features](https://img.shields.io/badge/Features-82%2F98-blue.svg)](PLATFORM_STATUS.md)
+[![Features](https://img.shields.io/badge/Features-83%2F98-blue.svg)](PLATFORM_STATUS.md)
 [![Services](https://img.shields.io/badge/Services-11%2F11_Complete-green.svg)](docs/roadmap.md)
 
 </div>

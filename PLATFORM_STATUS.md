@@ -278,8 +278,8 @@ Strategic alignment on Hardware-Aware Resilience and High-Fidelity telemetry:
 
 - [✓] **L6 Engagement Engine (v5.18.0)**: Deployed **Hardware Health Guardian** achievement; hardened site-specific multiplier logic.
 - [✓] **L2 Grid Signal (v2.5.6)**: Implemented site-specific safety lock enforcement on `CRITICAL` alarms.
-- [✓] **L10 Token Engine (v4.3.8)**: Implemented **Hardware Health Penalty** (-0.05 per alarm); hardened `safeFloat` telemetry.
-- [✓] **L4 Market Gateway (v3.8.9)**: Hardened bidding confidence logic and site-specific health tracking via DER Alarms.
+- [✓] **L10 Token Engine (v4.3.9)**: Zero-Trust JWT weak secret detection, nested metadata site ID extraction, and multi-key ISO region parsing.
+- [✓] **L4 Market Gateway (v3.9.0)**: Upgraded to v3.9.0 with Zero-Trust weak secret detection, nested metadata site ID extraction, and Decimal.js bidding optimizer health penalties.
 - [✓] **L7 Device Gateway (v5.13.0)**: Optimized heartbeat hash indexing and normalized individual DER alarms.
 - [✓] **L3 VPP Aggregator (v3.3.3)**: Hardened telemetry scoring for ML parity and secured training endpoints.
 
@@ -800,7 +800,7 @@ done
 | **L1** | Physics Engine | `10.1.6` | ✅ Operational |
 | **L2** | Grid Signal | `2.5.6` | ✅ Operational |
 | **L3** | VPP Aggregator | `3.3.3` | ✅ Operational |
-| **L4** | Market Gateway | `3.8.9` | ✅ Operational |
+| **L4** | Market Gateway | `3.9.0` | ✅ Operational |
 | **L5** | Driver Experience API | `4.1.0` | ✅ Operational |
 | **L6** | Engagement Engine | `5.18.0` | ✅ Operational |
 | **L7** | Device Gateway | `5.13.0` | ✅ Operational |
