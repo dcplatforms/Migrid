@@ -68,7 +68,7 @@ app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 
-const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
+const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret', 'change_in_production', 'development_secret'];
 
 const isWeakSecret = (secret) => {
   if (!secret) return true;
@@ -79,7 +79,11 @@ const isWeakSecret = (secret) => {
  * Helper: Standardized site ID extraction for multi-key parity (L2/L3/L10)
  */
 const extractSiteId = (payload) => {
-  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || 'SYSTEM_WIDE';
+  if (!payload) return null;
+  const siteId = payload.site_id || payload.siteId || payload.location_id || payload.locationId || payload.site;
+  if (siteId) return siteId;
+  if (payload.metadata) return extractSiteId(payload.metadata);
+  return null;
 };
 
 /**
@@ -341,7 +345,8 @@ async function startGridSignalConsumer() {
         const isSentinelFidelity = isSentinel(signal.is_sentinel_fidelity, physicsScore);
 
         if (topic === 'DER_ALARM_REPORTED') {
-          const alarmRegion = (signal.iso_region || 'SYSTEM_WIDE').toUpperCase().replace(/-/g, '');
+          const isoRaw = signal.iso_region || signal.isoRegion || signal.iso || signal.region || 'SYSTEM_WIDE';
+          const alarmRegion = isoRaw.toUpperCase().replace(/-/g, '');
           const alarms = signal.alarms || [];
           console.log(`🚨 [Market Gateway] DER Alarm reported from ${signal.chargePointId} in ${alarmRegion}. Count: ${alarms.length}`);
 
@@ -366,7 +371,7 @@ async function startGridSignalConsumer() {
           return;
         }
 
-        console.log(`[Market Gateway] Received grid signal: ${signal.event_id} (Site: ${siteIdVal}, Physics: ${physicsScore}, Sentinel: ${isSentinelFidelity})`);
+        console.log(`[Market Gateway] Received grid signal: ${signal.event_id} (Site: ${siteIdVal || 'SYSTEM_WIDE'}, Physics: ${physicsScore}, Sentinel: ${isSentinelFidelity})`);
 
         if (signal.priority === 'HIGH' || signal.priority === 'CRITICAL') {
           console.warn(`⚠️ [Market Gateway] High priority grid signal received. Market bidding should be reviewed for site ${siteIdVal}.`);

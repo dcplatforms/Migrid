@@ -49,8 +49,8 @@ const authenticateToken = (req, res, next) => {
   }
 
   // Reject insecure or default keys in production
-  const WEAK_SECRETS = ['test_secret', 'dev_secret', 'default_secret', 'secret', 'dev_secret_change_in_production', 'change_in_production', 'development_secret'];
-  if (process.env.NODE_ENV === 'production' && WEAK_SECRETS.includes(activeSecret)) {
+  if (process.env.NODE_ENV === 'production' &&
+      (activeSecret === 'test_secret' || activeSecret === 'dev_secret' || activeSecret === 'default_secret' || activeSecret === 'secret' || activeSecret === 'dev_secret_change_in_production' || activeSecret === 'change_in_production' || activeSecret === 'development_secret')) {
     console.error('Security Error: Weak JWT_SECRET detected in production environment.');
     return res.status(500).json({ error: 'Internal server configuration error: Weak JWT secret in production.' });
   }
@@ -68,7 +68,7 @@ const authenticateToken = (req, res, next) => {
  */
 function extractSiteId(payload) {
   if (!payload) return null;
-  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || (payload.metadata ? extractSiteId(payload.metadata) : null);
+  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || (payload.metadata ? extractSiteId(payload.metadata) : null) || null;
 }
 
 /**

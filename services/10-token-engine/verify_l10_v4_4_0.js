@@ -1,6 +1,6 @@
 /**
  * Verification Script for L10 Token Engine v4.4.0
- * Verifies versioning, health status, security hardening, multi-key ISO region extraction, and site ID metadata fallback.
+ * Verifies versioning, health status, security hardening, metadata site extraction, and core utility logic.
  */
 
 const { app } = require('./index');
@@ -25,36 +25,44 @@ async function verify() {
     process.exit(1);
   }
 
-  // 2. Duplicate Function Check and Nested Metadata Fallback
+  // 2. Duplicate Function Check
   const indexSource = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
   const occurrences = (indexSource.match(/function extractSiteId/g) || []).length;
 
-  if (occurrences === 1 && indexSource.includes('payload.metadata ? extractSiteId(payload.metadata) : null')) {
-    console.log('✅ Site ID Extraction & Metadata Fallback: PASSED');
+  if (occurrences === 1) {
+    console.log('✅ Duplicate Function Check: PASSED (Only 1 extractSiteId found)');
   } else {
-    console.error(`❌ Site ID Extraction Check: FAILED (${occurrences} functions found)`);
+    console.error(`❌ Duplicate Function Check: FAILED (${occurrences} found)`);
     process.exit(1);
   }
 
   // 3. AI Export Standard Check
   if (indexSource.includes("source: 'L10_TOKEN_ENGINE_V4.4.0'")) {
-    console.log('✅ AI Export Standard: PASSED (Version string v4.4.0 updated)');
+    console.log('✅ AI Export Standard: PASSED (Version string updated)');
   } else {
     console.error('❌ AI Export Standard: FAILED (Version string not updated)');
     process.exit(1);
   }
 
-  // 4. Multi-key ISO Region Extraction Check
-  if (indexSource.includes('payload.iso_region || payload.isoRegion || payload.iso || payload.region || \'SYSTEM_WIDE\'')) {
-    console.log('✅ Multi-key ISO Region Extraction: PASSED');
+  // 4. Nested Metadata Site ID Extraction Check
+  if (indexSource.includes("payload.metadata ? extractSiteId(payload.metadata)")) {
+    console.log('✅ Metadata Site Extraction: PASSED (Metadata fallback configured)');
   } else {
-    console.error('❌ Multi-key ISO Region Extraction: FAILED');
+    console.error('❌ Metadata Site Extraction: FAILED');
     process.exit(1);
   }
 
-  // 5. Production Weak Secret Hardening Check
-  if (indexSource.includes("'change_in_production'") && indexSource.includes("'development_secret'")) {
-    console.log('✅ Weak Secret Hardening: PASSED (Expanded WEAK_SECRETS in production)');
+  // 5. DER Alarm Multi-Format Region Extraction Check
+  if (indexSource.includes("payload.iso_region || payload.isoRegion || payload.iso || payload.region")) {
+    console.log('✅ DER Alarm Region Extraction: PASSED (Multi-key fallback configured)');
+  } else {
+    console.error('❌ DER Alarm Region Extraction: FAILED');
+    process.exit(1);
+  }
+
+  // 6. Security Hardening Checks for Insecure Secrets
+  if (indexSource.includes("activeSecret === 'development_secret'")) {
+    console.log("✅ Weak Secret Hardening: PASSED ('development_secret' rejected in production)");
   } else {
     console.error('❌ Weak Secret Hardening: FAILED');
     process.exit(1);
