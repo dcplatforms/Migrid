@@ -68,7 +68,7 @@ const authenticateToken = (req, res, next) => {
  */
 function extractSiteId(payload) {
   if (!payload) return null;
-  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || (payload.metadata ? extractSiteId(payload.metadata) : null);
+  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || (payload.metadata ? extractSiteId(payload.metadata) : null) || null;
 }
 
 /**
