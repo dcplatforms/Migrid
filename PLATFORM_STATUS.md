@@ -806,7 +806,7 @@ done
 | **L7** | Device Gateway | `5.13.0` | ✅ Operational |
 | **L8** | Energy Manager | `2.1.0` | ✅ Operational |
 | **L9** | Commerce Engine | `5.1.0` | ✅ Operational |
-| **L10**| Token Engine | `4.3.9` | ✅ Operational |
+| **L10**| Token Engine | `4.4.0` | ✅ Operational |
 | **L11**| ML Engine | `0.5.0` | ✅ Operational |
 
 ---
@@ -815,8 +815,8 @@ done
 
 - **L1 Physics Engine (v10.1.6)**: Integrated real-time hardware health signals via Kafka `DER_ALARM_REPORTED` consumer for site-specific locks and `safeFloat` telemetry hardening with 4-decimal precision.
 - **L7 Device Gateway (v5.13.0)**: Optimized heartbeat hash indexing, normalized OCPP 2.1 NotifyDERAlarm broadcasting, and synchronized site-safety cache locks.
-- **L10 Token Engine (v4.3.9)**: Expanded Zero-Trust weak secret rejection (`change_in_production`, `development_secret`), implemented nested metadata fallback for `extractSiteId`, and standardized multi-key ISO region parsing.
-- **L4 Market Gateway (v3.9.0)**: Upgraded to v3.9.0 with Zero-Trust JWT security hardening, nested metadata fallback in `extractSiteId`, multi-key ISO region parsing, and Decimal.js bidding optimizer health penalties.
+- **L10 Token Engine (v4.4.0)**: Expanded Zero-Trust weak secret detection, hardened multi-key ISO region extraction for DER alarms, and enabled nested metadata site ID fallbacks.
+- **L4 Market Gateway (v3.8.9)**: Implemented bidding optimizer health penalties with `Decimal.js` (-0.05 per active alarm, max -0.30) and hardened regional grid lock scanning.
 - **L2 Grid Signal (v2.5.6)**: Implemented site-specific safety lock dispatch rejection [L2-135] and `DER_ALARM_REPORTED` Kafka bridge to translate alarms into immediate site locks.
 - **L5 Driver API (v4.1.0)**: Hardened `POST /auth/register` against IDOR via `fleet_id` UUID validation and database existence checks.
 - **L6 Engagement Engine (v5.18.0)**: Implemented 'Hardware Health Guardian' achievement, resolved double-declarations, and consolidated helpers to ensure Phase 6 alignment.

@@ -77,6 +77,21 @@ describe('L6 Engagement Engine Security Hardening', () => {
     expect(res.body.error).toContain('Internal server configuration error');
   });
 
+  test('Authenticated endpoint should fail securely with 500 when NODE_ENV is production and JWT_SECRET is change_in_production or development_secret', async () => {
+    process.env.NODE_ENV = 'production';
+    process.env.JWT_SECRET = 'change_in_production';
+
+    const { app } = require('./index');
+    const token = jwt.sign({ driver_id: 'driver-123', fleet_id: 'fleet-abc' }, 'change_in_production');
+
+    const res = await request(app)
+      .get('/leaderboard')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(500);
+    expect(res.body.error).toContain('Internal server configuration error');
+  });
+
   test('Authenticated endpoint should fail securely with 500 when NODE_ENV is production and JWT_SECRET is weak', async () => {
     process.env.NODE_ENV = 'production';
     process.env.JWT_SECRET = 'secret'; // Weak secret
