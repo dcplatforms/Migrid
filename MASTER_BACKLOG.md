@@ -12,7 +12,7 @@
 |:---:|:---|:---:|:---|:---:|
 | **P0** | **ML Demand Forecasting** | L11 (ML Engine) | ✅ Phase 6 Telemetry Parity (100%) | Phase 6 |
 | **P1** | **ISO 15118 Cert Exchange** | L7 (Device) | ✅ L7 v5.13.0 localSafetyCache (100%) | Phase 5 |
-| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 v3.8.9 AI Readiness (100% Complete) | Phase 5 |
+| **P2** | **Dynamic Wholesale Tariffs** | L9 (Commerce) | ✅ L4 v3.9.0 AI Readiness (100% Complete) | Phase 5 |
 | **P3** | **OCPI 2.2 Roaming** | L7 (Device) | ✅ L9 v5.1.0 tariff engine sync (100% Complete) | Phase 5 |
 | **P4** | **BESS RL Bidding** | L4 (Market) | 🚧 L3 BESS Integration (75% Complete) | Phase 6 |
 
@@ -37,8 +37,8 @@
 | **L4 Market Gateway** | Capacity Cache | **L3 VPP Aggregator** | Bidding latency exceeds 50ms ISO SLA | ✅ v3.3.3 Active |
 | **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal (v2.5.6)** | Missing high-fidelity metadata for L11 | ✅ Active |
 | **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine (v5.18.0)** | Rewards fail for 'ISO Explorer' challenges | ✅ Sync |
-| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway (v3.8.9)** | VTN cannot see market-aware grid signals | ✅ Sync |
-| **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.3.8)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
+| **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway (v3.9.0)** | VTN cannot see market-aware grid signals | ✅ Sync |
+| **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.3.9)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
 
 ---
 
@@ -68,13 +68,13 @@
 - [✓] **ML Parity**: Enforced strict .toFixed(4) string formatting via `safeFloat`.
 - [~] **BESS Integration**: Support for stationary storage assets (75%).
 
-### Layer 4: Market Gateway (v3.8.8)
+### Layer 4: Market Gateway (v3.9.0)
+- [✓] **Zero-Trust Security Hardening**: Rejects weak JWT secrets (`change_in_production`, `development_secret`) in production.
+- [✓] **Multi-Key Region Extraction**: Hardened consumer to extract ISO region across `iso_region`, `isoRegion`, `iso`, and `region`.
+- [✓] **Nested Metadata Fallback**: Hardened `extractSiteId(payload)` with fallback to `payload.metadata`.
 - [✓] **[L4-133] Resilience**: Implemented `localSafetyCache` for sub-millisecond bidding.
 - [✓] **ML Parity**: Enforced strict string formatting (`.toFixed(4)`) for all scores.
-- [✓] **NaN Protection**: Hardened bidding logic via `safeFloat` utility.
-- [✓] **Multi-Site Parity**: Hardened grid signal consumer with multi-key site identification.
-- [✓] **Bidding Auditability**: High-fidelity audit context for all bids.
-- [✓] **AI Readiness**: Training endpoints for fuel-mix, load-forecast, and net-load active.
+- [✓] **Bidding Auditability**: High-fidelity audit context with Decimal.js penalty calculation for all bids.
 - [~] **BESS RL Bidding**: Research phase for reinforcement learning models (10%).
 
 ### Layer 6: Engagement Engine (v5.18.0)
@@ -94,13 +94,13 @@
 - [✓] **Availability**: Optimized Heartbeat indexing via Redis Hashes for 10k+ scalability.
 - [✓] **Security Hardening**: Integrated helmet() and updated Kafka tagging.
 
-### Layer 10: Token Engine (v4.3.8)
+### Layer 10: Token Engine (v4.3.9)
+- [✓] **Zero-Trust Security Hardening**: Rejects weak JWT secrets (`change_in_production`, `development_secret`) in production.
+- [✓] **Nested Metadata Site ID Fallback**: Hardened `extractSiteId(payload)` to parse `payload.metadata`.
+- [✓] **Multi-Key ISO Region Parsing**: Standardized `DER_ALARM_REPORTED` Kafka consumer to resolve region across multi-key payloads.
 - [✓] **Behavioral Expansion**: Added `der_alarm_response` and `solar_ramp_response`.
 - [✓] **Reward Batching**: Standardized atomic background worker for reward minting.
-- [✓] **ML Parity**: Enforced strict .toFixed(4) telemetry formatting.
-- [✓] **Site Awareness**: Standardized identification via `extractSiteId`.
-- [✓] **Global Data Security**: Restricted `/data/training/rewards` to admin tokens.
-- [✓] **Sentinel Fidelity**: Detection and flag (is_sentinel_fidelity) for score > 0.99.
+- [✓] **Sentinel Fidelity**: Detection and flag (`is_sentinel_fidelity`) for score > 0.99.
 
 ---
 

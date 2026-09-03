@@ -1,6 +1,6 @@
 ### 🌐 L2 Grid Signal: Weekly Sync & Update (v2.5.6)
 * **Cross-Layer Delta:**
-  - **L1 Physics Engine (v10.1.6):** Synchronized with high-fidelity telemetry validation enforcing strict <15% variance threshold for EV charging sessions and 10% for stationary BESS assets; standardized on security hardening boundaries by rejecting weak JWT secrets in production.
+  - **L1 Physics Engine (v10.1.6):** Synchronized with high-fidelity telemetry validation enforcing the strict <15% variance threshold for EV charging sessions and 10% for stationary BESS assets; standardized on zero-trust security hardening boundaries by rejecting weak JWT secrets in production.
   - **L3 VPP Aggregator (v3.3.3):** Streamlined sub-500ms reporting by importing aggregated regional capacity breakdowns (EV/BESS) and average regional confidence scores.
   - **L4 Market Gateway (v3.9.0):** Harmonized global and regional grid locks (`l4:grid:lock:*`) to suspend dispatches during periods of high-stress wholesale market volatility, and aligned on JWT secret safety checks.
   - **L7 Device Gateway (v5.13.0):** Normalized DER alarm handling via a consolidated Kafka stream (`DER_ALARM_REPORTED`), extending the DER alarm site isolation lock TTL to 1800s (30 minutes) to ensure sustained physical site stability during remediation.
