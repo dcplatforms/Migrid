@@ -24,7 +24,7 @@ const podId = process.env.POD_ID || 'gateway-instance-1';
 // Local memory map for active WebSocket connections on this instance
 const localConnections = new Map();
 
-const WEAK_SECRETS = ['secret', 'test_secret', 'dev_secret', 'default_secret', 'dev_secret_change_in_production'];
+const WEAK_SECRETS = ['secret', 'test_secret', 'dev_secret', 'default_secret', 'dev_secret_change_in_production', 'change_in_production', 'development_secret'];
 
 function checkJwtSecretSafety() {
   if (process.env.NODE_ENV === 'production' && WEAK_SECRETS.includes(config.jwtSecret)) {
