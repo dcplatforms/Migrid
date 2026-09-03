@@ -79,7 +79,7 @@ describe('L4 Market Gateway Security Hardening', () => {
     expect(res.body.error).toBe('Internal server configuration error');
   });
 
-  test('Authenticated route should fail securely with 500 when NODE_ENV is production and JWT_SECRET is expanded weak secret (change_in_production, development_secret)', async () => {
+  test('Authenticated route should fail securely with 500 when NODE_ENV is production and JWT_SECRET is change_in_production or development_secret', async () => {
     process.env.NODE_ENV = 'production';
     process.env.JWT_SECRET = 'change_in_production';
 
