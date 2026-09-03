@@ -13,7 +13,8 @@ const producer = kafka.producer();
  * Helper: Standardized site ID extraction for multi-key parity (L2, L3, L4, L10)
  */
 const extractSiteId = (payload) => {
-    return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
+    if (!payload) return null;
+    return payload.site_id || payload.siteId || payload.location_id || payload.locationId || (payload.metadata ? extractSiteId(payload.metadata) : null) || null;
 };
 
 /**
