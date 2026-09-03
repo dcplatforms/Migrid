@@ -806,7 +806,7 @@ done
 | **L7** | Device Gateway | `5.13.0` | ✅ Operational |
 | **L8** | Energy Manager | `2.1.0` | ✅ Operational |
 | **L9** | Commerce Engine | `5.1.0` | ✅ Operational |
-| **L10**| Token Engine | `4.3.8` | ✅ Operational |
+| **L10**| Token Engine | `4.4.0` | ✅ Operational |
 | **L11**| ML Engine | `0.5.0` | ✅ Operational |
 
 ---
