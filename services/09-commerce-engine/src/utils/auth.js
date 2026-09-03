@@ -1,5 +1,12 @@
 const jwt = require('jsonwebtoken');
-const { jwtSecret } = require('../../config');
+const config = require('../../config');
+
+const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
+
+const isWeakSecret = (secret) => {
+  if (!secret) return true;
+  return WEAK_SECRETS.includes(secret.toLowerCase().trim());
+};
 
 const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
 
@@ -11,13 +18,20 @@ const authenticateToken = (req, res, next) => {
     return res.status(401).json({ error: 'Access token required' });
   }
 
-  // Reject missing or weak/default JWT secrets in production environments
-  if (!jwtSecret || (process.env.NODE_ENV === 'production' && WEAK_SECRETS.includes(jwtSecret.toLowerCase().trim())) || jwtSecret === 'dev_secret_change_in_production') {
-    console.error('[Security] JWT_SECRET is weak or not properly configured.');
+  const activeSecret = process.env.JWT_SECRET || config.jwtSecret;
+
+  if (!activeSecret) {
+    console.error('[Security] JWT_SECRET is not properly configured.');
     return res.status(500).json({ error: 'Internal server configuration error' });
   }
 
-  jwt.verify(token, jwtSecret, (err, user) => {
+  // [Security Hardening] Reject weak secrets in production environment
+  if (process.env.NODE_ENV === 'production' && isWeakSecret(activeSecret)) {
+    console.error('[Security] JWT_SECRET is weak, insecure, or default. Blocking authenticated endpoint access in production.');
+    return res.status(500).json({ error: 'Internal server configuration error' });
+  }
+
+  jwt.verify(token, activeSecret, (err, user) => {
     if (err) {
       return res.status(403).json({ error: 'Invalid or expired token' });
     }
