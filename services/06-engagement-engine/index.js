@@ -37,7 +37,7 @@ app.use(express.json());
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 
 // [Security] Weak secret definitions
-const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
+const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret', 'change_in_production', 'development_secret'];
 
 const isWeakSecret = (secret) => {
   if (!secret) return true;
@@ -603,6 +603,7 @@ async function processChargingEvent(event) {
             source_value: parseFloat(event.energyDispensedKwh),
             event_id: sessionId,
             iso: iso,
+            iso_region: iso,
             physics_score: safeFloat(physics_score),
             confidence_score: safeFloat(confidence_score),
             is_high_fidelity: isHighFidelity,
@@ -624,6 +625,7 @@ async function processChargingEvent(event) {
             source_value: parseFloat(event.energyDispensedKwh),
             event_id: sessionId,
             iso: iso,
+            iso_region: iso,
             physics_score: safeFloat(physics_score),
             confidence_score: safeFloat(confidence_score),
             is_high_fidelity: isHighFidelity,
@@ -687,6 +689,7 @@ async function processChargingEvent(event) {
           source_value: energyDischargedKwh,
           event_id: sessionId,
           iso: iso,
+          iso_region: iso,
           physics_score: safeFloat(1.0), // V2G discharge is verified by protocol and VPP controller
           is_high_fidelity: true,
           multiplier_reason: multiplierReason,
@@ -1066,6 +1069,7 @@ async function handleGridSignal(payload) {
               source_value: reward,
               event_id: chalId,
               iso: row.iso,
+              iso_region: row.iso,
           physics_score: safeFloat(1.0),
               is_high_fidelity: true
             })
@@ -1103,6 +1107,7 @@ async function handleGridSignal(payload) {
               source_value: points,
               event_id: achId,
               iso: row.iso,
+              iso_region: row.iso,
           physics_score: safeFloat(1.0),
               is_high_fidelity: true
             })
@@ -1441,6 +1446,7 @@ async function updateChallengeProgress(driver_id, challenge_type) {
               source_value: chal.rows[0].token_reward || chal.rows[0].points_reward,
               event_id: challenge.id,
               iso: isoForChallenge,
+              iso_region: isoForChallenge,
               physics_score: safeFloat(1.0), // Behavioral achievements are logically verified
               is_high_fidelity: true
             })
@@ -1858,6 +1864,7 @@ async function awardAchievement(driver_id, achievement_id) {
           source_value: points,
           event_id: achievement_id,
           iso: iso,
+          iso_region: iso,
           physics_score: safeFloat(1.0), // Achievements are logically verified behavioral states
           is_high_fidelity: true
         })
