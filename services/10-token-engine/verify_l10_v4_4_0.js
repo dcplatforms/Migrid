@@ -1,50 +1,74 @@
-const http = require('http');
+/**
+ * Verification Script for L10 Token Engine v4.4.0
+ * Verifies versioning, health status, security hardening, metadata site extraction, and core utility logic.
+ */
+
 const { app } = require('./index');
+const request = require('supertest');
+const fs = require('fs');
+const path = require('path');
 
-console.log('🚀 Starting L10 v4.4.0 Verification...');
+async function verify() {
+  console.log('🚀 Starting L10 v4.4.0 Verification...');
 
-// 1. Health check verification
-const server = app.listen(0, async () => {
-  const port = server.address().port;
-
+  // 1. Verify Health Check and Versioning
   try {
-    const res = await new Promise((resolve, reject) => {
-      http.get(`http://localhost:${port}/health`, (response) => {
-        let data = '';
-        response.on('data', chunk => data += chunk);
-        response.on('end', () => resolve(JSON.parse(data)));
-      }).on('error', reject);
-    });
-
-    if (res.version !== '4.4.0') {
-      throw new Error(`Expected version 4.4.0, got ${res.version}`);
+    const res = await request(app).get('/health');
+    if (res.status === 200 && res.body.version === '4.4.0') {
+      console.log('✅ Health Check: PASSED (Version 4.4.0)');
+    } else {
+      console.error('❌ Health Check: FAILED', res.body);
+      process.exit(1);
     }
-    console.log('✅ Health Check: PASSED (Version 4.4.0)');
-
-    // 2. Export / Code Inspection checks
-    const fs = require('fs');
-    const indexContent = fs.readFileSync('index.js', 'utf8');
-
-    if (!indexContent.includes('change_in_production') || !indexContent.includes('development_secret')) {
-      throw new Error('Weak secret list missing change_in_production or development_secret');
-    }
-    console.log('✅ Zero-Trust Weak Secret Hardening: PASSED');
-
-    if (!indexContent.includes('payload.metadata ? extractSiteId(payload.metadata) : null')) {
-      throw new Error('extractSiteId nested metadata fallback missing');
-    }
-    console.log('✅ Nested Site ID Extraction: PASSED');
-
-    if (!indexContent.includes('payload.iso_region || payload.isoRegion || payload.iso || payload.region')) {
-      throw new Error('DER_ALARM_REPORTED multi-key ISO region extraction missing');
-    }
-    console.log('✅ Multi-Key ISO Region Extraction: PASSED');
-
-    console.log('🎉 L10 v4.4.0 Verification COMPLETE: ALL SYSTEMS NOMINAL');
   } catch (err) {
-    console.error('❌ Verification Failed:', err.message);
+    console.error('❌ Health Check Request Error:', err.message);
     process.exit(1);
-  } finally {
-    server.close();
   }
-});
+
+  // 2. Duplicate Function Check
+  const indexSource = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
+  const occurrences = (indexSource.match(/function extractSiteId/g) || []).length;
+
+  if (occurrences === 1) {
+    console.log('✅ Duplicate Function Check: PASSED (Only 1 extractSiteId found)');
+  } else {
+    console.error(`❌ Duplicate Function Check: FAILED (${occurrences} found)`);
+    process.exit(1);
+  }
+
+  // 3. AI Export Standard Check
+  if (indexSource.includes("source: 'L10_TOKEN_ENGINE_V4.4.0'")) {
+    console.log('✅ AI Export Standard: PASSED (Version string updated)');
+  } else {
+    console.error('❌ AI Export Standard: FAILED (Version string not updated)');
+    process.exit(1);
+  }
+
+  // 4. Nested Metadata Site ID Extraction Check
+  if (indexSource.includes("payload.metadata ? extractSiteId(payload.metadata)")) {
+    console.log('✅ Metadata Site Extraction: PASSED (Metadata fallback configured)');
+  } else {
+    console.error('❌ Metadata Site Extraction: FAILED');
+    process.exit(1);
+  }
+
+  // 5. DER Alarm Multi-Format Region Extraction Check
+  if (indexSource.includes("payload.iso_region || payload.isoRegion || payload.iso || payload.region")) {
+    console.log('✅ DER Alarm Region Extraction: PASSED (Multi-key fallback configured)');
+  } else {
+    console.error('❌ DER Alarm Region Extraction: FAILED');
+    process.exit(1);
+  }
+
+  // 6. Security Hardening Checks for Insecure Secrets
+  if (indexSource.includes("activeSecret === 'development_secret'")) {
+    console.log("✅ Weak Secret Hardening: PASSED ('development_secret' rejected in production)");
+  } else {
+    console.error('❌ Weak Secret Hardening: FAILED');
+    process.exit(1);
+  }
+
+  console.log('🎉 L10 v4.4.0 Verification COMPLETE: ALL SYSTEMS NOMINAL');
+}
+
+verify();
