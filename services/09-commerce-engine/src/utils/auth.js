@@ -8,6 +8,8 @@ const isWeakSecret = (secret) => {
   return WEAK_SECRETS.includes(secret.toLowerCase().trim());
 };
 
+const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
+
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
