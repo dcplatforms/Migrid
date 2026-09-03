@@ -65,6 +65,7 @@ const authenticateToken = (req, res, next) => {
 /**
  * Helper: Extract site ID from multi-key payload
  * Standardized for multi-site parity (site_id, siteId, location_id, locationId)
+ * Supports nested metadata fallback.
  */
 function extractSiteId(payload) {
   if (!payload) return null;

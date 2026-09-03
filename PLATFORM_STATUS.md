@@ -815,7 +815,7 @@ done
 
 - **L1 Physics Engine (v10.1.6)**: Integrated real-time hardware health signals via Kafka `DER_ALARM_REPORTED` consumer for site-specific locks and `safeFloat` telemetry hardening with 4-decimal precision.
 - **L7 Device Gateway (v5.13.0)**: Optimized heartbeat hash indexing, normalized OCPP 2.1 NotifyDERAlarm broadcasting, and synchronized site-safety cache locks.
-- **L10 Token Engine (v4.3.8)**: Implemented hardware health penalties, resolved shadow declarations/SyntaxErrors, and consolidated `extractSiteId` site awareness.
+- **L10 Token Engine (v4.4.0)**: Expanded Zero-Trust weak secret detection, hardened multi-key ISO region extraction for DER alarms, and enabled nested metadata site ID fallbacks.
 - **L4 Market Gateway (v3.8.9)**: Implemented bidding optimizer health penalties with `Decimal.js` (-0.05 per active alarm, max -0.30) and hardened regional grid lock scanning.
 - **L2 Grid Signal (v2.5.6)**: Implemented site-specific safety lock dispatch rejection [L2-135] and `DER_ALARM_REPORTED` Kafka bridge to translate alarms into immediate site locks.
 - **L5 Driver API (v4.1.0)**: Hardened `POST /auth/register` against IDOR via `fleet_id` UUID validation and database existence checks.
