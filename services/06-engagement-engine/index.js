@@ -139,7 +139,9 @@ async function initKafka() {
   });
 }
 
-initKafka().catch(console.error);
+if (require.main === module) {
+  initKafka().catch(console.error);
+}
 
 /**
  * [L6 v5.18.0] safeFloat: Robust isNaN protection for telemetry scoring
@@ -1997,7 +1999,9 @@ async function start() {
   }
 }
 
-start();
+if (require.main === module) {
+  start();
+}
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
