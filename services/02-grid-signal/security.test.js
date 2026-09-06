@@ -79,6 +79,25 @@ describe('L2 Grid Signal Security Hardening', () => {
     expect(res.body.error).toBe('Internal server configuration error');
   });
 
+  test('Authenticated route should reject change_in_production and development_secret weak secrets in production', async () => {
+    process.env.NODE_ENV = 'production';
+
+    for (const weakSecret of ['change_in_production', 'development_secret']) {
+      jest.resetModules();
+      process.env.JWT_SECRET = weakSecret;
+
+      const { app } = require('./index');
+      const token = jwt.sign({ sub: 'admin', role: 'system' }, weakSecret);
+
+      const res = await request(app)
+        .get('/openadr/v3/reports')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(500);
+      expect(res.body.error).toBe('Internal server configuration error');
+    }
+  });
+
   test('Authenticated route should verify token correctly when NODE_ENV is production and JWT_SECRET is strong', async () => {
     process.env.NODE_ENV = 'production';
     const strongSecret = 'super_strong_unpredictable_production_secret_key_12345';

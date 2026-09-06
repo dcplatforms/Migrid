@@ -14,7 +14,7 @@ const producer = kafka.producer();
  */
 const extractSiteId = (payload) => {
     if (!payload) return null;
-    return payload.site_id || payload.siteId || payload.location_id || payload.locationId || (payload.metadata ? extractSiteId(payload.metadata) : null) || null;
+    return payload.site_id || payload.siteId || payload.location_id || payload.locationId || (payload.metadata ? extractSiteId(payload.metadata) : null);
 };
 
 /**
@@ -163,6 +163,7 @@ async function publishSessionEvent(type, payload) {
     const enrichedPayload = {
         ...payload,
         iso_region: isoRegion,
+        isoRegion: isoRegion,
         site_id: siteId
     };
 

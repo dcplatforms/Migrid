@@ -17,6 +17,11 @@ const { authenticateToken } = require('../src/utils/auth');
 
 describe('Commerce Engine Security Tests', () => {
   let app;
+  const originalEnv = process.env.NODE_ENV;
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalEnv;
+  });
 
   beforeAll(() => {
     app = express();
@@ -42,13 +47,25 @@ describe('Commerce Engine Security Tests', () => {
     expect(response.status).toBe(403);
   });
 
-  it('should accept requests with a valid token', async () => {
+  it('should accept requests with a valid token in non-production', async () => {
+    process.env.NODE_ENV = 'development';
     const token = jwt.sign({ fleet_id: 'fleet-1' }, 'test_secret');
     const response = await request(app)
       .get('/test-auth')
       .set('Authorization', `Bearer ${token}`);
     expect(response.status).toBe(200);
     expect(response.body.user.fleet_id).toBe('fleet-1');
+  });
+
+  it('should fail securely if JWT_SECRET is weak in production', async () => {
+    process.env.NODE_ENV = 'production';
+    const token = jwt.sign({ fleet_id: 'fleet-1' }, 'test_secret');
+    const response = await request(app)
+      .get('/test-auth')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(500);
+    expect(response.body.error).toBe('Internal server configuration error');
   });
 
   it('should fail securely if JWT_SECRET is default', async () => {
