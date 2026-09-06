@@ -25,7 +25,7 @@ notifications.init(pool);
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 
 // [Security] Weak secret definitions
-const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
+const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret', 'change_in_production', 'development_secret'];
 
 const isWeakSecret = (secret) => {
   if (!secret) return true;
@@ -118,13 +118,15 @@ const authenticateToken = (req, res, next) => {
 
   if (!token) return res.status(401).json({ error: 'Access token required' });
 
+  const activeSecret = process.env.JWT_SECRET || JWT_SECRET;
+
   // [Security Hardening] Reject weak secrets in production environment
-  if (process.env.NODE_ENV === 'production' && isWeakSecret(JWT_SECRET)) {
+  if (process.env.NODE_ENV === 'production' && isWeakSecret(activeSecret)) {
     console.error('[Security] JWT_SECRET is weak, insecure, or default. Blocking authenticated endpoint access in production.');
     return res.status(500).json({ error: 'Internal server configuration error' });
   }
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
+  jwt.verify(token, activeSecret, (err, user) => {
     if (err) return res.status(403).json({ error: 'Invalid or expired token' });
     req.user = user;
     next();
@@ -218,8 +220,10 @@ app.post('/auth/register', registrationRateLimiter, async (req, res) => {
 
 // Login (With Security Sanitization)
 app.post('/auth/login', loginRateLimiter, async (req, res) => {
+  const activeSecret = process.env.JWT_SECRET || JWT_SECRET;
+
   // [Security Hardening] Reject weak secrets in production environment
-  if (process.env.NODE_ENV === 'production' && isWeakSecret(JWT_SECRET)) {
+  if (process.env.NODE_ENV === 'production' && isWeakSecret(activeSecret)) {
     console.error('[Security] JWT_SECRET is weak, insecure, or default. Blocking login in production.');
     return res.status(500).json({ error: 'Internal server configuration error' });
   }
@@ -239,7 +243,7 @@ app.post('/auth/login', loginRateLimiter, async (req, res) => {
 
     const token = jwt.sign(
       { driver_id: driver.id, email: driver.email, fleet_id: driver.fleet_id },
-      JWT_SECRET,
+      activeSecret,
       { expiresIn: '7d' }
     );
 
