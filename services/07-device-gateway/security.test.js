@@ -85,16 +85,19 @@ describe('L7 Device Gateway Security Hardening', () => {
 
   test('In production, weak JWT secrets are rejected with 500 config error in authenticateInternal', async () => {
     process.env.NODE_ENV = 'production';
-    config.jwtSecret = 'secret'; // Weak secret
 
-    const token = jwt.sign({ vehicle_id: 1, fleet_id: 'fleet-1' }, config.jwtSecret);
-    const response = await request(app)
-      .post('/iso15118/v2g-discharge')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ evse_id: 'evse-1', discharge_amount_kw: 10 });
+    for (const weakSecret of ['secret', 'change_in_production', 'development_secret']) {
+      config.jwtSecret = weakSecret;
 
-    expect(response.status).toBe(500);
-    expect(response.body.error).toContain('Internal server configuration error');
+      const token = jwt.sign({ vehicle_id: 1, fleet_id: 'fleet-1' }, config.jwtSecret);
+      const response = await request(app)
+        .post('/iso15118/v2g-discharge')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ evse_id: 'evse-1', discharge_amount_kw: 10 });
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toContain('Internal server configuration error');
+    }
   });
 
   test('In production, additional weak JWT secrets (change_in_production, development_secret) are also rejected', async () => {
