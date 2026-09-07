@@ -75,10 +75,10 @@ The system is decoupled into eleven distinct functional planes to separate conce
 | **L4** | `market-gateway` | Arbitrage engine for CAISO, PJM, and Nord Pool. | FIX / OASIS | v3.9.0 |
 | **L5** | `driver-dx` | Smart routing, voice commands, and availability. | GraphQL | v4.1.0 |
 | **L6** | `engagement` | Achievement-based driver behavior shaping. | WebSocket | v5.17.0 |
-| **L7** | `device-gateway` | Hardware abstraction for chargers. | OCPP 2.1 / 2.0.1 / ISO 15118 | v5.12.0 |
+| **L7** | `device-gateway` | Hardware abstraction for chargers. | OCPP 2.1 / 2.0.1 / ISO 15118 | v5.13.0 |
 | **L8** | `energy-manager` | Edge-ready dynamic load management (DLM). | Modbus TCP | v2.1.0 |
 | **L9** | `commerce-engine`| Flexible billing, tariffs, and split-billing. | Stripe / OCPI | v5.1.0 |
-| **L10**| `token-bridge` | Rewards and staking via Open-Wallet. | ERC-20 / Polygon | v4.3.9 |
+| **L10**| `token-bridge` | Rewards and staking via Open-Wallet. | ERC-20 / Polygon | v4.4.0 |
 
 ---
 
@@ -215,10 +215,10 @@ graph TB
 | **L4** | **Market Gateway** | CAISO/PJM/ERCOT wholesale integration | `3004` | v3.9.0 |
 | **L5** | **Driver Experience API** | Mobile backend, auth, smart routing | `3005` | v4.1.0 |
 | **L6** | **Engagement Engine** | Gamification, leaderboards, achievements | `3006` | v5.17.0 |
-| **L7** | **Device Gateway** | OCPP 2.1, ISO 15118, V2X control | `3007` | v5.12.0 |
+| **L7** | **Device Gateway** | OCPP 2.1, ISO 15118, V2X control | `3007` | v5.13.0 |
 | **L8** | **Energy Manager** | Dynamic Load Management (DLM) | `3008` | v2.1.0 |
 | **L9** | **Commerce Engine** | Billing, tariffs, split-billing | `3009` | v5.1.0 |
-| **L10** | **Token Engine** | Web3 rewards via Open-Wallet | `3010` | v4.3.9 |
+| **L10** | **Token Engine** | Web3 rewards via Open-Wallet | `3010` | v4.4.0 |
 | **L11** | **ML Engine** | AI forecasting, predictive maintenance | `3011` | v0.5.0 |
 
 </details>

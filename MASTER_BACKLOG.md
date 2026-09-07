@@ -38,7 +38,7 @@
 | **L4 Market Gateway** | Confidence Fallback | **L2 Grid Signal (v2.5.6)** | Missing high-fidelity metadata for L11 | ✅ Active |
 | **L10 Token Engine** | Engagement Triggers | **L6 Engagement Engine (v5.18.0)** | Rewards fail for 'ISO Explorer' challenges | ✅ Sync |
 | **L2 Grid Signal** | Regional Pricing | **L4 Market Gateway (v3.9.0)** | VTN cannot see market-aware grid signals | ✅ Sync |
-| **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.3.9)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
+| **L11 ML Engine** | Sentinel Audit | **L10 Token Engine (v4.4.0)** | Phase 6 AI auditing lacks ground truth | ✅ Active |
 
 ---
 
@@ -85,7 +85,7 @@
 - [✓] **Sentinel Elite**: Achievement for 50 total sentinel-fidelity sessions.
 - [✓] **DER Sentinel**: Achievement for 3 responses to NotifyDERAlarm safety events.
 
-### Layer 7: Device Gateway (v5.12.0)
+### Layer 7: Device Gateway (v5.13.0)
 - [✓] **[L7-133] Resilience**: Implemented `localSafetyCache` for sub-millisecond dispatch.
 - [✓] **Heartbeat Tracking**: Persisted charger availability to Redis.
 - [✓] **DER Alarms**: Enhanced hardware-agnostic alarm handling via `NotifyDERAlarm`.
@@ -94,7 +94,7 @@
 - [✓] **Availability**: Optimized Heartbeat indexing via Redis Hashes for 10k+ scalability.
 - [✓] **Security Hardening**: Integrated helmet() and updated Kafka tagging.
 
-### Layer 10: Token Engine (v4.3.9)
+### Layer 10: Token Engine (v4.4.0)
 - [✓] **Zero-Trust Security Hardening**: Rejects weak JWT secrets (`change_in_production`, `development_secret`) in production.
 - [✓] **Nested Metadata Site ID Fallback**: Hardened `extractSiteId(payload)` to parse `payload.metadata`.
 - [✓] **Multi-Key ISO Region Parsing**: Standardized `DER_ALARM_REPORTED` Kafka consumer to resolve region across multi-key payloads.
