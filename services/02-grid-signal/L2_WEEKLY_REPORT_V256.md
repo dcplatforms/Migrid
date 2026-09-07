@@ -5,7 +5,7 @@
   - **L4 Market Gateway (v3.9.0):** Harmonized global and regional grid locks (`l4:grid:lock:*`) to suspend dispatches during periods of high-stress wholesale market volatility, and aligned on JWT secret safety checks.
   - **L7 Device Gateway (v5.13.0):** Normalized DER alarm handling via a consolidated Kafka stream (`DER_ALARM_REPORTED`), extending the DER alarm site isolation lock TTL to 1800s (30 minutes) to ensure sustained physical site stability during remediation.
   - **L8 Edge Energy Manager (v5.1.0):** Integrated site safe-mode and meter-offline states to dynamically suppress grid dispatch commands when local gateway communications are interrupted.
-  - **L10 Token Engine (v4.3.9) & L6 Engagement Engine (v5.18.0):** Standardized token authentication boundaries and maintained parity on telemetry precision, zero-vulnerability signing context, and reward-multiplier mapping.
+  - **L10 Token Engine (v4.4.0) & L6 Engagement Engine (v5.18.0):** Standardized token authentication boundaries and maintained parity on telemetry precision, zero-vulnerability signing context, and reward-multiplier mapping.
 
 * **OpenADR 3.0 Health:**
   - **VEN Compliance:** The OpenADR 3.0.0 Virtual End Node (VEN) payload validation, reporting, and event acknowledgment are fully compliant and operate with sub-50ms reporting latency.
