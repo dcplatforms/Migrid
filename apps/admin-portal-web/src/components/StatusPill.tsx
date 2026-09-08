@@ -21,11 +21,13 @@ const useStyles = makeStyles({
     backgroundColor: "rgba(255, 255, 255, 0.06)",
     ...shorthands.border("1px", "solid", "rgba(255, 255, 255, 0.12)"),
     whiteSpace: "nowrap",
+    flexShrink: 0,
   },
   label: {
     color: tokens.colorNeutralForeground1,
     fontWeight: tokens.fontWeightMedium,
     lineHeight: "16px",
+    whiteSpace: "nowrap",
   },
   pulse: {
     animationName: {

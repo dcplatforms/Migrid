@@ -42,6 +42,7 @@ const useStyles = makeStyles({
   search: { minWidth: "240px" },
   mono: { fontVariantNumeric: "tabular-nums", color: tokens.colorNeutralForeground1 },
   muted: { color: tokens.colorNeutralForeground3 },
+  scrollX: { ...shorthands.overflow("auto", "hidden") },
   row: {
     ":hover": { backgroundColor: "rgba(255, 255, 255, 0.05)" },
   },
@@ -106,6 +107,7 @@ export const ChargingSessions = () => {
           </div>
         }
         flushBody
+        bodyClassName={styles.scrollX}
       >
         <Table aria-label="Charging sessions" size="medium" style={{ minWidth: "760px" }}>
           <TableHeader>

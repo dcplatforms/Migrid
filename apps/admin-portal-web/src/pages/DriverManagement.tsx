@@ -37,6 +37,7 @@ const useStyles = makeStyles({
   muted: { color: tokens.colorNeutralForeground3 },
   headerCell: { color: tokens.colorNeutralForeground3 },
   search: { minWidth: "240px" },
+  scrollX: { ...shorthands.overflow("auto", "hidden") },
   rank: {
     display: "inline-flex",
     alignItems: "center",
@@ -104,6 +105,7 @@ export const DriverManagement = () => {
         icon={<Trophy24Regular />}
         actions={<SearchBox className={styles.search} placeholder="Search drivers" appearance="filled-darker" />}
         flushBody
+        bodyClassName={styles.scrollX}
       >
         <Table aria-label="Drivers" size="medium" style={{ minWidth: "760px" }}>
           <TableHeader>

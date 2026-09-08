@@ -38,6 +38,7 @@ const useStyles = makeStyles({
   mono: { fontVariantNumeric: "tabular-nums", color: tokens.colorNeutralForeground1 },
   muted: { color: tokens.colorNeutralForeground3 },
   headerCell: { color: tokens.colorNeutralForeground3 },
+  scrollX: { ...shorthands.overflow("auto", "hidden") },
   programList: { display: "flex", flexDirection: "column", rowGap: "12px" },
   program: {
     display: "flex",
@@ -110,7 +111,7 @@ export const VppMarketBids = () => {
       </div>
 
       <div className={styles.splitGrid}>
-        <GlassCard title="Active & Recent Bids" subtitle="Wholesale market book" icon={<ArrowTrendingLines24Regular />} flushBody>
+        <GlassCard title="Active & Recent Bids" subtitle="Wholesale market book" icon={<ArrowTrendingLines24Regular />} flushBody bodyClassName={styles.scrollX}>
           <Table aria-label="Market bids" size="medium" style={{ minWidth: "620px" }}>
             <TableHeader>
               <TableRow>
