@@ -37,7 +37,10 @@ const useStyles = makeStyles({
   muted: { color: tokens.colorNeutralForeground3 },
   headerCell: { color: tokens.colorNeutralForeground3 },
   search: { minWidth: "240px" },
-  scrollX: { ...shorthands.overflow("auto", "hidden") },
+  scrollX: {
+    ...shorthands.overflow("auto", "hidden"),
+    ...shorthands.padding("4px", "12px", "10px"),
+  },
   rank: {
     display: "inline-flex",
     alignItems: "center",

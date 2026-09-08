@@ -38,7 +38,10 @@ const useStyles = makeStyles({
   mono: { fontVariantNumeric: "tabular-nums", color: tokens.colorNeutralForeground1 },
   muted: { color: tokens.colorNeutralForeground3 },
   headerCell: { color: tokens.colorNeutralForeground3 },
-  scrollX: { ...shorthands.overflow("auto", "hidden") },
+  scrollX: {
+    ...shorthands.overflow("auto", "hidden"),
+    ...shorthands.padding("4px", "12px", "10px"),
+  },
   programList: { display: "flex", flexDirection: "column", rowGap: "12px" },
   program: {
     display: "flex",

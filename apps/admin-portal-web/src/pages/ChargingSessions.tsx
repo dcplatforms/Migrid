@@ -42,7 +42,10 @@ const useStyles = makeStyles({
   search: { minWidth: "240px" },
   mono: { fontVariantNumeric: "tabular-nums", color: tokens.colorNeutralForeground1 },
   muted: { color: tokens.colorNeutralForeground3 },
-  scrollX: { ...shorthands.overflow("auto", "hidden") },
+  scrollX: {
+    ...shorthands.overflow("auto", "hidden"),
+    ...shorthands.padding("4px", "12px", "10px"),
+  },
   row: {
     ":hover": { backgroundColor: "rgba(255, 255, 255, 0.05)" },
   },
