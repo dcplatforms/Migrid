@@ -1,0 +1,84 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", "Segoe UI Web (West European)", -apple-system,
+    BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/*
+ * Enterprise "energy grid" backdrop. The fixed radial glows give the acrylic
+ * (frosted glass) panels something with depth and colour to blur over.
+ */
+body {
+  background-color: #05070d;
+  background-image:
+    radial-gradient(1100px 700px at 12% -8%, rgba(16, 185, 129, 0.22), transparent 60%),
+    radial-gradient(1000px 720px at 88% 6%, rgba(56, 189, 248, 0.20), transparent 58%),
+    radial-gradient(1200px 900px at 78% 108%, rgba(129, 90, 245, 0.20), transparent 60%),
+    radial-gradient(900px 700px at 6% 96%, rgba(20, 184, 166, 0.16), transparent 58%),
+    linear-gradient(160deg, #070b14 0%, #05070d 55%, #04060b 100%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  overflow: hidden;
+}
+
+/* Subtle moving sheen so the surface feels alive on large enterprise displays. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(2px 2px at 20% 30%, rgba(255, 255, 255, 0.05), transparent 40%),
+    radial-gradient(2px 2px at 70% 70%, rgba(255, 255, 255, 0.04), transparent 40%);
+  opacity: 0.6;
+  z-index: 0;
+}
+
+/* Slim, on-brand scrollbars for the frosted panels. */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
+  background-clip: padding-box;
+}
+
+@keyframes migrid-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
