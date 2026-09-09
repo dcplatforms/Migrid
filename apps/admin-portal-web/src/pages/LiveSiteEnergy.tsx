@@ -1,4 +1,4 @@
-import { makeStyles, shorthands, tokens, Text, ProgressBar, Button } from "@fluentui/react-components";
+import { makeStyles, shorthands, tokens, Text, ProgressBar, Button, Tooltip } from "@fluentui/react-components";
 import {
   Flash24Regular,
   Battery1024Regular,
@@ -11,7 +11,8 @@ import { EnergyChart } from "../components/EnergyChart";
 import { GlassCard } from "../components/GlassCard";
 import { KpiCard } from "../components/KpiCard";
 import { PageHeader } from "../components/PageHeader";
-import { StatusPill } from "../components/StatusPill";
+import { StatusPill, type StatusTone } from "../components/StatusPill";
+import { useSiteEnergy } from "../hooks/useSiteEnergy";
 
 const useStyles = makeStyles({
   root: {
@@ -59,8 +60,8 @@ const useStyles = makeStyles({
     columnGap: "12px",
     ...shorthands.padding("12px", "14px"),
     ...shorthands.borderRadius(tokens.borderRadiusLarge),
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    ...shorthands.border("1px", "solid", "rgba(255, 255, 255, 0.08)"),
+    backgroundColor: "var(--surface-soft)",
+    ...shorthands.border("1px", "solid", "var(--glass-subtle-border)"),
   },
   connectorMeta: {
     display: "flex",
@@ -74,42 +75,78 @@ const useStyles = makeStyles({
   },
 });
 
-const connectors = [
-  { id: "DEPOT-A · CP-01", detail: "Van #4102 · 48.3 kW", tone: "success" as const, state: "Charging" },
-  { id: "DEPOT-A · CP-02", detail: "Van #4088 · 22.1 kW", tone: "success" as const, state: "Charging" },
-  { id: "DEPOT-A · CP-03", detail: "V2G export · -19.4 kW", tone: "info" as const, state: "Discharging" },
-  { id: "DEPOT-B · CP-07", detail: "Idle · plug free", tone: "neutral" as const, state: "Available" },
-  { id: "DEPOT-B · CP-09", detail: "Fault · overtemp", tone: "danger" as const, state: "Faulted" },
-];
+// Static fallback used only when the L8 telemetry service is unreachable.
+const FALLBACK = {
+  buildingLoadKw: 75.5,
+  evLoadKw: 120.3,
+  gridLimitKw: 250,
+  connectors: [
+    { id: "DEPOT-A · CP-01", vehicle: "Van #4102 · 48.3 kW", tone: "success" as StatusTone, status: "Charging" },
+    { id: "DEPOT-A · CP-02", vehicle: "Van #4088 · 22.1 kW", tone: "success" as StatusTone, status: "Charging" },
+    { id: "DEPOT-A · CP-03", vehicle: "V2G export · -19.4 kW", tone: "info" as StatusTone, status: "Discharging" },
+    { id: "DEPOT-B · CP-07", vehicle: "Idle · plug free", tone: "neutral" as StatusTone, status: "Available" },
+    { id: "DEPOT-B · CP-09", vehicle: "Fault · overtemp", tone: "danger" as StatusTone, status: "Faulted" },
+  ],
+};
+
+const fmt = (n: number) => n.toFixed(1);
 
 export const LiveSiteEnergy = () => {
   const styles = useStyles();
+  const { data, series, status, lastUpdated } = useSiteEnergy(5000);
 
-  const buildingLoad = 75.5;
-  const evLoad = 120.3;
-  const gridLimit = 250;
-  const totalLoad = buildingLoad + evLoad;
-  const available = gridLimit - totalLoad;
-  const utilization = Math.round((totalLoad / gridLimit) * 100);
+  const isLive = status === "live" && !!data;
+
+  const buildingLoad = data?.buildingLoadKw ?? FALLBACK.buildingLoadKw;
+  const evLoad = data?.evLoadKw ?? FALLBACK.evLoadKw;
+  const gridLimit = data?.gridLimitKw ?? FALLBACK.gridLimitKw;
+  const totalLoad = data?.totalLoadKw ?? buildingLoad + evLoad;
+  const available = data?.availableKw ?? gridLimit - totalLoad;
+  const utilization = data?.utilizationPct ?? Math.round((totalLoad / gridLimit) * 100);
+
+  const connectors = data?.connectors
+    ? data.connectors.map((c) => ({
+        id: c.id,
+        vehicle:
+          c.status === "Available"
+            ? c.vehicle
+            : `${c.vehicle} · ${c.kw.toFixed(1)} kW`,
+        tone: c.tone,
+        status: c.status,
+      }))
+    : FALLBACK.connectors;
+
+  const connStatus: { tone: StatusTone; label: string } =
+    status === "live"
+      ? { tone: "success", label: "Live · L8 API" }
+      : status === "connecting"
+      ? { tone: "warning", label: "Connecting…" }
+      : { tone: "danger", label: "Offline · fallback data" };
 
   return (
     <div className={styles.root}>
       <PageHeader
         eyebrow={
           <>
-            <StatusPill tone="success" label="Live" pulse />
+            <StatusPill tone={connStatus.tone} label={connStatus.label} pulse={isLive} />
             L8 · Energy Manager
           </>
         }
         title="Live Site Energy"
         subtitle="Real-time dynamic load management across depots. Building and EV demand are balanced against the grid connection limit to keep the site within its firm capacity envelope."
         actions={
-          <Button
-            appearance="secondary"
-            icon={<ArrowClockwise20Regular />}
+          <Tooltip
+            content={
+              lastUpdated
+                ? `Last updated ${lastUpdated.toLocaleTimeString()}`
+                : "Awaiting telemetry"
+            }
+            relationship="label"
           >
-            Refresh
-          </Button>
+            <Button appearance="secondary" icon={<ArrowClockwise20Regular />}>
+              {isLive ? "Auto-refreshing" : "Refresh"}
+            </Button>
+          </Tooltip>
         }
       />
 
@@ -117,7 +154,7 @@ export const LiveSiteEnergy = () => {
         <KpiCard
           index={0}
           label="Building Load"
-          value={buildingLoad.toFixed(1)}
+          value={fmt(buildingLoad)}
           unit="kW"
           delta={-3}
           caption="vs last hour"
@@ -127,7 +164,7 @@ export const LiveSiteEnergy = () => {
         <KpiCard
           index={1}
           label="Total EV Load"
-          value={evLoad.toFixed(1)}
+          value={fmt(evLoad)}
           unit="kW"
           delta={12}
           caption="vs last hour"
@@ -137,7 +174,7 @@ export const LiveSiteEnergy = () => {
         <KpiCard
           index={2}
           label="Available Capacity"
-          value={available.toFixed(1)}
+          value={fmt(available)}
           unit="kW"
           delta={-8}
           caption="headroom"
@@ -158,29 +195,29 @@ export const LiveSiteEnergy = () => {
       <div className={styles.mainGrid}>
         <GlassCard
           title="Total Site Load vs. Limit"
-          subtitle="Rolling 2-minute window · 5s resolution"
+          subtitle="Rolling window · 5s resolution"
           icon={<ArrowTrendingLines24Regular />}
           actions={<StatusPill tone={utilization > 90 ? "warning" : "success"} label={`${utilization}% utilised`} />}
         >
           <div className={styles.capacityBlock}>
             <div className={styles.capacityRow}>
               <Text className={styles.muted} size={200}>
-                {totalLoad.toFixed(1)} kW of {gridLimit} kW committed
+                {fmt(totalLoad)} kW of {gridLimit} kW committed
               </Text>
               <span className={styles.capacityValue}>{utilization}%</span>
             </div>
             <ProgressBar
-              value={utilization / 100}
+              value={Math.min(1, utilization / 100)}
               thickness="large"
               color={utilization > 90 ? "warning" : "success"}
             />
           </div>
-          <EnergyChart totalLoad={totalLoad} limit={gridLimit} />
+          <EnergyChart totalLoad={totalLoad} limit={gridLimit} points={series} />
         </GlassCard>
 
         <GlassCard
           title="Connector Status"
-          subtitle="Depot A & B · 5 of 24 shown"
+          subtitle={`Depot A & B · ${connectors.length} shown`}
           icon={<PlugConnected24Regular />}
         >
           <div className={styles.connectorList}>
@@ -191,10 +228,10 @@ export const LiveSiteEnergy = () => {
                     {c.id}
                   </Text>
                   <Text className={styles.muted} size={200}>
-                    {c.detail}
+                    {c.vehicle}
                   </Text>
                 </div>
-                <StatusPill tone={c.tone} label={c.state} pulse={c.state === "Charging"} />
+                <StatusPill tone={c.tone} label={c.status} pulse={c.status === "Charging"} />
               </div>
             ))}
           </div>
