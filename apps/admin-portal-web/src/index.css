@@ -1,10 +1,54 @@
 :root {
-  color-scheme: dark;
   font-family: "Segoe UI", "Segoe UI Web (West European)", -apple-system,
     BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+/* Dark theme (default) frosted-glass tokens. */
+:root,
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --glass-bg: rgba(255, 255, 255, 0.055);
+  --glass-bg-hover: rgba(255, 255, 255, 0.09);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-border-hover: rgba(255, 255, 255, 0.2);
+  --glass-subtle-bg: rgba(255, 255, 255, 0.035);
+  --glass-subtle-border: rgba(255, 255, 255, 0.08);
+  --glass-chrome-bg: rgba(9, 13, 22, 0.55);
+  --glass-hi: rgba(255, 255, 255, 0.1);
+  --glass-hi-strong: rgba(255, 255, 255, 0.14);
+  --glass-shadow: 0 10px 34px rgba(2, 6, 16, 0.45);
+  --glass-shadow-hover: 0 16px 40px rgba(2, 6, 16, 0.55);
+  --hairline: rgba(255, 255, 255, 0.08);
+  --row-hover: rgba(255, 255, 255, 0.05);
+  --nav-active-bg: rgba(255, 255, 255, 0.09);
+  --nav-active-border: rgba(255, 255, 255, 0.14);
+  --surface-soft: rgba(255, 255, 255, 0.04);
+  --search-bg: rgba(255, 255, 255, 0.05);
+}
+
+/* Light theme frosted-glass tokens. */
+html[data-theme="light"] {
+  color-scheme: light;
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-bg-hover: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(15, 23, 42, 0.1);
+  --glass-border-hover: rgba(15, 23, 42, 0.18);
+  --glass-subtle-bg: rgba(255, 255, 255, 0.5);
+  --glass-subtle-border: rgba(15, 23, 42, 0.08);
+  --glass-chrome-bg: rgba(255, 255, 255, 0.68);
+  --glass-hi: rgba(255, 255, 255, 0.75);
+  --glass-hi-strong: rgba(255, 255, 255, 0.9);
+  --glass-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+  --glass-shadow-hover: 0 16px 38px rgba(15, 23, 42, 0.2);
+  --hairline: rgba(15, 23, 42, 0.08);
+  --row-hover: rgba(15, 23, 42, 0.04);
+  --nav-active-bg: rgba(255, 255, 255, 0.85);
+  --nav-active-border: rgba(15, 23, 42, 0.12);
+  --surface-soft: rgba(255, 255, 255, 0.55);
+  --search-bg: rgba(255, 255, 255, 0.6);
 }
 
 html,
@@ -30,6 +74,17 @@ body {
   background-attachment: fixed;
   background-repeat: no-repeat;
   overflow: hidden;
+}
+
+/* Light-theme backdrop. */
+html[data-theme="light"] body {
+  background-color: #eef2f9;
+  background-image:
+    radial-gradient(1100px 700px at 12% -8%, rgba(16, 185, 129, 0.18), transparent 60%),
+    radial-gradient(1000px 720px at 88% 6%, rgba(56, 189, 248, 0.16), transparent 58%),
+    radial-gradient(1200px 900px at 78% 108%, rgba(129, 90, 245, 0.14), transparent 60%),
+    radial-gradient(900px 700px at 6% 96%, rgba(20, 184, 166, 0.12), transparent 58%),
+    linear-gradient(160deg, #f7f9fd 0%, #eef2f9 55%, #e7ecf5 100%);
 }
 
 /* Subtle moving sheen so the surface feels alive on large enterprise displays. */

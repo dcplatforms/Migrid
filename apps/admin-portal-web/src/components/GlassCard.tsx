@@ -14,7 +14,7 @@ const useStyles = makeStyles({
     justifyContent: "space-between",
     columnGap: "12px",
     ...shorthands.padding("16px", "20px"),
-    ...shorthands.borderBottom("1px", "solid", "rgba(255, 255, 255, 0.08)"),
+    ...shorthands.borderBottom("1px", "solid", "var(--hairline)"),
   },
   headerText: {
     display: "flex",

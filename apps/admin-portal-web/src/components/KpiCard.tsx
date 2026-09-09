@@ -32,8 +32,8 @@ const useStyles = makeStyles({
     width: "36px",
     height: "36px",
     ...shorthands.borderRadius(tokens.borderRadiusLarge),
-    backgroundColor: "rgba(255, 255, 255, 0.07)",
-    ...shorthands.border("1px", "solid", "rgba(255, 255, 255, 0.10)"),
+    backgroundColor: "var(--surface-soft)",
+    ...shorthands.border("1px", "solid", "var(--glass-border)"),
     color: tokens.colorNeutralForeground1,
   },
   valueRow: {

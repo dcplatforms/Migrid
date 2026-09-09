@@ -47,7 +47,7 @@ const useStyles = makeStyles({
     ...shorthands.padding("4px", "12px", "10px"),
   },
   row: {
-    ":hover": { backgroundColor: "rgba(255, 255, 255, 0.05)" },
+    ":hover": { backgroundColor: "var(--row-hover)" },
   },
   headerCell: { color: tokens.colorNeutralForeground3 },
 });

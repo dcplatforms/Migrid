@@ -19,8 +19,11 @@ import {
   Search24Regular,
   Alert24Regular,
   Settings24Regular,
+  WeatherSunny24Regular,
+  WeatherMoon24Regular,
 } from "@fluentui/react-icons";
 import { useGlassStyles, brandGradient } from "./theme/glass";
+import { useThemeMode } from "./theme/ThemeContext";
 import { StatusPill } from "./components/StatusPill";
 import { LiveSiteEnergy } from "./pages/LiveSiteEnergy";
 import { ChargingSessions } from "./pages/ChargingSessions";
@@ -44,7 +47,7 @@ const useStyles = makeStyles({
     height: "60px",
     flexShrink: 0,
     ...shorthands.padding("0px", "20px"),
-    ...shorthands.borderBottom("1px", "solid", "rgba(255, 255, 255, 0.08)"),
+    ...shorthands.borderBottom("1px", "solid", "var(--hairline)"),
     zIndex: 3,
   },
   brand: {
@@ -88,8 +91,8 @@ const useStyles = makeStyles({
     width: "min(420px, 40vw)",
     ...shorthands.padding("7px", "14px"),
     ...shorthands.borderRadius("999px"),
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    ...shorthands.border("1px", "solid", "rgba(255, 255, 255, 0.10)"),
+    backgroundColor: "var(--search-bg)",
+    ...shorthands.border("1px", "solid", "var(--glass-border)"),
     color: tokens.colorNeutralForeground3,
     cursor: "text",
   },
@@ -103,7 +106,7 @@ const useStyles = makeStyles({
     flexDirection: "column",
     rowGap: "18px",
     ...shorthands.padding("18px", "14px"),
-    ...shorthands.borderRight("1px", "solid", "rgba(255, 255, 255, 0.08)"),
+    ...shorthands.borderRight("1px", "solid", "var(--hairline)"),
     zIndex: 2,
   },
   navGroupLabel: {
@@ -128,13 +131,13 @@ const useStyles = makeStyles({
     transitionProperty: "background-color, color, border-color",
     transitionDuration: tokens.durationFast,
     ":hover": {
-      backgroundColor: "rgba(255, 255, 255, 0.06)",
+      backgroundColor: "var(--row-hover)",
       color: tokens.colorNeutralForeground1,
     },
   },
   navItemActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.09)",
-    ...shorthands.borderColor("rgba(255, 255, 255, 0.14)"),
+    backgroundColor: "var(--nav-active-bg)",
+    ...shorthands.borderColor("var(--nav-active-border)"),
     color: tokens.colorNeutralForeground1,
     boxShadow: "inset 3px 0 0 0 #34d399",
   },
@@ -163,7 +166,7 @@ const useStyles = makeStyles({
     height: "30px",
     flexShrink: 0,
     ...shorthands.padding("0px", "20px"),
-    ...shorthands.borderTop("1px", "solid", "rgba(255, 255, 255, 0.08)"),
+    ...shorthands.borderTop("1px", "solid", "var(--hairline)"),
     color: tokens.colorNeutralForeground3,
     fontSize: "12px",
   },
@@ -182,6 +185,7 @@ const nav: { key: PageKey; label: string; icon: ReactNode; layer: string }[] = [
 function App() {
   const styles = useStyles();
   const glass = useGlassStyles();
+  const { mode, toggle } = useThemeMode();
   const [page, setPage] = useState<PageKey>("energy");
 
   return (
@@ -204,6 +208,19 @@ function App() {
         </div>
         <div className={styles.headerRight}>
           <StatusPill tone="success" label="All Systems Operational" pulse />
+          <Tooltip
+            content={mode === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+            relationship="label"
+          >
+            <Button
+              appearance="subtle"
+              className={styles.iconButton}
+              icon={mode === "dark" ? <WeatherSunny24Regular /> : <WeatherMoon24Regular />}
+              shape="circular"
+              onClick={toggle}
+              aria-label="Toggle color theme"
+            />
+          </Tooltip>
           <Tooltip content="Alerts" relationship="label">
             <Button appearance="subtle" className={styles.iconButton} icon={<Alert24Regular />} shape="circular" />
           </Tooltip>

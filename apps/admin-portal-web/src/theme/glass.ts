@@ -7,30 +7,32 @@ import { makeStyles, shorthands, tokens } from "@fluentui/react-components";
  * whatever sits behind it. We emulate it with a semi-transparent fill plus a
  * `backdrop-filter` blur+saturate, a hairline highlight border, and a soft
  * elevation shadow so panels read as layered glass on the energy backdrop.
+ *
+ * All tints reference CSS variables (defined per theme in index.css) so the
+ * same panels adapt to the light/dark toggle.
  */
 export const useGlassStyles = makeStyles({
   // Primary content surface (cards, panels).
   panel: {
     position: "relative",
-    backgroundColor: "rgba(255, 255, 255, 0.055)",
+    backgroundColor: "var(--glass-bg)",
     backdropFilter: "blur(26px) saturate(165%)",
     WebkitBackdropFilter: "blur(26px) saturate(165%)",
-    ...shorthands.border("1px", "solid", "rgba(255, 255, 255, 0.12)"),
+    ...shorthands.border("1px", "solid", "var(--glass-border)"),
     ...shorthands.borderRadius(tokens.borderRadiusXLarge),
-    boxShadow:
-      "0 10px 34px rgba(2, 6, 16, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.10)",
+    boxShadow: "var(--glass-shadow), inset 0 1px 0 var(--glass-hi)",
   },
   // A lighter surface for nested elements / rows.
   panelSubtle: {
-    backgroundColor: "rgba(255, 255, 255, 0.035)",
+    backgroundColor: "var(--glass-subtle-bg)",
     backdropFilter: "blur(14px) saturate(140%)",
     WebkitBackdropFilter: "blur(14px) saturate(140%)",
-    ...shorthands.border("1px", "solid", "rgba(255, 255, 255, 0.08)"),
+    ...shorthands.border("1px", "solid", "var(--glass-subtle-border)"),
     ...shorthands.borderRadius(tokens.borderRadiusLarge),
   },
   // Heavier chrome for the app header / rails.
   chrome: {
-    backgroundColor: "rgba(9, 13, 22, 0.55)",
+    backgroundColor: "var(--glass-chrome-bg)",
     backdropFilter: "blur(30px) saturate(180%)",
     WebkitBackdropFilter: "blur(30px) saturate(180%)",
   },
@@ -41,11 +43,10 @@ export const useGlassStyles = makeStyles({
     transitionTimingFunction: tokens.curveEasyEase,
     cursor: "pointer",
     ":hover": {
-      backgroundColor: "rgba(255, 255, 255, 0.09)",
-      ...shorthands.borderColor("rgba(255, 255, 255, 0.20)"),
+      backgroundColor: "var(--glass-bg-hover)",
+      ...shorthands.borderColor("var(--glass-border-hover)"),
       transform: "translateY(-2px)",
-      boxShadow:
-        "0 16px 40px rgba(2, 6, 16, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.14)",
+      boxShadow: "var(--glass-shadow-hover), inset 0 1px 0 var(--glass-hi-strong)",
     },
   },
 });

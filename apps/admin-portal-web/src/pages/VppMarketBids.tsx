@@ -49,8 +49,8 @@ const useStyles = makeStyles({
     rowGap: "8px",
     ...shorthands.padding("14px"),
     ...shorthands.borderRadius(tokens.borderRadiusLarge),
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    ...shorthands.border("1px", "solid", "rgba(255, 255, 255, 0.08)"),
+    backgroundColor: "var(--surface-soft)",
+    ...shorthands.border("1px", "solid", "var(--glass-subtle-border)"),
   },
   programTop: {
     display: "flex",
@@ -61,7 +61,7 @@ const useStyles = makeStyles({
   bar: {
     height: "6px",
     ...shorthands.borderRadius("999px"),
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: "var(--hairline)",
     ...shorthands.overflow("hidden"),
   },
   barFill: { height: "100%", ...shorthands.borderRadius("999px") },
