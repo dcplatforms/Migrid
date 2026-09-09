@@ -1,0 +1,16 @@
+{
+  "name": "MiGrid Core",
+  "user": "ubuntu",
+  "install": "PUPPETEER_SKIP_DOWNLOAD=true npm install",
+  "terminals": [
+    {
+      "name": "admin-portal-web",
+      "command": "cd apps/admin-portal-web && npm run dev -- --host 0.0.0.0 --port 5173",
+      "description": "L5 Admin Portal (Vite + React + Fluent UI) dev server on http://localhost:5173"
+    }
+  ],
+  "ports": [
+    { "name": "admin-portal-web", "port": 5173 },
+    { "name": "physics-engine", "port": 3001 }
+  ]
+}
