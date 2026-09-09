@@ -1,7 +1,7 @@
 {
   "name": "MiGrid Core",
   "user": "ubuntu",
-  "install": "PUPPETEER_SKIP_DOWNLOAD=true npm install && (command -v redis-server >/dev/null 2>&1 || (sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq redis-server)) || true",
+  "install": "PUPPETEER_SKIP_DOWNLOAD=true npm install && bash -c 'command -v redis-server >/dev/null 2>&1 || (sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq redis-server); exit 0'",
   "terminals": [
     {
       "name": "redis",
