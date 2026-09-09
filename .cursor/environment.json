@@ -1,16 +1,27 @@
 {
   "name": "MiGrid Core",
   "user": "ubuntu",
-  "install": "PUPPETEER_SKIP_DOWNLOAD=true npm install",
+  "install": "PUPPETEER_SKIP_DOWNLOAD=true npm install && (command -v redis-server >/dev/null 2>&1 || (sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq redis-server)) || true",
   "terminals": [
+    {
+      "name": "redis",
+      "command": "redis-server --save \"\" --appendonly no --port 6379",
+      "description": "Redis 7 — shared cache/state for the L8 Energy Manager and other services"
+    },
+    {
+      "name": "energy-manager",
+      "command": "cd services/08-energy-manager && REDIS_URL=redis://localhost:6379 PORT=3008 node index.js",
+      "description": "L8 Energy Manager service exposing live site-energy telemetry at http://localhost:3008/api/site/energy"
+    },
     {
       "name": "admin-portal-web",
       "command": "cd apps/admin-portal-web && npm run dev -- --host 0.0.0.0 --port 5173",
-      "description": "L5 Admin Portal (Vite + React + Fluent UI) dev server on http://localhost:5173"
+      "description": "L5 Admin Portal (Vite + React + Fluent UI) dev server on http://localhost:5173 (proxies /api to L8)"
     }
   ],
   "ports": [
     { "name": "admin-portal-web", "port": 5173 },
+    { "name": "energy-manager", "port": 3008 },
     { "name": "physics-engine", "port": 3001 }
   ]
 }
