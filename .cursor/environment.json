@@ -11,17 +11,34 @@
     {
       "name": "energy-manager",
       "command": "cd services/08-energy-manager && REDIS_URL=redis://localhost:6379 PORT=3008 node index.js",
-      "description": "L8 Energy Manager service exposing live site-energy telemetry at http://localhost:3008/api/site/energy"
+      "description": "L8 Energy Manager — live site-energy telemetry at http://localhost:3008/api/site/energy (Live Site Energy page)"
+    },
+    {
+      "name": "physics-engine",
+      "command": "cd services/01-physics-engine && REDIS_URL=redis://localhost:6379 PORT=3001 node index.js",
+      "description": "L1 Physics Engine — charging-session telemetry at http://localhost:3001/api/sessions (Charging Sessions page)"
+    },
+    {
+      "name": "market-gateway",
+      "command": "cd services/04-market-gateway && REDIS_URL=redis://localhost:6379 PORT=3004 node index.js",
+      "description": "L4 Market Gateway — market-bid telemetry at http://localhost:3004/api/market (VPP Market Bids page)"
+    },
+    {
+      "name": "engagement-engine",
+      "command": "cd services/06-engagement-engine && REDIS_URL=redis://localhost:6379 PORT=3006 node index.js",
+      "description": "L6 Engagement Engine — driver telemetry at http://localhost:3006/api/drivers (Driver Management page)"
     },
     {
       "name": "admin-portal-web",
       "command": "cd apps/admin-portal-web && npm run dev -- --host 0.0.0.0 --port 5173",
-      "description": "L5 Admin Portal (Vite + React + Fluent UI) dev server on http://localhost:5173 (proxies /api to L8)"
+      "description": "L5 Admin Portal (Vite + React + Fluent UI) dev server on http://localhost:5173 (proxies /api/* to L1/L4/L6/L8)"
     }
   ],
   "ports": [
     { "name": "admin-portal-web", "port": 5173 },
     { "name": "energy-manager", "port": 3008 },
-    { "name": "physics-engine", "port": 3001 }
+    { "name": "physics-engine", "port": 3001 },
+    { "name": "market-gateway", "port": 3004 },
+    { "name": "engagement-engine", "port": 3006 }
   ]
 }
