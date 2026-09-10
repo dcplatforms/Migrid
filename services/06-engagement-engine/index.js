@@ -34,6 +34,9 @@ const redisClient = redis.createClient({
 app.use(helmet());
 app.use(express.json());
 
+// Admin Portal live telemetry (Driver Management page).
+require('./portalTelemetry').mountPortalTelemetry(app);
+
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 
 // [Security] Weak secret definitions

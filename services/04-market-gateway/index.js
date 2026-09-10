@@ -20,6 +20,9 @@ const port = process.env.PORT || 3004;
 
 app.use(helmet());
 
+// Admin Portal live telemetry (VPP Market Bids page).
+require('./portalTelemetry').mountPortalTelemetry(app);
+
 // PostgreSQL connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://localhost/migrid'
@@ -797,21 +800,41 @@ app.get('/markets', async (req, res) => {
 
 // Start server
 async function start() {
+  // Bring the HTTP server up first so the portal telemetry API stays available
+  // even when downstream infra (Kafka, ISO feeds) is offline. Each dependency
+  // then degrades independently instead of taking down the process.
+  if (process.env.NODE_ENV !== 'test') {
+    app.listen(port, () => {
+      console.log(`[Market Gateway] Running on port ${port}`);
+      console.log(`[Market Gateway] LMP Strategy: Buy < $${LMP_THRESHOLD_BUY}, Sell > $${LMP_THRESHOLD_SELL}`);
+      console.log('[Market Gateway] Using Decimal.js for financial precision');
+    });
+  }
+
   try {
     await redisClient.connect();
     console.log('✅ [Market Gateway] Connected to Redis');
+  } catch (error) {
+    console.warn('⚠️  [Market Gateway] Redis unavailable:', error.message);
+  }
 
+  try {
     await producer.connect();
     console.log('✅ [Market Gateway] Connected to Kafka Producer');
-
     await startGridSignalConsumer();
     console.log('✅ [Market Gateway] Grid Signal Consumer running (Listening to L2)');
+  } catch (error) {
+    console.warn('⚠️  [Market Gateway] Kafka unavailable, continuing without event bus:', error.message);
+  }
 
-    // Start Safety Lock Poller [L4-133]
-    setInterval(updateLocalSafetyCache, 5000);
-    await updateLocalSafetyCache();
+  // Start Safety Lock Poller [L4-133]
+  setInterval(updateLocalSafetyCache, 5000);
+  await updateLocalSafetyCache().catch((e) =>
+    console.warn('⚠️  [Market Gateway] Safety cache init skipped:', e.message)
+  );
 
-    // Start background tasks
+  // Start background tasks
+  try {
     const GRID_STATUS_API_KEY = process.env.GRID_STATUS_API_KEY;
     const USE_LIVE_DATA = process.env.USE_LIVE_DATA === 'true';
 
@@ -828,17 +851,8 @@ async function start() {
       console.log('📉 [Market Gateway] Running in Simulation Mode');
       await startPriceBroadcaster();
     }
-
-    if (process.env.NODE_ENV !== 'test') {
-      app.listen(port, () => {
-        console.log(`[Market Gateway] Running on port ${port}`);
-        console.log(`[Market Gateway] LMP Strategy: Buy < $${LMP_THRESHOLD_BUY}, Sell > $${LMP_THRESHOLD_SELL}`);
-        console.log('[Market Gateway] Using Decimal.js for financial precision');
-      });
-    }
   } catch (error) {
-    console.error('❌ [Market Gateway] Failed to start:', error);
-    process.exit(1);
+    console.warn('⚠️  [Market Gateway] Background price tasks degraded:', error.message);
   }
 }
 

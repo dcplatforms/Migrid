@@ -21,6 +21,9 @@ const app = express();
 const port = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 
+// Admin Portal live telemetry (Charging Sessions page).
+require('./portalTelemetry').mountPortalTelemetry(app);
+
 const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
 const isWeakSecret = (secret) => {
   if (!secret) return true;
