@@ -25,6 +25,9 @@ import { GlassCard } from "../components/GlassCard";
 import { KpiCard } from "../components/KpiCard";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill, type StatusTone } from "../components/StatusPill";
+import { ConnectionPill } from "../components/ConnectionPill";
+import { usePolling } from "../hooks/usePolling";
+import { fetchDrivers } from "../api/portal";
 
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", rowGap: "22px" },
@@ -66,7 +69,7 @@ interface Driver {
   statusTone: StatusTone;
 }
 
-const drivers: Driver[] = [
+const FALLBACK_DRIVERS: Driver[] = [
   { name: "Alice Nguyen", depot: "Depot A · San Jose", score: 982, tokens: "12,540 MGT", tier: "Platinum", tierTone: "info", status: "Active", statusTone: "success" },
   { name: "Marcus Reed", depot: "Depot A · San Jose", score: 934, tokens: "10,870 MGT", tier: "Platinum", tierTone: "info", status: "Active", statusTone: "success" },
   { name: "Priya Shah", depot: "Depot B · Fremont", score: 901, tokens: "9,220 MGT", tier: "Gold", tierTone: "warning", status: "Active", statusTone: "success" },
@@ -77,10 +80,19 @@ const drivers: Driver[] = [
 
 export const DriverManagement = () => {
   const styles = useStyles();
+  const { data, status } = usePolling(fetchDrivers, 5000);
+  const summary = data?.summary;
+  const drivers: Driver[] = data?.drivers ?? FALLBACK_DRIVERS;
+
   return (
     <div className={styles.root}>
       <PageHeader
-        eyebrow={<>L5 · Driver Experience + L6 · Engagement</>}
+        eyebrow={
+          <>
+            <ConnectionPill status={status} liveLabel="Live · L6 API" />
+            L5 · Driver Experience + L6 · Engagement
+          </>
+        }
         title="Driver Management"
         subtitle="Grid-supportive driver behaviour is measured, scored and rewarded. Tokens are minted to driver wallets via the L10 Token Bridge for off-peak charging and verified V2G participation."
         actions={
@@ -96,10 +108,10 @@ export const DriverManagement = () => {
       />
 
       <div className={styles.kpiGrid}>
-        <KpiCard index={0} label="Active Drivers" value="342" delta={4} caption="fleet-wide" accent="#38bdf8" icon={<People24Regular />} />
-        <KpiCard index={1} label="Avg Engagement" value="86" unit="/100" delta={7} caption="behaviour score" accent="#34d399" icon={<Trophy24Regular />} />
-        <KpiCard index={2} label="Tokens Minted (30d)" value="1.24M" unit="MGT" delta={19} caption="rewards" accent="#fbbf24" icon={<Wallet24Regular />} />
-        <KpiCard index={3} label="V2G Participation" value="63" unit="%" delta={11} caption="opt-in rate" accent="#a78bfa" icon={<People24Regular />} />
+        <KpiCard index={0} label="Active Drivers" value={(summary?.activeDrivers ?? 342).toString()} delta={4} caption="fleet-wide" accent="#38bdf8" icon={<People24Regular />} />
+        <KpiCard index={1} label="Avg Engagement" value={(summary?.avgEngagement ?? 86).toString()} unit="/100" delta={7} caption="behaviour score" accent="#34d399" icon={<Trophy24Regular />} />
+        <KpiCard index={2} label="Tokens Minted (30d)" value={`${(summary?.tokensMinted30dM ?? 1.24).toFixed(2)}M`} unit="MGT" delta={19} caption="rewards" accent="#fbbf24" icon={<Wallet24Regular />} />
+        <KpiCard index={3} label="V2G Participation" value={(summary?.v2gParticipationPct ?? 63).toString()} unit="%" delta={11} caption="opt-in rate" accent="#a78bfa" icon={<People24Regular />} />
       </div>
 
       <GlassCard

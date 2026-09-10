@@ -22,6 +22,9 @@ import { GlassCard } from "../components/GlassCard";
 import { KpiCard } from "../components/KpiCard";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill, type StatusTone } from "../components/StatusPill";
+import { ConnectionPill } from "../components/ConnectionPill";
+import { usePolling } from "../hooks/usePolling";
+import { fetchMarket } from "../api/portal";
 
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", rowGap: "22px" },
@@ -77,7 +80,7 @@ interface Bid {
   tone: StatusTone;
 }
 
-const bids: Bid[] = [
+const FALLBACK_BIDS: Bid[] = [
   { id: "BID-5521", market: "CAISO", product: "Day-Ahead Energy", capacity: "1.2 MW", clearing: "$78.40/MWh", status: "Cleared", tone: "success" },
   { id: "BID-5519", market: "PJM", product: "Frequency Reg (RegD)", capacity: "0.8 MW", clearing: "$21.15/MW", status: "Cleared", tone: "success" },
   { id: "BID-5514", market: "ERCOT", product: "Responsive Reserve", capacity: "1.5 MW", clearing: "$44.90/MW", status: "Pending", tone: "warning" },
@@ -93,10 +96,19 @@ const programs = [
 
 export const VppMarketBids = () => {
   const styles = useStyles();
+  const { data, status } = usePolling(fetchMarket, 5000);
+  const summary = data?.summary;
+  const bids: Bid[] = data?.bids ?? FALLBACK_BIDS;
+
   return (
     <div className={styles.root}>
       <PageHeader
-        eyebrow={<>L3 · VPP Aggregator + L4 · Market Gateway</>}
+        eyebrow={
+          <>
+            <ConnectionPill status={status} liveLabel="Live · L4 API" />
+            L3 · VPP Aggregator + L4 · Market Gateway
+          </>
+        }
         title="VPP Market Bids"
         subtitle="Aggregated fleet capacity is bid into wholesale energy and ancillary-services markets. Arbitrage is driven by locational marginal price signals across CAISO, PJM, ERCOT and Nord Pool."
         actions={
@@ -107,10 +119,10 @@ export const VppMarketBids = () => {
       />
 
       <div className={styles.kpiGrid}>
-        <KpiCard index={0} label="Dispatchable Capacity" value="4.9" unit="MW" delta={5} caption="fleet aggregate" accent="#34d399" icon={<Molecule24Regular />} />
-        <KpiCard index={1} label="Revenue (30d)" value="$182.4k" delta={14} caption="grid services" accent="#fbbf24" icon={<Money24Regular />} />
-        <KpiCard index={2} label="Cleared Bids" value="63" delta={8} caption="this week" accent="#38bdf8" icon={<ArrowTrendingLines24Regular />} />
-        <KpiCard index={3} label="Avg Clearing" value="$74.10" unit="/MWh" delta={-3} caption="vs 30d avg" accent="#a78bfa" icon={<Flash20Filled />} />
+        <KpiCard index={0} label="Dispatchable Capacity" value={(summary?.dispatchableMw ?? 4.9).toFixed(1)} unit="MW" delta={5} caption="fleet aggregate" accent="#34d399" icon={<Molecule24Regular />} />
+        <KpiCard index={1} label="Revenue (30d)" value={`$${(summary?.revenue30dK ?? 182.4).toFixed(1)}k`} delta={14} caption="grid services" accent="#fbbf24" icon={<Money24Regular />} />
+        <KpiCard index={2} label="Cleared Bids" value={(summary?.clearedBids ?? 63).toString()} delta={8} caption="this week" accent="#38bdf8" icon={<ArrowTrendingLines24Regular />} />
+        <KpiCard index={3} label="Avg Clearing" value={`$${(summary?.avgClearingUsd ?? 74.1).toFixed(2)}`} unit="/MWh" delta={-3} caption="vs 30d avg" accent="#a78bfa" icon={<Flash20Filled />} />
       </div>
 
       <div className={styles.splitGrid}>

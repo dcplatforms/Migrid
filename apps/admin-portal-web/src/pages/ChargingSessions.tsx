@@ -25,6 +25,9 @@ import { GlassCard } from "../components/GlassCard";
 import { KpiCard } from "../components/KpiCard";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill, type StatusTone } from "../components/StatusPill";
+import { ConnectionPill } from "../components/ConnectionPill";
+import { usePolling } from "../hooks/usePolling";
+import { fetchSessions } from "../api/portal";
 
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", rowGap: "22px" },
@@ -63,7 +66,7 @@ interface Session {
   statusTone: StatusTone;
 }
 
-const sessions: Session[] = [
+const FALLBACK_SESSIONS: Session[] = [
   { id: "SES-90241", driver: "Alice Nguyen", vehicle: "Ford E-Transit #4102", energy: "48.32 kWh", variance: "2.1%", varianceTone: "success", status: "Verified", statusTone: "success" },
   { id: "SES-90238", driver: "Marcus Reed", vehicle: "Rivian EDV #3391", energy: "61.07 kWh", variance: "4.8%", varianceTone: "success", status: "Verified", statusTone: "success" },
   { id: "SES-90233", driver: "Priya Shah", vehicle: "BrightDrop Zevo #2210", energy: "33.55 kWh", variance: "11.4%", varianceTone: "warning", status: "Review", statusTone: "warning" },
@@ -73,12 +76,35 @@ const sessions: Session[] = [
   { id: "SES-90212", driver: "Lena Osei", vehicle: "Ford E-Transit #4110", energy: "-19.40 kWh", variance: "0.9%", varianceTone: "info", status: "V2G Export", statusTone: "info" },
 ];
 
+const fmtEnergy = (kwh: number) => `${kwh.toFixed(2)} kWh`;
+
 export const ChargingSessions = () => {
   const styles = useStyles();
+  const { data, status } = usePolling(fetchSessions, 5000);
+
+  const summary = data?.summary;
+  const sessions: Session[] = data?.sessions
+    ? data.sessions.map((s) => ({
+        id: s.id,
+        driver: s.driver,
+        vehicle: s.vehicle,
+        energy: fmtEnergy(s.energyKwh),
+        variance: `${s.variancePct}%`,
+        varianceTone: s.varianceTone,
+        status: s.status,
+        statusTone: s.statusTone,
+      }))
+    : FALLBACK_SESSIONS;
+
   return (
     <div className={styles.root}>
       <PageHeader
-        eyebrow={<>L1 · Physics Engine</>}
+        eyebrow={
+          <>
+            <ConnectionPill status={status} liveLabel="Live · L1 API" />
+            L1 · Physics Engine
+          </>
+        }
         title="Charging Sessions"
         subtitle="Every session is audited by the Physics Engine — energy dispensed is reconciled against energy received with a strict <15% variance threshold before settlement."
         actions={
@@ -94,10 +120,10 @@ export const ChargingSessions = () => {
       />
 
       <div className={styles.kpiGrid}>
-        <KpiCard index={0} label="Sessions Today" value="1,284" delta={9} caption="vs yesterday" accent="#38bdf8" icon={<PlugConnected24Regular />} />
-        <KpiCard index={1} label="Energy Dispensed" value="42.7" unit="MWh" delta={6} caption="vs yesterday" accent="#34d399" icon={<Flash20Filled />} />
-        <KpiCard index={2} label="Physics Pass Rate" value="97.4" unit="%" delta={1} caption="verified" accent="#a78bfa" icon={<Checkmark20Regular />} />
-        <KpiCard index={3} label="Flagged Sessions" value="14" delta={-22} caption="needs review" accent="#f87171" icon={<Filter20Regular />} />
+        <KpiCard index={0} label="Sessions Today" value={(summary?.sessionsToday ?? 1284).toLocaleString()} delta={9} caption="vs yesterday" accent="#38bdf8" icon={<PlugConnected24Regular />} />
+        <KpiCard index={1} label="Energy Dispensed" value={(summary?.energyMwh ?? 42.7).toFixed(1)} unit="MWh" delta={6} caption="vs yesterday" accent="#34d399" icon={<Flash20Filled />} />
+        <KpiCard index={2} label="Physics Pass Rate" value={(summary?.physicsPassRatePct ?? 97.4).toFixed(1)} unit="%" delta={1} caption="verified" accent="#a78bfa" icon={<Checkmark20Regular />} />
+        <KpiCard index={3} label="Flagged Sessions" value={(summary?.flagged ?? 14).toString()} delta={-22} caption="needs review" accent="#f87171" icon={<Filter20Regular />} />
       </div>
 
       <GlassCard
