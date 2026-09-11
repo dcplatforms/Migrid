@@ -128,4 +128,55 @@ describe('L5 Driver Experience API Security Hardening', () => {
     expect(res.status).toBe(200);
     expect(res.body.id).toBe('driver-123');
   });
+
+  test('POST /voice/command should reject missing or invalid command_text with HTTP 400', async () => {
+    process.env.NODE_ENV = 'production';
+    const strongSecret = 'super_strong_unpredictable_production_secret_key_12345';
+    process.env.JWT_SECRET = strongSecret;
+
+    const { app } = require('./index');
+    const token = jwt.sign({ driver_id: 'driver-123', fleet_id: 'fleet-abc' }, strongSecret);
+
+    // Missing body / command_text
+    const res1 = await request(app)
+      .post('/voice/command')
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+    expect(res1.status).toBe(400);
+    expect(res1.body.error).toBe('Invalid or missing command_text');
+
+    // Invalid type (number)
+    const res2 = await request(app)
+      .post('/voice/command')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ command_text: 12345 });
+    expect(res2.status).toBe(400);
+    expect(res2.body.error).toBe('Invalid or missing command_text');
+
+    // Empty / whitespace string
+    const res3 = await request(app)
+      .post('/voice/command')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ command_text: '   ' });
+    expect(res3.status).toBe(400);
+    expect(res3.body.error).toBe('Invalid or missing command_text');
+  });
+
+  test('POST /voice/command should process valid command_text correctly', async () => {
+    process.env.NODE_ENV = 'production';
+    const strongSecret = 'super_strong_unpredictable_production_secret_key_12345';
+    process.env.JWT_SECRET = strongSecret;
+
+    const { app } = require('./index');
+    const token = jwt.sign({ driver_id: 'driver-123', fleet_id: 'fleet-abc' }, strongSecret);
+
+    const res = await request(app)
+      .post('/voice/command')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ command_text: 'Please start charging my vehicle' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.action).toBe('start_charging');
+    expect(res.body.success).toBe(true);
+  });
 });
