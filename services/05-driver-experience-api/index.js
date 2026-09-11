@@ -509,7 +509,10 @@ app.post('/rewards/claim', authenticateToken, async (req, res) => {
 // ============================================================================
 
 app.post('/voice/command', authenticateToken, async (req, res) => {
-  const { command_text } = req.body;
+  const { command_text } = req.body || {};
+  if (!command_text || typeof command_text !== 'string' || !command_text.trim()) {
+    return res.status(400).json({ error: 'Invalid or missing command_text' });
+  }
   try {
     const lowerCommand = command_text.toLowerCase();
     if (lowerCommand.includes('start charging')) return res.json({ action: 'start_charging', success: true });
