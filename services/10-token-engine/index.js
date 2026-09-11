@@ -440,9 +440,16 @@ async function start() {
 
           const {
             driver_id,
+            driverId,
+            user_id,
+            userId,
             action_type,
+            actionType,
             source_value,
+            sourceValue,
             event_id,
+            eventId,
+            id,
             iso: payloadIso,
             physics_score,
             physicsScore,
@@ -458,6 +465,10 @@ async function start() {
             resourceType
           } = payload;
 
+          const driverIdVal = driver_id || driverId || user_id || userId;
+          const actionTypeVal = action_type || actionType;
+          const sourceValueVal = source_value !== undefined ? source_value : (sourceValue !== undefined ? sourceValue : 0);
+          const eventIdVal = event_id || eventId || id;
           const vppAligned = !!(is_vpp_event || isVppEvent);
 
           // Robust Payload Validation and Standardization (Snake_case & CamelCase support)
@@ -477,10 +488,15 @@ async function start() {
           const siteIdVal = extractSiteId(payload);
           const resourceTypeVal = resource_type || resourceType || 'EV';
 
+          if (!driverIdVal) {
+            console.error(`❌ Missing driver identifier in payload for event: ${eventIdVal}`);
+            return;
+          }
+
           // 1. Ensure Driver Wallet Exists (and get address)
-          const driverWallet = await getOrCreateDriverWallet(driver_id);
+          const driverWallet = await getOrCreateDriverWallet(driverIdVal);
           if (!driverWallet) {
-            console.error(`❌ Failed to get or create wallet for driver: ${driver_id}`);
+            console.error(`❌ Failed to get or create wallet for driver: ${driverIdVal}`);
             return;
           }
           const iso = (payloadIso || driverWallet.iso || 'CAISO').toUpperCase().replace(/-/g, '');
@@ -490,7 +506,7 @@ async function start() {
           let multiplierReason = 'Standard Reward';
 
           if (physicsScoreNum !== null && isNaN(physicsScoreNum)) {
-            console.warn(`[L10 Audit] Received invalid physics_score for event ${event_id}. Skipping.`);
+            console.warn(`[L10 Audit] Received invalid physics_score for event ${eventIdVal}. Skipping.`);
             return;
           }
 
@@ -504,42 +520,42 @@ async function start() {
                                            (physicsScoreNum !== null && physicsScoreNum > 0.99);
 
           // Fetch rule early for idempotency check
-          const rule = await getRewardRule(action_type);
-          const isBehavioral = action_type === 'challenge_completed' || action_type === 'achievement_unlocked' || action_type === 'grid_response' || action_type === 'der_alarm_response' || action_type === 'solar_ramp_response';
+          const rule = await getRewardRule(actionTypeVal);
+          const isBehavioral = actionTypeVal === 'challenge_completed' || actionTypeVal === 'achievement_unlocked' || actionTypeVal === 'grid_response' || actionTypeVal === 'der_alarm_response' || actionTypeVal === 'solar_ramp_response';
 
           if (!rule && !isBehavioral) {
-            console.warn(`⚠️ No active reward rule found for action type: ${action_type}`);
+            console.warn(`⚠️ No active reward rule found for action type: ${actionTypeVal}`);
             return;
           }
           rule_id = rule ? rule.rule_id : '00000000-0000-0000-0000-000000000000';
 
           // 2. Idempotency Check
-          const existingReward = await checkIdempotency(driver_id, event_id, rule_id);
+          const existingReward = await checkIdempotency(driverIdVal, eventIdVal, rule_id);
           if (existingReward) {
-            console.log(`[L10 Idempotency] Reward already exists for ${action_type} (Event: ${event_id}). Status: ${existingReward.status}. Skipping.`);
+            console.log(`[L10 Idempotency] Reward already exists for ${actionTypeVal} (Event: ${eventIdVal}). Status: ${existingReward.status}. Skipping.`);
             return;
           }
 
           if (isBehavioral) {
             // Fixed-value rewards (points/tokens)
-            pointsAwarded = new Decimal(source_value || 0);
-            console.log(`[L10] Behavioral ${action_type} by driver ${driver_id}. Awarding ${pointsAwarded.toNumber()} tokens. [Resource: ${resourceTypeVal}]`);
+            pointsAwarded = new Decimal(sourceValueVal || 0);
+            console.log(`[L10] Behavioral ${actionTypeVal} by driver ${driverIdVal}. Awarding ${pointsAwarded.toNumber()} tokens. [Resource: ${resourceTypeVal}]`);
           } else {
             // Proof of Physics Gate: Energy-based rewards must have verified physics
             if (physicsScoreNum !== null) {
               const fidelityStatus = isHighFidelityPersist ? 'HIGH_FIDELITY' : 'STANDARD';
 
               if (parseFloat(physicsScoreVal) <= 0.0) {
-                console.warn(`[L10 Audit] [${fidelityStatus}] Rejected reward for event ${event_id}: Physics Score too low (${physicsScoreVal}). Driver: ${driver_id} [Resource: ${resourceTypeVal}]`);
+                console.warn(`[L10 Audit] [${fidelityStatus}] Rejected reward for event ${eventIdVal}: Physics Score too low (${physicsScoreVal}). Driver: ${driverIdVal} [Resource: ${resourceTypeVal}]`);
                 return;
               }
             } else {
-              console.warn(`[L10 Audit] Rejected energy-based reward for event ${event_id}: Physics Score missing. Driver: ${driver_id} [Resource: ${resourceTypeVal}]`);
+              console.warn(`[L10 Audit] Rejected energy-based reward for event ${eventIdVal}: Physics Score missing. Driver: ${driverIdVal} [Resource: ${resourceTypeVal}]`);
               return;
             }
 
             // 2. Calculate Reward with Dynamic Boosting (Energy-based)
-            const marketMultiplier = await getDynamicMultiplier(iso, action_type, vppAligned);
+            const marketMultiplier = await getDynamicMultiplier(iso, actionTypeVal, vppAligned);
             const siteMultiplier = await getSiteMultiplier(siteIdVal);
 
             // Compound Multipliers
@@ -551,23 +567,23 @@ async function start() {
             totalMultiplier = penaltyResult.multiplier;
             multiplierReason = penaltyResult.reason;
 
-            const baseReward = new Decimal(source_value || 0).times(rule.reward_multiplier);
+            const baseReward = new Decimal(sourceValueVal || 0).times(rule.reward_multiplier);
             pointsAwarded = baseReward.times(totalMultiplier).toDecimalPlaces(8);
 
-            console.log(`[L10] Reward calculated: ${pointsAwarded.toNumber()} points (Source: ${source_value}, Rule Mult: ${rule.reward_multiplier}, Total Mult: ${totalMultiplier.toFixed(4)})`);
+            console.log(`[L10] Reward calculated: ${pointsAwarded.toNumber()} points (Source: ${sourceValueVal}, Rule Mult: ${rule.reward_multiplier}, Total Mult: ${totalMultiplier.toFixed(4)})`);
           }
 
           if (pointsAwarded.isZero()) {
-            console.log(`[L10] Reward is zero for event ${event_id}, skipping.`);
+            console.log(`[L10] Reward is zero for event ${eventIdVal}, skipping.`);
             return;
           }
 
           // 4. Log the Reward (queued for batch minting)
           await logRewardTransaction(
-            driver_id,
+            driverIdVal,
             rule_id,
-            event_id,
-            source_value || 0,
+            eventIdVal,
+            sourceValueVal || 0,
             pointsAwarded.toNumber(),
             'queued',
             iso,
