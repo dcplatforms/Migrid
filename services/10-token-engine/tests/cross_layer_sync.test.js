@@ -8,16 +8,28 @@ describe('L10 Kafka Consumer Logic Refactor Verification', () => {
   test('Multi-layer payload key mapping (Simulated Logic)', () => {
     const payloads = [
       { // L1 Physics style
+        driver_id: "drv-101",
+        event_id: "evt-001",
+        action_type: "session_completed",
+        source_value: 15.5,
         physics_score: "0.995",
         confidence_score: "0.98",
         site_id: "site-1"
       },
       { // L7 Device style
+        driverId: "drv-102",
+        eventId: "evt-002",
+        actionType: "v2g_discharge",
+        sourceValue: 12.0,
         physicsScore: 0.995,
         confidenceScore: 0.98,
         locationId: "site-1"
       },
       { // L6 Engagement style
+        userId: "drv-103",
+        id: "evt-003",
+        actionType: "achievement_unlocked",
+        sourceValue: 50,
         is_sentinel_fidelity: true,
         resource_type: "BESS"
       }
@@ -25,6 +37,10 @@ describe('L10 Kafka Consumer Logic Refactor Verification', () => {
 
     payloads.forEach(payload => {
       const {
+        driver_id, driverId, user_id, userId,
+        action_type, actionType,
+        source_value, sourceValue,
+        event_id, eventId, id,
         physics_score, physicsScore,
         confidence_score, confidenceScore,
         site_id, siteId, location_id, locationId,
@@ -32,11 +48,20 @@ describe('L10 Kafka Consumer Logic Refactor Verification', () => {
         resource_type, resourceType
       } = payload;
 
+      const driverIdVal = driver_id || driverId || user_id || userId;
+      const actionTypeVal = action_type || actionType;
+      const sourceValueVal = source_value !== undefined ? source_value : (sourceValue !== undefined ? sourceValue : 0);
+      const eventIdVal = event_id || eventId || id;
       const physicsScoreVal = physics_score !== undefined ? parseFloat(physics_score) : (physicsScore !== undefined ? parseFloat(physicsScore) : null);
       const confidenceScoreVal = confidence_score !== undefined ? parseFloat(confidence_score) : (confidenceScore !== undefined ? parseFloat(confidenceScore) : null);
       const siteIdVal = site_id || siteId || location_id || locationId || null;
       const isSentinelFidelityVal = is_sentinel_fidelity !== undefined ? is_sentinel_fidelity : (isSentinelFidelity !== undefined ? isSentinelFidelity : false);
       const resourceTypeVal = resource_type || resourceType || 'EV';
+
+      expect(driverIdVal).toMatch(/^drv-10[1-3]$/);
+      expect(eventIdVal).toMatch(/^evt-00[1-3]$/);
+      expect(actionTypeVal).toBeDefined();
+      expect(sourceValueVal).toBeGreaterThan(0);
 
       if (payload.physics_score || payload.physicsScore) {
         expect(physicsScoreVal).toBe(0.995);
