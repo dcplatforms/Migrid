@@ -294,8 +294,11 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
     // [L4 v3.8.5] Standardized Sentinel logic with fallback
     isSentinelFidelity = isSentinel(isSentinelFidelity, physicsScore);
 
+    const normalizedIso = iso.toUpperCase().replace(/-/g, '');
     const payload = {
-      iso: iso.toUpperCase().replace(/-/g, ''),
+      iso: normalizedIso,
+      iso_region: normalizedIso, // Multi-key region compatibility with L2/L6/L10
+      isoRegion: normalizedIso,  // Multi-key region compatibility
       location: location || 'SYSTEM_WIDE',
       site_id: location || 'SYSTEM_WIDE', // L10 v4.3.5 site-aware reward parity
       price_per_mwh: price.toNumber(),
@@ -307,7 +310,6 @@ async function broadcastMarketPrice(iso, price_per_mwh, location = 'SYSTEM_WIDE'
       is_high_fidelity: isHighFidelity,
       is_sentinel_fidelity: isSentinelFidelity,
       fidelity_status: isHighFidelity ? 'HIGH_FIDELITY' : 'STANDARD',
-      regional_alarm_count: alarmCount,
       hardware_penalty: hardwarePenalty.toFixed(4),
       site_aware_sync: true, // L1 v10.1.3 compliance
       timestamp: new Date().toISOString()
@@ -366,6 +368,12 @@ async function startGridSignalConsumer() {
             } else {
               await redisClient.setEx('l4:grid:lock', lockDuration, 'true');
               console.warn(`[Market Gateway] L4 Global Grid Lock ACTIVATED for ${lockDuration}s due to critical hardware alarm`);
+            }
+
+            if (siteIdVal) {
+              const siteLockKey = `l1:safety:lock:site:${siteIdVal}`;
+              await redisClient.setEx(siteLockKey, lockDuration, 'true');
+              console.warn(`[Market Gateway] L1 Site-Specific Safety Lock ACTIVATED for ${siteIdVal} for ${lockDuration}s due to DER alarm`);
             }
           }
           return;
@@ -519,17 +527,18 @@ app.get('/markets/:iso/prices', authenticateToken, async (req, res) => {
 
 // Generate and submit optimized bids
 app.post('/bids/optimize', authenticateToken, async (req, res) => {
-  const { iso } = req.body;
+  const { iso, site_id, siteId } = req.body;
 
   if (!iso) {
     return res.status(400).json({ error: 'ISO is required' });
   }
 
   const normalizedIso = iso.toUpperCase().replace(/-/g, '');
+  const targetSiteId = site_id || siteId || null;
 
   try {
     const optimizer = new BiddingOptimizer(pool, process.env.REDIS_URL || 'redis://localhost:6379', localSafetyCache);
-    const { bids, audit } = await optimizer.generateDayAheadBids(normalizedIso);
+    const { bids, audit } = await optimizer.generateDayAheadBids(normalizedIso, targetSiteId);
 
     // In a real scenario, we would send these FIX messages to CAISO
     // For now, we'll return them and log them
