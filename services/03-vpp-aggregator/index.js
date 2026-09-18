@@ -20,7 +20,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 const CAPACITY_UPDATE_INTERVAL = parseInt(process.env.CAPACITY_UPDATE_INTERVAL) || 10000;
 
 // [Security] Weak secret definitions
-const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret'];
+const WEAK_SECRETS = ['dev_secret_change_in_production', 'test_secret', 'dev_secret', 'default_secret', 'secret', 'change_in_production', 'development_secret'];
 
 const isWeakSecret = (secret) => {
   if (!secret) return true;

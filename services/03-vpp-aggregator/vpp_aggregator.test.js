@@ -409,16 +409,20 @@ describe('L3 VPP Aggregator Service', () => {
 
         test('Authenticated endpoint should fail securely with 500 when NODE_ENV is production and JWT_SECRET is weak', async () => {
             process.env.NODE_ENV = 'production';
-            process.env.JWT_SECRET = 'secret';
 
-            const token = jwt.sign({ fleet_id: 'FLEET-001' }, 'secret');
+            const weakSecretsToTest = ['secret', 'change_in_production', 'development_secret'];
 
-            const response = await request(app)
-                .get('/capacity/available')
-                .set('Authorization', `Bearer ${token}`);
+            for (const weakSecret of weakSecretsToTest) {
+                process.env.JWT_SECRET = weakSecret;
+                const token = jwt.sign({ fleet_id: 'FLEET-001' }, weakSecret);
 
-            expect(response.status).toBe(500);
-            expect(response.body.error).toContain('Internal server configuration error');
+                const response = await request(app)
+                    .get('/capacity/available')
+                    .set('Authorization', `Bearer ${token}`);
+
+                expect(response.status).toBe(500);
+                expect(response.body.error).toContain('Internal server configuration error');
+            }
         });
 
         test('Authenticated endpoint should succeed when NODE_ENV is production and JWT_SECRET is strong', async () => {
