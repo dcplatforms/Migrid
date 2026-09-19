@@ -370,7 +370,7 @@ app.get('/challenges/active', authenticateToken, async (req, res) => {
  */
 function extractSiteId(payload) {
   if (!payload) return null;
-  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || null;
+  return payload.site_id || payload.siteId || payload.location_id || payload.locationId || (payload.metadata ? extractSiteId(payload.metadata) : null);
 }
 
 

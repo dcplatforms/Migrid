@@ -62,4 +62,13 @@ describe('L6 v5.15.0 Robust Site ID Extraction', () => {
       ['ALL', expect.any(String)]
     );
   });
+
+  test('handleGridSignal extracts site_id from nested metadata object correctly', async () => {
+    const payload = { event_id: 'evt-6', priority: 'HIGH', metadata: { site_id: 'SITE-NESTED-E' } };
+    await handleGridSignal(payload);
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining('($1 = \'ALL\' OR chr.location_id = $1)'),
+      ['SITE-NESTED-E', expect.any(String)]
+    );
+  });
 });
