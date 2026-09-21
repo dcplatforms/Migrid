@@ -1,7 +1,7 @@
 # MiGrid Master Backlog & Strategic Dependency Matrix
 
 **Version:** 10.1.6
-**Last Updated:** June 2026
+**Last Updated:** September 2026
 **Status:** Phase 6 "AI & Optimization" (Active — 60%)
 
 ---
@@ -54,11 +54,13 @@
 - [✓] **Contextual Safety Locks**: metadata-enriched `l1:safety:lock:context` in Redis.
 - [✓] **API Security**: Integrated `helmet` and secured `/data/training/physics`.
 
-### Layer 2: Grid Signal (v2.5.4)
-- [✓] **[L2-133] Resilience**: Implemented `localSafetyCache` and 5s poller.
-- [✓] **Telemetry Hardening**: implemented `isNaN` protection for physics/confidence scores.
-- [✓] **L11 Parity**: enforced strict `.toFixed(4)` string formatting for audit trails.
-- [✓] **Secure Reporting**: authenticateToken and PII masking applied to `/openadr/v3/reports`.
+### Layer 2: Grid Signal (v2.5.6)
+- [✓] **Zero-Trust Security Hardening**: Rejects weak JWT secrets (`change_in_production`, `development_secret`) in production.
+- [✓] **Multi-Key Region Extraction**: Standardized `DER_ALARM_REPORTED` and market price consumers across multi-key payloads.
+- [✓] **Nested Metadata Fallback**: Hardened `extractSiteId(payload)` to parse `payload.metadata`.
+- [✓] **[L2-133] Resilience**: Implemented `localSafetyCache` and 1800s TTL for DER hardware safety locks.
+- [✓] **Telemetry Hardening**: Implemented `isNaN` protection and `.toFixed(4)` string formatting for physics/confidence scores.
+- [✓] **Secure Reporting**: Applied Zero-Trust authentication and PII masking to `/openadr/v3/reports`.
 
 ### Layer 3: VPP Aggregator (v3.3.3)
 - [✓] **Sentinel Fidelity Hardening**: Supports boolean, string, and integer formats for sentinel flags.
